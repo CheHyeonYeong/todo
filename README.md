@@ -140,6 +140,40 @@ https://your-vercel-app.vercel.app
 
 Google provider를 켠 뒤 `client/src/config.js`와 서버 `.env`에 Supabase URL/anon key를 넣으면 로그인 화면에 Google 로그인 버튼이 표시됩니다.
 
+## 서버 CD
+
+OCI 서버에서 최초 1회 systemd 서비스를 설치합니다.
+
+```bash
+cd ~/todo
+git pull
+npm ci --omit=dev
+bash scripts/install-systemd.sh
+```
+
+이후 GitHub Actions가 `main` push 때 서버에 SSH로 접속해 `git reset --hard origin/main`, `npm ci --omit=dev`, `systemctl restart free-adhd-memo`를 실행합니다.
+
+GitHub repo -> Settings -> Secrets and variables -> Actions에 아래 secrets를 추가합니다.
+
+```text
+OCI_HOST=158.179.193.175
+OCI_USER=opc
+OCI_SSH_KEY=서버에 접속 가능한 private key 전체 내용
+OCI_APP_DIR=/home/opc/todo
+```
+
+서비스 로그 확인:
+
+```bash
+sudo journalctl -u free-adhd-memo -f
+```
+
+수동 재시작:
+
+```bash
+sudo systemctl restart free-adhd-memo
+```
+
 ## 빌드
 
 ```bash

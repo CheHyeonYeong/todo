@@ -1,0 +1,37 @@
+name: Deploy API server
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "package.json"
+      - "package-lock.json"
+      - "supabase/**"
+      - ".github/workflows/deploy-server.yml"
+      - "scripts/deploy-server.sh"
+      - "systemd/free-adhd-memo.service"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+          OCI_APP_DIR: ${{ secrets.OCI_APP_DIR }}
+        run: |
+          set -eu
+          test -n "$OCI_HOST"
+          test -n "$OCI_USER"
+          test -n "$OCI_SSH_KEY"
+          APP_DIR="${OCI_APP_DIR:-/home/opc/todo}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$OCI_SSH_KEY" > ~/.ssh/oci_deploy_key
+          chmod 600 ~/.ssh/oci_deploy_key
+          ssh-keyscan -H "$OCI_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/oci_deploy_key "$OCI_USER@$OCI_HOST" "cd '$APP_DIR' && bash scripts/deploy-server.sh"

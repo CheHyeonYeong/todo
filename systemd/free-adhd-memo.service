@@ -1,0 +1,17 @@
+[Unit]
+Description=Free ADHD Memo API server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=opc
+WorkingDirectory=/home/opc/todo
+EnvironmentFile=/home/opc/todo/.env
+ExecStart=/usr/bin/node /home/opc/todo/server/server.js
+Restart=always
+RestartSec=5
+SyslogIdentifier=free-adhd-memo
+
+[Install]
+WantedBy=multi-user.target
