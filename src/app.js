@@ -1,4 +1,6 @@
 const STORAGE_KEY = "free-adhd-memo:v1";
+const API_BASE_KEY = "free-adhd-memo:api-base";
+const AUTH_TOKEN_KEY = "free-adhd-memo:auth-token";
 const scopeLabels = {
   day: "오늘",
   week: "이번 주",
@@ -18,6 +20,17 @@ let query = "";
 let serverBacked = false;
 let syncTimer = null;
 let authenticated = false;
+
+const urlParams = new URLSearchParams(window.location.search);
+const requestedApiBase = urlParams.get("api");
+if (requestedApiBase) {
+  localStorage.setItem(API_BASE_KEY, requestedApiBase);
+  urlParams.delete("api");
+  const nextQuery = urlParams.toString();
+  window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
+}
+
+const API_BASE_URL = (localStorage.getItem(API_BASE_KEY) || window.FREE_ADHD_API_BASE_URL || "").replace(/\/$/, "");
 
 function uid() {
   if (crypto?.randomUUID) return crypto.randomUUID();
@@ -102,8 +115,15 @@ function setSyncStatus(label, state = "neutral") {
 
 async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  const response = await fetch(path, { ...options, headers, credentials: "same-origin" });
+  const authToken = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: API_BASE_URL ? "omit" : "same-origin",
+  });
   if (response.status === 401) {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     showLogin();
   }
   return response;
@@ -125,7 +145,7 @@ function hideLogin() {
 
 async function checkSession() {
   try {
-    const response = await fetch("/api/session", { credentials: "same-origin" });
+    const response = await apiFetch("/api/session");
     const session = await response.json();
     if (session.authenticated) {
       hideLogin();
@@ -589,18 +609,20 @@ byId("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const password = byId("loginPassword").value;
   try {
-    const response = await fetch("/api/login", {
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      credentials: "same-origin",
+      credentials: API_BASE_URL ? "omit" : "same-origin",
       body: JSON.stringify({ password }),
     });
     if (!response.ok) {
       showLogin("비밀번호가 맞지 않습니다.");
       return;
     }
+    const result = await response.json();
+    localStorage.setItem(AUTH_TOKEN_KEY, result.authToken || password);
     hideLogin();
     loadServerData();
   } catch {
@@ -608,9 +630,10 @@ byId("loginForm").addEventListener("submit", async (event) => {
   }
 });
 byId("logoutButton").addEventListener("click", async () => {
-  await fetch("/api/logout", {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  await fetch(`${API_BASE_URL}/api/logout`, {
     method: "POST",
-    credentials: "same-origin",
+    credentials: API_BASE_URL ? "omit" : "same-origin",
   });
   serverBacked = false;
   setSyncStatus("signed out", "warn");

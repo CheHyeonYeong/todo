@@ -18,6 +18,10 @@ const stateId = process.env.MEMO_STATE_ID || "default";
 const tableName = process.env.MEMO_TABLE || "memo_state";
 const todosTable = process.env.TODOS_TABLE || "todos";
 const memosTable = process.env.MEMOS_TABLE || "memos";
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const pool = databaseUrl
   ? new pg.Pool({
       connectionString: databaseUrl,
@@ -44,6 +48,18 @@ function json(response, status, body) {
     "Cache-Control": "no-store",
   });
   response.end(JSON.stringify(body));
+}
+
+function applyCors(request, response) {
+  const origin = request.headers.origin;
+  if (!origin) return;
+  if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+    response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    response.setHeader("Access-Control-Max-Age", "86400");
+  }
 }
 
 function parseCookies(request) {
@@ -426,7 +442,7 @@ async function handleApi(request, response, pathname) {
 
   if (pathname === "/api/session" && request.method === "GET") {
     json(response, 200, {
-      authenticated: !token || hasValidSession(request),
+      authenticated: !token || isAuthorized(request),
       loginRequired: Boolean(token),
     });
     return;
@@ -441,7 +457,7 @@ async function handleApi(request, response, pathname) {
         "Cache-Control": "no-store",
         "Set-Cookie": createSessionCookie(),
       });
-      response.end(JSON.stringify({ ok: true }));
+      response.end(JSON.stringify({ ok: true, authToken: token || "" }));
       return;
     }
     json(response, 401, { error: "Invalid password" });
@@ -546,6 +562,12 @@ async function serveStatic(request, response, pathname) {
 
 const server = createServer(async (request, response) => {
   try {
+    applyCors(request, response);
+    if (request.method === "OPTIONS") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
     const url = new URL(request.url || "/", `http://${request.headers.host}`);
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url.pathname);

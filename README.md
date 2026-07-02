@@ -5,10 +5,10 @@
 ## 1차 배포 방향
 
 - 추천: 가벼운 Node 서버 + Supabase Postgres
-  - 구조는 브라우저 클라이언트 -> Node 서버 -> Supabase DB입니다.
+  - 구조는 Vercel 정적 FE -> OCI Node API -> Supabase DB입니다.
   - Oracle 1GB VPS에도 충분합니다.
   - `MEMO_TOKEN`을 설정하면 로그인 비밀번호가 생깁니다.
-  - 로그인 후에는 `HttpOnly` 쿠키로 세션을 유지합니다.
+  - 분리 배포에서는 로그인 후 `Authorization: Bearer` 토큰으로 API를 호출합니다.
   - 앱 런타임 DB 연결은 Supabase shared transaction-mode pooler `:6543`을 씁니다.
 - Docker 배포
   - `docker build -t free-adhd-memo .`
@@ -80,6 +80,7 @@ npm run dev
 PORT=3000
 MEMO_TOKEN=change-this-login-token
 SESSION_SECRET=change-this-cookie-signing-secret
+ALLOWED_ORIGINS=http://localhost:3000,https://your-vercel-app.vercel.app
 DATABASE_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 MEMO_TABLE=memo_state
@@ -91,6 +92,18 @@ MEMO_STATE_ID=default
 `DIRECT_URL`은 Prisma/Drizzle 같은 migration 도구를 붙일 때 쓰는 session-mode 연결입니다. 현재 앱 런타임에서는 읽지 않습니다.
 
 `SESSION_SECRET`은 로그인 쿠키 서명용입니다. 아무 긴 랜덤 문자열로 두면 되고, 값을 바꾸면 기존 로그인 세션은 만료됩니다.
+
+`ALLOWED_ORIGINS`는 OCI API를 호출할 수 있는 프론트엔드 origin 목록입니다. Vercel 배포 URL을 콤마로 추가합니다.
+
+## Vercel FE 분리
+
+프론트엔드는 정적 파일이라 Vercel에 그대로 올릴 수 있습니다. API 주소는 첫 접속 때 `api` query로 지정하면 브라우저에 저장됩니다.
+
+```text
+https://your-vercel-app.vercel.app/?api=https://api.your-domain.com
+```
+
+Vercel은 HTTPS라서 OCI API도 HTTPS여야 합니다. `http://158.179.193.175:3000` 같은 HTTP API는 mixed content로 브라우저에서 막힐 수 있습니다. 도메인과 HTTPS를 붙인 뒤 `ALLOWED_ORIGINS`에 Vercel URL을 넣습니다.
 
 ## 빌드
 
