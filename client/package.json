@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "build": "echo static client: no build step required"
+    "build": "rm -rf dist && mkdir -p dist && cp index.html dist/index.html && cp -R src dist/src"
   }
 }
