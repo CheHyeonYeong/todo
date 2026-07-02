@@ -22,6 +22,7 @@ const googleAuthEnabled = Boolean(supabaseUrl && supabaseAnonKey);
 const maxBodyBytes = 1024 * 1024 * 2;
 const databaseUrl = process.env.DATABASE_URL || "";
 const stateId = process.env.MEMO_STATE_ID || "default";
+const legacyUserId = process.env.LEGACY_USER_ID || stateId;
 const tableName = process.env.MEMO_TABLE || "memo_state";
 const todosTable = process.env.TODOS_TABLE || "todos";
 const memosTable = process.env.MEMOS_TABLE || "memos";
@@ -134,6 +135,15 @@ async function isAuthorized(request) {
   return Boolean(await getSupabaseUser(match[1]));
 }
 
+async function getRequestUserId(request) {
+  if (!token && !googleAuthEnabled) return legacyUserId;
+  if (token && (hasValidSession(request) || request.headers.authorization === `Bearer ${token}`)) return legacyUserId;
+
+  const match = (request.headers.authorization || "").match(/^Bearer\s+(.+)$/i);
+  const user = match ? await getSupabaseUser(match[1]) : null;
+  return user?.id || null;
+}
+
 function emptyData() {
   return {
     todos: [],
@@ -170,8 +180,8 @@ function cleanData(value) {
   };
 }
 
-async function readData() {
-  if (pool) return readPostgresData();
+async function readData(userId = legacyUserId) {
+  if (pool) return readPostgresData(userId);
 
   try {
     const raw = await readFile(dataFile, "utf8");
@@ -182,8 +192,8 @@ async function readData() {
   }
 }
 
-async function writeData(value) {
-  if (pool) return writePostgresData(value);
+async function writeData(value, userId = legacyUserId) {
+  if (pool) return writePostgresData(value, userId);
 
   const data = cleanData(value);
   const tempFile = `${dataFile}.tmp`;
@@ -212,6 +222,7 @@ async function ensureSchema() {
   await pool.query(`
     create table if not exists ${quoteIdentifier(memosTable)} (
       id text primary key,
+      user_id text not null default 'default',
       body text not null,
       tags text[] not null default '{}',
       created_at timestamptz not null,
@@ -221,6 +232,7 @@ async function ensureSchema() {
   await pool.query(`
     create table if not exists ${quoteIdentifier(todosTable)} (
       id text primary key,
+      user_id text not null default 'default',
       title text not null,
       scope text not null check (scope in ('day', 'week', 'month')),
       done boolean not null default false,
@@ -230,23 +242,31 @@ async function ensureSchema() {
       updated_at timestamptz not null default now()
     )
   `);
+  await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists user_id text not null default 'default'`);
+  await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists user_id text not null default 'default'`);
+  await pool.query(`create index if not exists ${quoteIdentifier(`${memosTable}_user_created_idx`)} on ${quoteIdentifier(memosTable)} (user_id, created_at desc)`);
+  await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_user_created_idx`)} on ${quoteIdentifier(todosTable)} (user_id, created_at desc)`);
 }
 
-async function readPostgresData() {
+async function readPostgresData(userId = legacyUserId) {
   await ensureSchema();
   const memos = await pool.query(
     `
       select id, body, tags, created_at
       from ${quoteIdentifier(memosTable)}
+      where user_id = $1
       order by created_at desc
     `,
+    [userId],
   );
   const todos = await pool.query(
     `
       select id, title, scope, done, created_at, completed_at, source_memo_id
       from ${quoteIdentifier(todosTable)}
+      where user_id = $1
       order by created_at desc
     `,
+    [userId],
   );
   if (memos.rowCount || todos.rowCount) {
     return {
@@ -273,31 +293,31 @@ async function readPostgresData() {
   return cleanData(result.rows[0].data || emptyData());
 }
 
-async function writePostgresData(value) {
+async function writePostgresData(value, userId = legacyUserId) {
   await ensureSchema();
   const data = cleanData(value);
   const client = await pool.connect();
   try {
     await client.query("begin");
-    await client.query(`delete from ${quoteIdentifier(todosTable)}`);
-    await client.query(`delete from ${quoteIdentifier(memosTable)}`);
+    await client.query(`delete from ${quoteIdentifier(todosTable)} where user_id = $1`, [userId]);
+    await client.query(`delete from ${quoteIdentifier(memosTable)} where user_id = $1`, [userId]);
     for (const memo of data.memos.map(cleanMemo).filter((memo) => memo.id && memo.body)) {
       await client.query(
         `
-          insert into ${quoteIdentifier(memosTable)} (id, body, tags, created_at, updated_at)
-          values ($1, $2, $3, $4, now())
+          insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, updated_at)
+          values ($1, $2, $3, $4, $5, now())
         `,
-        [memo.id, memo.body, memo.tags, memo.createdAt],
+        [memo.id, userId, memo.body, memo.tags, memo.createdAt],
       );
     }
     for (const todo of data.todos.map(cleanTodo).filter((todo) => todo.id && todo.title)) {
       await client.query(
         `
           insert into ${quoteIdentifier(todosTable)}
-            (id, title, scope, done, created_at, completed_at, source_memo_id, updated_at)
-          values ($1, $2, $3, $4, $5, $6, $7, now())
+            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, now())
         `,
-        [todo.id, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId],
+        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId],
       );
     }
     await client.query(
@@ -319,14 +339,14 @@ async function writePostgresData(value) {
   return data;
 }
 
-async function createMemoWithTodos(value) {
+async function createMemoWithTodos(value, userId = legacyUserId) {
   if (!pool) {
-    const data = await readData();
+    const data = await readData(userId);
     const memo = cleanMemo(value.memo);
     const todos = Array.isArray(value.todos) ? value.todos.map(cleanTodo) : [];
     data.memos.unshift(memo);
     data.todos.unshift(...todos);
-    await writeData(data);
+    await writeData(data, userId);
     return { memo, todos };
   }
 
@@ -338,24 +358,24 @@ async function createMemoWithTodos(value) {
     await client.query("begin");
     await client.query(
       `
-        insert into ${quoteIdentifier(memosTable)} (id, body, tags, created_at, updated_at)
-        values ($1, $2, $3, $4, now())
+        insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, updated_at)
+        values ($1, $2, $3, $4, $5, now())
         on conflict (id)
         do update set body = excluded.body, tags = excluded.tags, updated_at = now()
       `,
-      [memo.id, memo.body, memo.tags, memo.createdAt],
+      [memo.id, userId, memo.body, memo.tags, memo.createdAt],
     );
     for (const todo of todos.filter((todo) => todo.id && todo.title)) {
       await client.query(
         `
           insert into ${quoteIdentifier(todosTable)}
-            (id, title, scope, done, created_at, completed_at, source_memo_id, updated_at)
-          values ($1, $2, $3, $4, $5, $6, $7, now())
+            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, now())
           on conflict (id)
           do update set title = excluded.title, scope = excluded.scope, done = excluded.done,
             completed_at = excluded.completed_at, source_memo_id = excluded.source_memo_id, updated_at = now()
         `,
-        [todo.id, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId],
+        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId],
       );
     }
     await client.query("commit");
@@ -368,12 +388,12 @@ async function createMemoWithTodos(value) {
   }
 }
 
-async function createTodo(value) {
+async function createTodo(value, userId = legacyUserId) {
   const todo = cleanTodo(value);
   if (!pool) {
-    const data = await readData();
+    const data = await readData(userId);
     data.todos.unshift(todo);
-    await writeData(data);
+    await writeData(data, userId);
     return todo;
   }
 
@@ -381,22 +401,22 @@ async function createTodo(value) {
   await pool.query(
     `
       insert into ${quoteIdentifier(todosTable)}
-        (id, title, scope, done, created_at, completed_at, source_memo_id, updated_at)
-      values ($1, $2, $3, $4, $5, $6, $7, now())
+        (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, updated_at)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, now())
       on conflict (id)
       do update set title = excluded.title, scope = excluded.scope, done = excluded.done,
         completed_at = excluded.completed_at, source_memo_id = excluded.source_memo_id, updated_at = now()
     `,
-    [todo.id, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId],
+    [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId],
   );
   return todo;
 }
 
-async function updateTodo(id, patch) {
+async function updateTodo(id, patch, userId = legacyUserId) {
   if (!pool) {
-    const data = await readData();
+    const data = await readData(userId);
     data.todos = data.todos.map((todo) => (todo.id === id ? { ...todo, ...patch } : todo));
-    await writeData(data);
+    await writeData(data, userId);
     return data.todos.find((todo) => todo.id === id) || null;
   }
 
@@ -407,10 +427,10 @@ async function updateTodo(id, patch) {
       set done = coalesce($2, done),
         completed_at = $3,
         updated_at = now()
-      where id = $1
+      where id = $1 and user_id = $4
       returning id, title, scope, done, created_at, completed_at, source_memo_id
     `,
-    [id, typeof patch.done === "boolean" ? patch.done : null, patch.completedAt || null],
+    [id, typeof patch.done === "boolean" ? patch.done : null, patch.completedAt || null, userId],
   );
   if (!result.rowCount) return null;
   const todo = result.rows[0];
@@ -425,26 +445,26 @@ async function updateTodo(id, patch) {
   };
 }
 
-async function deleteTodoById(id) {
+async function deleteTodoById(id, userId = legacyUserId) {
   if (!pool) {
-    const data = await readData();
+    const data = await readData(userId);
     data.todos = data.todos.filter((todo) => todo.id !== id);
-    await writeData(data);
+    await writeData(data, userId);
     return;
   }
   await ensureSchema();
-  await pool.query(`delete from ${quoteIdentifier(todosTable)} where id = $1`, [id]);
+  await pool.query(`delete from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2`, [id, userId]);
 }
 
-async function deleteMemoById(id) {
+async function deleteMemoById(id, userId = legacyUserId) {
   if (!pool) {
-    const data = await readData();
+    const data = await readData(userId);
     data.memos = data.memos.filter((memo) => memo.id !== id);
-    await writeData(data);
+    await writeData(data, userId);
     return;
   }
   await ensureSchema();
-  await pool.query(`delete from ${quoteIdentifier(memosTable)} where id = $1`, [id]);
+  await pool.query(`delete from ${quoteIdentifier(memosTable)} where id = $1 and user_id = $2`, [id, userId]);
 }
 
 async function readRequestBody(request) {
@@ -479,7 +499,7 @@ async function handleApi(request, response, pathname) {
   if (pathname === "/api/login" && request.method === "POST") {
     const body = await readRequestBody(request);
     const parsed = JSON.parse(body || "{}");
-    if (!token || parsed.password === token) {
+    if (token && parsed.password === token) {
       response.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store",
@@ -506,23 +526,28 @@ async function handleApi(request, response, pathname) {
     json(response, 401, { error: "Unauthorized" });
     return;
   }
+  const userId = await getRequestUserId(request);
+  if (!userId) {
+    json(response, 401, { error: "Unauthorized" });
+    return;
+  }
 
   if (pathname === "/api/memos" && request.method === "POST") {
     const body = await readRequestBody(request);
-    json(response, 201, await createMemoWithTodos(JSON.parse(body || "{}")));
+    json(response, 201, await createMemoWithTodos(JSON.parse(body || "{}"), userId));
     return;
   }
 
   if (pathname === "/api/todos" && request.method === "POST") {
     const body = await readRequestBody(request);
-    json(response, 201, await createTodo(JSON.parse(body || "{}")));
+    json(response, 201, await createTodo(JSON.parse(body || "{}"), userId));
     return;
   }
 
   const todoMatch = pathname.match(/^\/api\/todos\/([^/]+)$/);
   if (todoMatch && request.method === "PATCH") {
     const body = await readRequestBody(request);
-    const todo = await updateTodo(decodeURIComponent(todoMatch[1]), JSON.parse(body || "{}"));
+    const todo = await updateTodo(decodeURIComponent(todoMatch[1]), JSON.parse(body || "{}"), userId);
     if (!todo) {
       json(response, 404, { error: "Todo not found" });
       return;
@@ -532,14 +557,14 @@ async function handleApi(request, response, pathname) {
   }
 
   if (todoMatch && request.method === "DELETE") {
-    await deleteTodoById(decodeURIComponent(todoMatch[1]));
+    await deleteTodoById(decodeURIComponent(todoMatch[1]), userId);
     json(response, 200, { ok: true });
     return;
   }
 
   const memoMatch = pathname.match(/^\/api\/memos\/([^/]+)$/);
   if (memoMatch && request.method === "DELETE") {
-    await deleteMemoById(decodeURIComponent(memoMatch[1]));
+    await deleteMemoById(decodeURIComponent(memoMatch[1]), userId);
     json(response, 200, { ok: true });
     return;
   }
@@ -550,14 +575,14 @@ async function handleApi(request, response, pathname) {
   }
 
   if (request.method === "GET") {
-    json(response, 200, await readData());
+    json(response, 200, await readData(userId));
     return;
   }
 
   if (request.method === "PUT") {
     const body = await readRequestBody(request);
     const parsed = JSON.parse(body || "{}");
-    json(response, 200, await writeData(parsed));
+    json(response, 200, await writeData(parsed, userId));
     return;
   }
 

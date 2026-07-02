@@ -27,6 +27,7 @@
 - 활동 그래프와 오늘의 집중 큐
 - 폰/PC 간 서버 동기화
 - memo/todo 항목 단위 저장으로 폰과 PC의 동시 사용 충돌 완화
+- Google 로그인 사용자별 memo/todo 분리
 
 ## 개발
 
@@ -41,6 +42,7 @@ create table if not exists public.memo_state (
 
 create table if not exists public.memos (
   id text primary key,
+  user_id text not null default 'default',
   body text not null,
   tags text[] not null default '{}',
   created_at timestamptz not null,
@@ -49,6 +51,7 @@ create table if not exists public.memos (
 
 create table if not exists public.todos (
   id text primary key,
+  user_id text not null default 'default',
   title text not null,
   scope text not null check (scope in ('day', 'week', 'month')),
   done boolean not null default false,
@@ -61,6 +64,12 @@ create table if not exists public.todos (
 alter table public.memo_state enable row level security;
 alter table public.memos enable row level security;
 alter table public.todos enable row level security;
+
+alter table public.memos add column if not exists user_id text not null default 'default';
+alter table public.todos add column if not exists user_id text not null default 'default';
+
+create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
+create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);
 ```
 
 `.env.example`을 참고해 `.env`를 만들고 실행합니다.
@@ -90,6 +99,7 @@ DATABASE_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-s
 DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 MEMO_TABLE=memo_state
 MEMO_STATE_ID=default
+LEGACY_USER_ID=default
 ```
 
 `DATABASE_URL`은 서버가 평소에 쓰는 연결입니다. Supabase가 보여준 shared transaction-mode pooler, 즉 `aws-1-ap-southeast-1.pooler.supabase.com:6543` 주소를 넣습니다.
@@ -101,6 +111,8 @@ MEMO_STATE_ID=default
 `ALLOWED_ORIGINS`는 OCI API를 호출할 수 있는 프론트엔드 origin 목록입니다. Vercel 배포 URL을 콤마로 추가합니다.
 
 `SUPABASE_URL`과 `SUPABASE_ANON_KEY`는 Google 로그인 JWT 검증에 씁니다. `SUPABASE_ALLOWED_EMAILS`를 설정하면 지정한 Google 계정만 API를 사용할 수 있습니다.
+
+`LEGACY_USER_ID`는 `MEMO_TOKEN` 로그인 또는 개발용 인증에서 쓰는 사용자 id입니다. Google 로그인 사용자는 Supabase Auth user id로 자동 분리됩니다.
 
 ## Vercel FE 분리
 
