@@ -7,11 +7,18 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const publicDir = __dirname;
+const publicDir = process.env.PUBLIC_DIR || join(__dirname, "../client");
 const port = Number(process.env.PORT || 3000);
-const dataFile = process.env.DATA_FILE || join(__dirname, "data", "store.json");
+const dataFile = process.env.DATA_FILE || join(__dirname, "../data", "store.json");
 const token = process.env.MEMO_TOKEN || "";
 const sessionSecret = process.env.SESSION_SECRET || token || randomBytes(32).toString("hex");
+const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "";
+const allowedEmails = (process.env.SUPABASE_ALLOWED_EMAILS || "")
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+const googleAuthEnabled = Boolean(supabaseUrl && supabaseAnonKey);
 const maxBodyBytes = 1024 * 1024 * 2;
 const databaseUrl = process.env.DATABASE_URL || "";
 const stateId = process.env.MEMO_STATE_ID || "default";
@@ -102,9 +109,29 @@ function hasValidSession(request) {
   return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
-function isAuthorized(request) {
-  if (!token) return true;
-  return hasValidSession(request) || request.headers.authorization === `Bearer ${token}`;
+async function getSupabaseUser(accessToken) {
+  if (!supabaseUrl || !supabaseAnonKey || !accessToken) return null;
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (!response.ok) return null;
+
+  const user = await response.json();
+  const email = String(user.email || "").toLowerCase();
+  if (allowedEmails.length && !allowedEmails.includes(email)) return null;
+  return user;
+}
+
+async function isAuthorized(request) {
+  if (!token && !googleAuthEnabled) return true;
+  if (token && (hasValidSession(request) || request.headers.authorization === `Bearer ${token}`)) return true;
+
+  const match = (request.headers.authorization || "").match(/^Bearer\s+(.+)$/i);
+  if (!match) return false;
+  return Boolean(await getSupabaseUser(match[1]));
 }
 
 function emptyData() {
@@ -442,8 +469,9 @@ async function handleApi(request, response, pathname) {
 
   if (pathname === "/api/session" && request.method === "GET") {
     json(response, 200, {
-      authenticated: !token || isAuthorized(request),
-      loginRequired: Boolean(token),
+      authenticated: !token && !googleAuthEnabled ? true : await isAuthorized(request),
+      loginRequired: Boolean(token || googleAuthEnabled),
+      googleEnabled: googleAuthEnabled,
     });
     return;
   }
@@ -474,7 +502,7 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
-  if (!isAuthorized(request)) {
+  if (!(await isAuthorized(request))) {
     json(response, 401, { error: "Unauthorized" });
     return;
   }

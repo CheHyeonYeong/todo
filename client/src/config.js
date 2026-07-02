@@ -1,0 +1,3 @@
+window.FREE_ADHD_API_BASE_URL = "";
+window.FREE_ADHD_SUPABASE_URL = "";
+window.FREE_ADHD_SUPABASE_ANON_KEY = "";

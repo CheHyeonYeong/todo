@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js",
+    "dev": "node server/server.js",
+    "start": "node server/server.js",
     "build": "echo static app: no build step required",
-    "preview": "node server.js"
+    "preview": "node server/server.js"
   },
   "dependencies": {
     "pg": "^8.13.1"

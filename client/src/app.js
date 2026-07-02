@@ -31,6 +31,12 @@ if (requestedApiBase) {
 }
 
 const API_BASE_URL = (localStorage.getItem(API_BASE_KEY) || window.FREE_ADHD_API_BASE_URL || "").replace(/\/$/, "");
+const SUPABASE_URL = window.FREE_ADHD_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY = window.FREE_ADHD_SUPABASE_ANON_KEY || "";
+const supabaseClient =
+  SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
 
 function uid() {
   if (crypto?.randomUUID) return crypto.randomUUID();
@@ -133,6 +139,7 @@ function showLogin(message = "") {
   authenticated = false;
   byId("loginScreen").hidden = false;
   byId("loginError").textContent = message;
+  byId("googleLoginButton").hidden = !supabaseClient;
   byId("loginPassword").focus();
 }
 
@@ -145,6 +152,12 @@ function hideLogin() {
 
 async function checkSession() {
   try {
+    if (supabaseClient) {
+      const { data: authData } = await supabaseClient.auth.getSession();
+      if (authData.session?.access_token) {
+        localStorage.setItem(AUTH_TOKEN_KEY, authData.session.access_token);
+      }
+    }
     const response = await apiFetch("/api/session");
     const session = await response.json();
     if (session.authenticated) {
@@ -629,8 +642,22 @@ byId("loginForm").addEventListener("submit", async (event) => {
     showLogin("로그인 요청에 실패했습니다.");
   }
 });
+byId("googleLoginButton").addEventListener("click", async () => {
+  if (!supabaseClient) {
+    showLogin("Google 로그인 설정이 없습니다.");
+    return;
+  }
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: window.location.origin,
+    },
+  });
+  if (error) showLogin("Google 로그인 요청에 실패했습니다.");
+});
 byId("logoutButton").addEventListener("click", async () => {
   localStorage.removeItem(AUTH_TOKEN_KEY);
+  if (supabaseClient) await supabaseClient.auth.signOut();
   await fetch(`${API_BASE_URL}/api/logout`, {
     method: "POST",
     credentials: API_BASE_URL ? "omit" : "same-origin",

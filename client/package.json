@@ -1,0 +1,8 @@
+{
+  "name": "free-adhd-memo-client",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "echo static client: no build step required"
+  }
+}

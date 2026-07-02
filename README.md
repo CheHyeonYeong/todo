@@ -6,8 +6,10 @@
 
 - 추천: 가벼운 Node 서버 + Supabase Postgres
   - 구조는 Vercel 정적 FE -> OCI Node API -> Supabase DB입니다.
+  - 클라이언트 코드는 `client/`, API 서버 코드는 `server/`에 분리되어 있습니다.
   - Oracle 1GB VPS에도 충분합니다.
   - `MEMO_TOKEN`을 설정하면 로그인 비밀번호가 생깁니다.
+  - Supabase Google Auth를 설정하면 Google 로그인 JWT도 API에서 검증합니다.
   - 분리 배포에서는 로그인 후 `Authorization: Bearer` 토큰으로 API를 호출합니다.
   - 앱 런타임 DB 연결은 Supabase shared transaction-mode pooler `:6543`을 씁니다.
 - Docker 배포
@@ -81,6 +83,9 @@ PORT=3000
 MEMO_TOKEN=change-this-login-token
 SESSION_SECRET=change-this-cookie-signing-secret
 ALLOWED_ORIGINS=http://localhost:3000,https://your-vercel-app.vercel.app
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-public-anon-key
+SUPABASE_ALLOWED_EMAILS=you@example.com
 DATABASE_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 MEMO_TABLE=memo_state
@@ -95,15 +100,45 @@ MEMO_STATE_ID=default
 
 `ALLOWED_ORIGINS`는 OCI API를 호출할 수 있는 프론트엔드 origin 목록입니다. Vercel 배포 URL을 콤마로 추가합니다.
 
+`SUPABASE_URL`과 `SUPABASE_ANON_KEY`는 Google 로그인 JWT 검증에 씁니다. `SUPABASE_ALLOWED_EMAILS`를 설정하면 지정한 Google 계정만 API를 사용할 수 있습니다.
+
 ## Vercel FE 분리
 
-프론트엔드는 정적 파일이라 Vercel에 그대로 올릴 수 있습니다. API 주소는 첫 접속 때 `api` query로 지정하면 브라우저에 저장됩니다.
+Vercel에서 Project Root를 `client`로 설정합니다. 프론트엔드는 정적 파일이라 빌드가 필요 없습니다.
+
+`client/src/config.js`에 API와 Supabase public config를 넣습니다.
+
+```js
+window.FREE_ADHD_API_BASE_URL = "https://api.your-domain.com";
+window.FREE_ADHD_SUPABASE_URL = "https://your-project-ref.supabase.co";
+window.FREE_ADHD_SUPABASE_ANON_KEY = "your-public-anon-key";
+```
+
+API 주소는 첫 접속 때 `api` query로도 지정할 수 있고, 브라우저에 저장됩니다.
 
 ```text
 https://your-vercel-app.vercel.app/?api=https://api.your-domain.com
 ```
 
 Vercel은 HTTPS라서 OCI API도 HTTPS여야 합니다. `http://158.179.193.175:3000` 같은 HTTP API는 mixed content로 브라우저에서 막힐 수 있습니다. 도메인과 HTTPS를 붙인 뒤 `ALLOWED_ORIGINS`에 Vercel URL을 넣습니다.
+
+## Google 로그인
+
+Supabase Dashboard -> Authentication -> Providers -> Google에서 Google provider를 켭니다.
+
+Google OAuth Authorized redirect URI:
+
+```text
+https://your-project-ref.supabase.co/auth/v1/callback
+```
+
+Authorized JavaScript origin:
+
+```text
+https://your-vercel-app.vercel.app
+```
+
+Google provider를 켠 뒤 `client/src/config.js`와 서버 `.env`에 Supabase URL/anon key를 넣으면 로그인 화면에 Google 로그인 버튼이 표시됩니다.
 
 ## 빌드
 
