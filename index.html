@@ -8,6 +8,15 @@
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
+    <section class="login-screen" id="loginScreen" hidden>
+      <form class="login-panel" id="loginForm">
+        <p class="eyebrow">private workspace</p>
+        <h1>Free ADHD Memo</h1>
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="비밀번호" />
+        <button type="submit">로그인</button>
+        <p class="login-error" id="loginError"></p>
+      </form>
+    </section>
     <main class="app-shell">
       <header class="topbar">
         <div>
@@ -18,6 +27,7 @@
           <span aria-hidden="true">↓</span>
           Export
         </button>
+        <button class="icon-button" id="logoutButton" type="button" title="로그아웃">Logout</button>
         <span class="sync-status" id="syncStatus">local</span>
       </header>
 

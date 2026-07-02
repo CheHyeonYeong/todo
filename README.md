@@ -7,7 +7,8 @@
 - 추천: 가벼운 Node 서버 + Supabase Postgres
   - 구조는 브라우저 클라이언트 -> Node 서버 -> Supabase DB입니다.
   - Oracle 1GB VPS에도 충분합니다.
-  - `MEMO_TOKEN`을 설정하면 앱 API에 토큰 인증이 걸립니다.
+  - `MEMO_TOKEN`을 설정하면 로그인 비밀번호가 생깁니다.
+  - 로그인 후에는 `HttpOnly` 쿠키로 세션을 유지합니다.
   - 앱 런타임 DB 연결은 Supabase shared transaction-mode pooler `:6543`을 씁니다.
 - Docker 배포
   - `docker build -t free-adhd-memo .`
@@ -56,6 +57,7 @@ npm run dev
 ```bash
 PORT=3000
 MEMO_TOKEN=change-this-login-token
+SESSION_SECRET=change-this-cookie-signing-secret
 DATABASE_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 MEMO_TABLE=memo_state
@@ -65,6 +67,8 @@ MEMO_STATE_ID=default
 `DATABASE_URL`은 서버가 평소에 쓰는 연결입니다. Supabase가 보여준 shared transaction-mode pooler, 즉 `aws-1-ap-southeast-1.pooler.supabase.com:6543` 주소를 넣습니다.
 
 `DIRECT_URL`은 Prisma/Drizzle 같은 migration 도구를 붙일 때 쓰는 session-mode 연결입니다. 현재 앱 런타임에서는 읽지 않습니다.
+
+`SESSION_SECRET`은 로그인 쿠키 서명용입니다. 아무 긴 랜덤 문자열로 두면 되고, 값을 바꾸면 기존 로그인 세션은 만료됩니다.
 
 ## 빌드
 

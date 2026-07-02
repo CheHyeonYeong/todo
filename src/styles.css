@@ -36,6 +36,56 @@ button {
   cursor: pointer;
 }
 
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(246, 247, 249, 0.92);
+  padding: 20px;
+  backdrop-filter: blur(14px);
+}
+
+.login-screen[hidden] {
+  display: none;
+}
+
+.login-panel {
+  width: min(420px, 100%);
+  border: 1px solid rgba(143, 154, 179, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.16);
+  padding: 24px;
+}
+
+.login-panel h1 {
+  margin-bottom: 22px;
+  font-size: clamp(2rem, 10vw, 3.4rem);
+}
+
+.login-panel input,
+.login-panel button {
+  width: 100%;
+}
+
+.login-panel button {
+  min-height: 44px;
+  margin-top: 10px;
+  border-radius: 8px;
+  background: #172033;
+  color: #fff;
+  font-weight: 900;
+}
+
+.login-error {
+  min-height: 22px;
+  margin: 10px 0 0;
+  color: #b42318;
+  font-weight: 800;
+}
+
 .app-shell {
   width: min(1480px, calc(100% - 32px));
   margin: 0 auto;

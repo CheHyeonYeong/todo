@@ -1,5 +1,4 @@
 const STORAGE_KEY = "free-adhd-memo:v1";
-const TOKEN_KEY = "free-adhd-memo:token";
 const scopeLabels = {
   day: "오늘",
   week: "이번 주",
@@ -18,9 +17,26 @@ let activeTag = null;
 let query = "";
 let serverBacked = false;
 let syncTimer = null;
+let authenticated = false;
 
 function uid() {
-  return crypto.randomUUID();
+  if (crypto?.randomUUID) return crypto.randomUUID();
+
+  const bytes = new Uint8Array(16);
+  if (crypto?.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex
+    .slice(8, 10)
+    .join("")}-${hex.slice(10, 16).join("")}`;
 }
 
 function nowIso() {
@@ -79,10 +95,6 @@ function saveData() {
   queueServerSave();
 }
 
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || "";
-}
-
 function setSyncStatus(label, state = "neutral") {
   const element = byId("syncStatus");
   element.textContent = label;
@@ -91,21 +103,45 @@ function setSyncStatus(label, state = "neutral") {
 
 async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-
-  const response = await fetch(path, { ...options, headers });
+  const response = await fetch(path, { ...options, headers, credentials: "same-origin" });
   if (response.status === 401) {
-    const nextToken = prompt("서버 동기화 토큰을 입력하세요.");
-    if (!nextToken) throw new Error("Missing sync token");
-    localStorage.setItem(TOKEN_KEY, nextToken);
-    headers.set("Authorization", `Bearer ${nextToken}`);
-    return fetch(path, { ...options, headers });
+    showLogin();
   }
   return response;
 }
 
+function showLogin(message = "") {
+  authenticated = false;
+  byId("loginScreen").hidden = false;
+  byId("loginError").textContent = message;
+  byId("loginPassword").focus();
+}
+
+function hideLogin() {
+  authenticated = true;
+  byId("loginScreen").hidden = true;
+  byId("loginPassword").value = "";
+  byId("loginError").textContent = "";
+}
+
+async function checkSession() {
+  try {
+    const response = await fetch("/api/session", { credentials: "same-origin" });
+    const session = await response.json();
+    if (session.authenticated) {
+      hideLogin();
+      loadServerData();
+      return;
+    }
+    showLogin();
+  } catch {
+    hideLogin();
+    setSyncStatus("local only", "warn");
+  }
+}
+
 async function loadServerData() {
+  if (!authenticated) return;
   try {
     const response = await apiFetch("/api/data");
     if (!response.ok) throw new Error(`Sync failed: ${response.status}`);
@@ -134,7 +170,7 @@ async function loadServerData() {
 }
 
 function queueServerSave() {
-  if (!serverBacked) return;
+  if (!serverBacked || !authenticated) return;
   setSyncStatus("syncing", "neutral");
   clearTimeout(syncTimer);
   syncTimer = setTimeout(saveServerData, 250);
@@ -498,8 +534,39 @@ byId("resetButton").addEventListener("click", () => {
   saveData();
   render();
 });
+byId("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const password = byId("loginPassword").value;
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({ password }),
+    });
+    if (!response.ok) {
+      showLogin("비밀번호가 맞지 않습니다.");
+      return;
+    }
+    hideLogin();
+    loadServerData();
+  } catch {
+    showLogin("로그인 요청에 실패했습니다.");
+  }
+});
+byId("logoutButton").addEventListener("click", async () => {
+  await fetch("/api/logout", {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  serverBacked = false;
+  setSyncStatus("signed out", "warn");
+  showLogin();
+});
 
 render();
-loadServerData();
+checkSession();
 setInterval(renderLabels, 30000);
 setInterval(loadServerData, 20000);

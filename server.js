@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -10,6 +11,7 @@ const publicDir = __dirname;
 const port = Number(process.env.PORT || 3000);
 const dataFile = process.env.DATA_FILE || join(__dirname, "data", "store.json");
 const token = process.env.MEMO_TOKEN || "";
+const sessionSecret = process.env.SESSION_SECRET || token || randomBytes(32).toString("hex");
 const maxBodyBytes = 1024 * 1024 * 2;
 const databaseUrl = process.env.DATABASE_URL || "";
 const stateId = process.env.MEMO_STATE_ID || "default";
@@ -42,9 +44,49 @@ function json(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function parseCookies(request) {
+  return Object.fromEntries(
+    (request.headers.cookie || "")
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const index = part.indexOf("=");
+        if (index === -1) return [part, ""];
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      }),
+  );
+}
+
+function signSession(value) {
+  return createHmac("sha256", sessionSecret).update(value).digest("base64url");
+}
+
+function createSessionCookie() {
+  const issuedAt = Date.now().toString();
+  const session = `${issuedAt}.${signSession(issuedAt)}`;
+  return `memo_session=${session}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`;
+}
+
+function clearSessionCookie() {
+  return "memo_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+}
+
+function hasValidSession(request) {
+  const session = parseCookies(request).memo_session;
+  if (!session) return false;
+  const [issuedAt, signature] = session.split(".");
+  if (!issuedAt || !signature) return false;
+
+  const expected = signSession(issuedAt);
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(signature);
+  return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
 function isAuthorized(request) {
   if (!token) return true;
-  return request.headers.authorization === `Bearer ${token}`;
+  return hasValidSession(request) || request.headers.authorization === `Bearer ${token}`;
 }
 
 function emptyData() {
@@ -142,6 +184,40 @@ async function handleApi(request, response, pathname) {
       ok: true,
       storage: pool ? "postgres" : "file",
     });
+    return;
+  }
+
+  if (pathname === "/api/session" && request.method === "GET") {
+    json(response, 200, {
+      authenticated: !token || hasValidSession(request),
+      loginRequired: Boolean(token),
+    });
+    return;
+  }
+
+  if (pathname === "/api/login" && request.method === "POST") {
+    const body = await readRequestBody(request);
+    const parsed = JSON.parse(body || "{}");
+    if (!token || parsed.password === token) {
+      response.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Set-Cookie": createSessionCookie(),
+      });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    json(response, 401, { error: "Invalid password" });
+    return;
+  }
+
+  if (pathname === "/api/logout" && request.method === "POST") {
+    response.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Set-Cookie": clearSessionCookie(),
+    });
+    response.end(JSON.stringify({ ok: true }));
     return;
   }
 
