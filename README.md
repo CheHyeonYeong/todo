@@ -24,6 +24,7 @@
 - 뽀모도로 타이머
 - 활동 그래프와 오늘의 집중 큐
 - 폰/PC 간 서버 동기화
+- memo/todo 항목 단위 저장으로 폰과 PC의 동시 사용 충돌 완화
 
 ## 개발
 
@@ -36,7 +37,28 @@ create table if not exists public.memo_state (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.memos (
+  id text primary key,
+  body text not null,
+  tags text[] not null default '{}',
+  created_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.todos (
+  id text primary key,
+  title text not null,
+  scope text not null check (scope in ('day', 'week', 'month')),
+  done boolean not null default false,
+  created_at timestamptz not null,
+  completed_at timestamptz,
+  source_memo_id text references public.memos(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
 alter table public.memo_state enable row level security;
+alter table public.memos enable row level security;
+alter table public.todos enable row level security;
 ```
 
 `.env.example`을 참고해 `.env`를 만들고 실행합니다.

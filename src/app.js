@@ -92,7 +92,6 @@ let data = loadData();
 
 function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  queueServerSave();
 }
 
 function setSyncStatus(label, state = "neutral") {
@@ -186,6 +185,18 @@ async function saveServerData() {
       body: JSON.stringify(data),
     });
     if (!response.ok) throw new Error(`Save failed: ${response.status}`);
+    setSyncStatus("synced", "ok");
+  } catch {
+    setSyncStatus("offline", "warn");
+  }
+}
+
+async function sendMutation(path, options = {}) {
+  if (!serverBacked || !authenticated) return;
+  setSyncStatus("syncing", "neutral");
+  try {
+    const response = await apiFetch(path, options);
+    if (!response.ok) throw new Error(`Mutation failed: ${response.status}`);
     setSyncStatus("synced", "ok");
   } catch {
     setSyncStatus("offline", "warn");
@@ -376,29 +387,49 @@ function render() {
 }
 
 function toggleTodo(id) {
+  const currentTodo = data.todos.find((todo) => todo.id === id);
+  if (!currentTodo) return;
+  const nextDone = !currentTodo.done;
+  const completedAt = nextDone ? nowIso() : undefined;
   data.todos = data.todos.map((todo) =>
     todo.id === id
       ? {
           ...todo,
-          done: !todo.done,
-          completedAt: todo.done ? undefined : nowIso(),
+          done: nextDone,
+          completedAt,
         }
       : todo,
   );
   saveData();
   render();
+  sendMutation(`/api/todos/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      done: nextDone,
+      completedAt,
+    }),
+  });
 }
 
 function deleteTodo(id) {
   data.todos = data.todos.filter((todo) => todo.id !== id);
   saveData();
   render();
+  sendMutation(`/api/todos/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 function deleteMemo(id) {
   data.memos = data.memos.filter((memo) => memo.id !== id);
   saveData();
   render();
+  sendMutation(`/api/memos/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
 }
 
 function setTimerMode(mode) {
@@ -464,17 +495,28 @@ byId("memoForm").addEventListener("submit", (event) => {
     sourceMemoId: memoId,
   }));
 
-  data.memos.unshift({
+  const memo = {
     id: memoId,
     body,
     createdAt,
     tags: extractTags(body),
-  });
+  };
+  data.memos.unshift(memo);
   data.todos.unshift(...extractedTodos);
   textarea.value = "";
   textarea.focus();
   saveData();
   render();
+  sendMutation("/api/memos", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      memo,
+      todos: extractedTodos,
+    }),
+  });
 });
 
 byId("todoForm").addEventListener("submit", (event) => {
@@ -483,16 +525,24 @@ byId("todoForm").addEventListener("submit", (event) => {
   const title = input.value.trim();
   if (!title) return;
 
-  data.todos.unshift({
+  const todo = {
     id: uid(),
     title,
     scope: byId("todoScope").value,
     done: false,
     createdAt: nowIso(),
-  });
+  };
+  data.todos.unshift(todo);
   input.value = "";
   saveData();
   render();
+  sendMutation("/api/todos", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(todo),
+  });
 });
 
 document.body.addEventListener("click", (event) => {
@@ -532,6 +582,7 @@ byId("resetButton").addEventListener("click", () => {
   query = "";
   byId("queryInput").value = "";
   saveData();
+  queueServerSave();
   render();
 });
 byId("loginForm").addEventListener("submit", async (event) => {
