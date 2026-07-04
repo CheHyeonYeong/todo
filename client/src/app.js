@@ -176,13 +176,6 @@ async function loadServerData() {
     const serverData = await response.json();
     if (!Array.isArray(serverData.todos) || !Array.isArray(serverData.memos)) return;
 
-    if (serverData.todos.length === 0 && serverData.memos.length === 0 && (data.todos.length || data.memos.length)) {
-      serverBacked = true;
-      setSyncStatus("syncing", "neutral");
-      queueServerSave();
-      return;
-    }
-
     data = {
       todos: serverData.todos,
       memos: serverData.memos,
