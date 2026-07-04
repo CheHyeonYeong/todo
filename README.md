@@ -34,12 +34,6 @@
 Supabase SQL Editor에서 먼저 실행합니다.
 
 ```sql
-create table if not exists public.memo_state (
-  id text primary key,
-  data jsonb not null default '{"todos":[],"memos":[]}'::jsonb,
-  updated_at timestamptz not null default now()
-);
-
 create table if not exists public.memos (
   id text primary key,
   user_id text not null default 'default',
@@ -61,7 +55,6 @@ create table if not exists public.todos (
   updated_at timestamptz not null default now()
 );
 
-alter table public.memo_state enable row level security;
 alter table public.memos enable row level security;
 alter table public.todos enable row level security;
 
@@ -97,8 +90,6 @@ SUPABASE_ANON_KEY=your-public-anon-key
 SUPABASE_ALLOWED_EMAILS=you@example.com
 DATABASE_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
-MEMO_TABLE=memo_state
-MEMO_STATE_ID=default
 LEGACY_USER_ID=default
 ```
 

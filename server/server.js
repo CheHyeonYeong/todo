@@ -21,9 +21,7 @@ const allowedEmails = (process.env.SUPABASE_ALLOWED_EMAILS || "")
 const googleAuthEnabled = Boolean(supabaseUrl && supabaseAnonKey);
 const maxBodyBytes = 1024 * 1024 * 2;
 const databaseUrl = process.env.DATABASE_URL || "";
-const stateId = process.env.MEMO_STATE_ID || "default";
-const legacyUserId = process.env.LEGACY_USER_ID || stateId;
-const tableName = process.env.MEMO_TABLE || "memo_state";
+const legacyUserId = process.env.LEGACY_USER_ID || "default";
 const todosTable = process.env.TODOS_TABLE || "todos";
 const memosTable = process.env.MEMOS_TABLE || "memos";
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
@@ -213,13 +211,6 @@ function quoteIdentifier(value) {
 async function ensureSchema() {
   if (!pool) return;
   await pool.query(`
-    create table if not exists ${quoteIdentifier(tableName)} (
-      id text primary key,
-      data jsonb not null default '{"todos":[],"memos":[]}'::jsonb,
-      updated_at timestamptz not null default now()
-    )
-  `);
-  await pool.query(`
     create table if not exists ${quoteIdentifier(memosTable)} (
       id text primary key,
       user_id text not null default 'default',
@@ -268,29 +259,23 @@ async function readPostgresData(userId = legacyUserId) {
     `,
     [userId],
   );
-  if (memos.rowCount || todos.rowCount) {
-    return {
-      memos: memos.rows.map((memo) => ({
-        id: memo.id,
-        body: memo.body,
-        tags: memo.tags || [],
-        createdAt: memo.created_at.toISOString(),
-      })),
-      todos: todos.rows.map((todo) => ({
-        id: todo.id,
-        title: todo.title,
-        scope: todo.scope,
-        done: todo.done,
-        createdAt: todo.created_at.toISOString(),
-        completedAt: todo.completed_at ? todo.completed_at.toISOString() : undefined,
-        sourceMemoId: todo.source_memo_id || undefined,
-      })),
-    };
-  }
-
-  const result = await pool.query(`select data from ${quoteIdentifier(tableName)} where id = $1 limit 1`, [stateId]);
-  if (!result.rowCount) return emptyData();
-  return cleanData(result.rows[0].data || emptyData());
+  return {
+    memos: memos.rows.map((memo) => ({
+      id: memo.id,
+      body: memo.body,
+      tags: memo.tags || [],
+      createdAt: memo.created_at.toISOString(),
+    })),
+    todos: todos.rows.map((todo) => ({
+      id: todo.id,
+      title: todo.title,
+      scope: todo.scope,
+      done: todo.done,
+      createdAt: todo.created_at.toISOString(),
+      completedAt: todo.completed_at ? todo.completed_at.toISOString() : undefined,
+      sourceMemoId: todo.source_memo_id || undefined,
+    })),
+  };
 }
 
 async function writePostgresData(value, userId = legacyUserId) {
@@ -320,15 +305,6 @@ async function writePostgresData(value, userId = legacyUserId) {
         [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId],
       );
     }
-    await client.query(
-      `
-        insert into ${quoteIdentifier(tableName)} (id, data, updated_at)
-        values ($1, $2::jsonb, $3)
-        on conflict (id)
-        do update set data = excluded.data, updated_at = excluded.updated_at
-      `,
-      [stateId, JSON.stringify(data), data.updatedAt],
-    );
     await client.query("commit");
   } catch (error) {
     await client.query("rollback");

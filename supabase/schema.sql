@@ -1,9 +1,3 @@
-create table if not exists public.memo_state (
-  id text primary key,
-  data jsonb not null default '{"todos":[],"memos":[]}'::jsonb,
-  updated_at timestamptz not null default now()
-);
-
 create table if not exists public.memos (
   id text primary key,
   user_id text not null default 'default',
@@ -25,7 +19,6 @@ create table if not exists public.todos (
   updated_at timestamptz not null default now()
 );
 
-alter table public.memo_state enable row level security;
 alter table public.memos enable row level security;
 alter table public.todos enable row level security;
 
