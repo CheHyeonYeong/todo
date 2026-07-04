@@ -1,3 +1,3 @@
-window.FREE_ADHD_API_BASE_URL = "";
+window.FREE_ADHD_API_BASE_URL = "https://158-179-193-175.nip.io";
 window.FREE_ADHD_SUPABASE_URL = "https://mkvgbffihswfjzgegwlx.supabase.co";
-window.FREE_ADHD_SUPABASE_ANON_KEY = "";
+window.FREE_ADHD_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rdmdiZmZpaHN3Zmp6Z2Vnd2x4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NzA5NzksImV4cCI6MjA5ODU0Njk3OX0.MrKmcsAMCU9fepyD97HMuSSImARjtchiCAaGRzgqsQ8";
