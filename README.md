@@ -8,8 +8,7 @@
   - 구조는 Vercel 정적 FE -> OCI Node API -> Supabase DB입니다.
   - 클라이언트 코드는 `client/`, API 서버 코드는 `server/`에 분리되어 있습니다.
   - Oracle 1GB VPS에도 충분합니다.
-  - `MEMO_TOKEN`을 설정하면 로그인 비밀번호가 생깁니다.
-  - Supabase Google Auth를 설정하면 Google 로그인 JWT도 API에서 검증합니다.
+  - 인증은 Supabase Google Auth 하나만 씁니다. `SUPABASE_URL`/`SUPABASE_ANON_KEY`를 설정하지 않으면 API가 완전히 무인증 상태로 열립니다.
   - 분리 배포에서는 로그인 후 `Authorization: Bearer` 토큰으로 API를 호출합니다.
   - 앱 런타임 DB 연결은 Supabase shared transaction-mode pooler `:6543`을 씁니다.
 - Docker 배포
@@ -82,8 +81,6 @@ npm run dev
 
 ```bash
 PORT=3000
-MEMO_TOKEN=change-this-login-token
-SESSION_SECRET=change-this-cookie-signing-secret
 ALLOWED_ORIGINS=http://localhost:3000,https://your-vercel-app.vercel.app
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_ANON_KEY=your-public-anon-key
@@ -97,13 +94,11 @@ LEGACY_USER_ID=default
 
 `DIRECT_URL`은 Prisma/Drizzle 같은 migration 도구를 붙일 때 쓰는 session-mode 연결입니다. 현재 앱 런타임에서는 읽지 않습니다.
 
-`SESSION_SECRET`은 로그인 쿠키 서명용입니다. 아무 긴 랜덤 문자열로 두면 되고, 값을 바꾸면 기존 로그인 세션은 만료됩니다.
-
 `ALLOWED_ORIGINS`는 OCI API를 호출할 수 있는 프론트엔드 origin 목록입니다. Vercel 배포 URL을 콤마로 추가합니다.
 
-`SUPABASE_URL`과 `SUPABASE_ANON_KEY`는 Google 로그인 JWT 검증에 씁니다. `SUPABASE_ALLOWED_EMAILS`를 설정하면 지정한 Google 계정만 API를 사용할 수 있습니다.
+`SUPABASE_URL`과 `SUPABASE_ANON_KEY`는 Google 로그인 JWT 검증에 씁니다. 이 둘을 설정해야 API에 인증이 걸립니다 (안 하면 무인증으로 열림). `SUPABASE_ALLOWED_EMAILS`를 설정하면 지정한 Google 계정만 API를 사용할 수 있습니다.
 
-`LEGACY_USER_ID`는 `MEMO_TOKEN` 로그인 또는 개발용 인증에서 쓰는 사용자 id입니다. Google 로그인 사용자는 Supabase Auth user id로 자동 분리됩니다.
+`LEGACY_USER_ID`는 Google 로그인 없이 로컬 개발할 때(=무인증 상태) 쓰는 고정 사용자 id입니다. Google 로그인 사용자는 Supabase Auth user id로 자동 분리됩니다.
 
 ## Vercel FE 분리
 
@@ -141,7 +136,7 @@ Authorized JavaScript origin:
 https://your-vercel-app.vercel.app
 ```
 
-Google provider를 켠 뒤 `client/src/config.js`와 서버 `.env`에 Supabase URL/anon key를 넣으면 로그인 화면에 Google 로그인 버튼이 표시됩니다.
+Google 로그인이 유일한 인증 수단입니다. Google provider를 켠 뒤 `client/src/config.js`와 서버 `.env`에 Supabase URL/anon key를 넣어야 실제로 인증이 걸립니다. 설정 전에는 API가 무인증으로 열려 있으니 프로덕션 배포 전에 꼭 켜야 합니다.
 
 ## 서버 CD
 

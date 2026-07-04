@@ -65,7 +65,6 @@ button {
   font-size: clamp(2rem, 10vw, 3.4rem);
 }
 
-.login-panel input,
 .login-panel button {
   width: 100%;
 }

@@ -126,7 +126,6 @@ async function apiFetch(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
-    credentials: API_BASE_URL ? "omit" : "same-origin",
   });
   if (response.status === 401) {
     localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -139,14 +138,11 @@ function showLogin(message = "") {
   authenticated = false;
   byId("loginScreen").hidden = false;
   byId("loginError").textContent = message;
-  byId("googleLoginButton").hidden = !supabaseClient;
-  byId("loginPassword").focus();
 }
 
 function hideLogin() {
   authenticated = true;
   byId("loginScreen").hidden = true;
-  byId("loginPassword").value = "";
   byId("loginError").textContent = "";
 }
 
@@ -618,30 +614,6 @@ byId("resetButton").addEventListener("click", () => {
   queueServerSave();
   render();
 });
-byId("loginForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const password = byId("loginPassword").value;
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: API_BASE_URL ? "omit" : "same-origin",
-      body: JSON.stringify({ password }),
-    });
-    if (!response.ok) {
-      showLogin("비밀번호가 맞지 않습니다.");
-      return;
-    }
-    const result = await response.json();
-    localStorage.setItem(AUTH_TOKEN_KEY, result.authToken || password);
-    hideLogin();
-    loadServerData();
-  } catch {
-    showLogin("로그인 요청에 실패했습니다.");
-  }
-});
 byId("googleLoginButton").addEventListener("click", async () => {
   if (!supabaseClient) {
     showLogin("Google 로그인 설정이 없습니다.");
@@ -658,10 +630,6 @@ byId("googleLoginButton").addEventListener("click", async () => {
 byId("logoutButton").addEventListener("click", async () => {
   localStorage.removeItem(AUTH_TOKEN_KEY);
   if (supabaseClient) await supabaseClient.auth.signOut();
-  await fetch(`${API_BASE_URL}/api/logout`, {
-    method: "POST",
-    credentials: API_BASE_URL ? "omit" : "same-origin",
-  });
   serverBacked = false;
   setSyncStatus("signed out", "warn");
   showLogin();
