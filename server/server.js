@@ -11,14 +11,9 @@ const port = Number(process.env.PORT || 3000);
 const dataFile = process.env.DATA_FILE || join(__dirname, "../data", "store.json");
 const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "";
-const allowedEmails = (process.env.SUPABASE_ALLOWED_EMAILS || "")
-  .split(",")
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
 const googleAuthEnabled = Boolean(supabaseUrl && supabaseAnonKey);
 const maxBodyBytes = 1024 * 1024 * 2;
 const databaseUrl = process.env.DATABASE_URL || "";
-const legacyUserId = process.env.LEGACY_USER_ID || "default";
 const todosTable = process.env.TODOS_TABLE || "todos";
 const memosTable = process.env.MEMOS_TABLE || "memos";
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
@@ -75,10 +70,7 @@ async function getSupabaseUser(accessToken) {
   });
   if (!response.ok) return null;
 
-  const user = await response.json();
-  const email = String(user.email || "").toLowerCase();
-  if (allowedEmails.length && !allowedEmails.includes(email)) return null;
-  return user;
+  return response.json();
 }
 
 async function isAuthorized(request) {
@@ -90,7 +82,7 @@ async function isAuthorized(request) {
 }
 
 async function getRequestUserId(request) {
-  if (!googleAuthEnabled) return legacyUserId;
+  if (!googleAuthEnabled) return "default";
 
   const match = (request.headers.authorization || "").match(/^Bearer\s+(.+)$/i);
   const user = match ? await getSupabaseUser(match[1]) : null;
@@ -133,7 +125,7 @@ function cleanData(value) {
   };
 }
 
-async function readData(userId = legacyUserId) {
+async function readData(userId) {
   if (pool) return readPostgresData(userId);
 
   try {
@@ -145,7 +137,7 @@ async function readData(userId = legacyUserId) {
   }
 }
 
-async function writeData(value, userId = legacyUserId) {
+async function writeData(value, userId) {
   if (pool) return writePostgresData(value, userId);
 
   const data = cleanData(value);
@@ -194,7 +186,7 @@ async function ensureSchema() {
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_user_created_idx`)} on ${quoteIdentifier(todosTable)} (user_id, created_at desc)`);
 }
 
-async function readPostgresData(userId = legacyUserId) {
+async function readPostgresData(userId) {
   await ensureSchema();
   const memos = await pool.query(
     `
@@ -233,7 +225,7 @@ async function readPostgresData(userId = legacyUserId) {
   };
 }
 
-async function writePostgresData(value, userId = legacyUserId) {
+async function writePostgresData(value, userId) {
   await ensureSchema();
   const data = cleanData(value);
   const client = await pool.connect();
@@ -270,7 +262,7 @@ async function writePostgresData(value, userId = legacyUserId) {
   return data;
 }
 
-async function createMemoWithTodos(value, userId = legacyUserId) {
+async function createMemoWithTodos(value, userId) {
   if (!pool) {
     const data = await readData(userId);
     const memo = cleanMemo(value.memo);
@@ -319,7 +311,7 @@ async function createMemoWithTodos(value, userId = legacyUserId) {
   }
 }
 
-async function createTodo(value, userId = legacyUserId) {
+async function createTodo(value, userId) {
   const todo = cleanTodo(value);
   if (!pool) {
     const data = await readData(userId);
@@ -343,7 +335,7 @@ async function createTodo(value, userId = legacyUserId) {
   return todo;
 }
 
-async function updateTodo(id, patch, userId = legacyUserId) {
+async function updateTodo(id, patch, userId) {
   if (!pool) {
     const data = await readData(userId);
     data.todos = data.todos.map((todo) => (todo.id === id ? { ...todo, ...patch } : todo));
@@ -376,7 +368,7 @@ async function updateTodo(id, patch, userId = legacyUserId) {
   };
 }
 
-async function deleteTodoById(id, userId = legacyUserId) {
+async function deleteTodoById(id, userId) {
   if (!pool) {
     const data = await readData(userId);
     data.todos = data.todos.filter((todo) => todo.id !== id);
@@ -387,7 +379,7 @@ async function deleteTodoById(id, userId = legacyUserId) {
   await pool.query(`delete from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2`, [id, userId]);
 }
 
-async function deleteMemoById(id, userId = legacyUserId) {
+async function deleteMemoById(id, userId) {
   if (!pool) {
     const data = await readData(userId);
     data.memos = data.memos.filter((memo) => memo.id !== id);
