@@ -84,7 +84,7 @@ PORT=3000
 ALLOWED_ORIGINS=http://localhost:3000,https://your-vercel-app.vercel.app
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_ANON_KEY=your-public-anon-key
-SUPABASE_ALLOWED_EMAILS=you@example.com
+# SUPABASE_ALLOWED_EMAILS=you@example.com,teammate@example.com
 DATABASE_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
 LEGACY_USER_ID=default
@@ -96,7 +96,7 @@ LEGACY_USER_ID=default
 
 `ALLOWED_ORIGINS`는 OCI API를 호출할 수 있는 프론트엔드 origin 목록입니다. Vercel 배포 URL을 콤마로 추가합니다.
 
-`SUPABASE_URL`과 `SUPABASE_ANON_KEY`는 Google 로그인 JWT 검증에 씁니다. 이 둘을 설정해야 API에 인증이 걸립니다 (안 하면 무인증으로 열림). `SUPABASE_ALLOWED_EMAILS`를 설정하면 지정한 Google 계정만 API를 사용할 수 있습니다.
+`SUPABASE_URL`과 `SUPABASE_ANON_KEY`는 Google 로그인 JWT 검증에 씁니다. 이 둘을 설정해야 API에 인증이 걸립니다 (안 하면 무인증으로 열림). `SUPABASE_ALLOWED_EMAILS`는 선택사항이며, 비워두면 Google 계정만 있으면 누구나 로그인해서 쓸 수 있고(각자 데이터는 자동으로 분리됨), 설정하면 지정한 이메일만 허용하는 화이트리스트가 됩니다.
 
 `LEGACY_USER_ID`는 Google 로그인 없이 로컬 개발할 때(=무인증 상태) 쓰는 고정 사용자 id입니다. Google 로그인 사용자는 Supabase Auth user id로 자동 분리됩니다.
 
