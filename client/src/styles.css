@@ -709,6 +709,7 @@ select {
 
 .memo-list {
   display: grid;
+  flex-shrink: 0;
   max-height: 560px;
   overflow: auto;
   gap: 10px;
