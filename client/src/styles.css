@@ -193,6 +193,13 @@ h3 {
   cursor: grabbing;
 }
 
+@media (pointer: coarse) {
+  .drag-handle,
+  .resize-handle {
+    display: none;
+  }
+}
+
 .focus-panel,
 .todo-panel,
 .pomodoro-panel,
@@ -265,8 +272,21 @@ select:focus {
   font-weight: 800;
 }
 
-.icon-button.wide {
-  min-width: 120px;
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-label {
+  color: #4b5870;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.account-label:empty {
+  display: none;
 }
 
 .sync-status {

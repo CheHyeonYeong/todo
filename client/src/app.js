@@ -179,6 +179,7 @@ async function checkSession() {
       if (authData.session?.access_token) {
         localStorage.setItem(AUTH_TOKEN_KEY, authData.session.access_token);
       }
+      byId("accountLabel").textContent = authData.session?.user?.email || "";
     }
     const response = await apiFetch("/api/session");
     const session = await response.json();
@@ -876,6 +877,7 @@ byId("logoutButton").addEventListener("click", async () => {
   if (supabaseClient) await supabaseClient.auth.signOut();
   serverBacked = false;
   setSyncStatus("signed out", "warn");
+  byId("accountLabel").textContent = "";
   showLogin();
 });
 

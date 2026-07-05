@@ -20,19 +20,18 @@
     </section>
     <main class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">timestamp todo workspace</p>
-          <h1>Free ADHD Memo</h1>
+        <span class="account-label" id="accountLabel"></span>
+        <div class="topbar-actions">
+          <button class="icon-button" id="memoDrawerToggle" type="button" title="메모 열기">
+            <span aria-hidden="true">✎</span>메모
+          </button>
+          <button class="icon-button" id="exportButton" type="button" title="마크다운 내보내기">
+            <span aria-hidden="true">↓</span>
+            Export
+          </button>
+          <button class="icon-button" id="logoutButton" type="button" title="로그아웃">Logout</button>
+          <span class="sync-status" id="syncStatus">local</span>
         </div>
-        <button class="icon-button" id="memoDrawerToggle" type="button" title="메모 열기">
-          <span aria-hidden="true">✎</span>메모
-        </button>
-        <button class="icon-button wide" id="exportButton" type="button" title="마크다운 내보내기">
-          <span aria-hidden="true">↓</span>
-          Export
-        </button>
-        <button class="icon-button" id="logoutButton" type="button" title="로그아웃">Logout</button>
-        <span class="sync-status" id="syncStatus">local</span>
       </header>
 
       <section class="dashboard-grid">
