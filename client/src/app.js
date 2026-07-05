@@ -658,6 +658,20 @@ byId("timerMinutesInput").addEventListener("change", (event) => {
 byId("timerToggle").addEventListener("click", toggleTimer);
 byId("timerReset").addEventListener("click", () => setTimerMode(timerMode));
 byId("exportButton").addEventListener("click", exportMarkdown);
+
+function openMemoDrawer() {
+  byId("memoDrawer").classList.add("open");
+  byId("memoDrawerBackdrop").hidden = false;
+}
+
+function closeMemoDrawer() {
+  byId("memoDrawer").classList.remove("open");
+  byId("memoDrawerBackdrop").hidden = true;
+}
+
+byId("memoDrawerToggle").addEventListener("click", openMemoDrawer);
+byId("memoDrawerClose").addEventListener("click", closeMemoDrawer);
+byId("memoDrawerBackdrop").addEventListener("click", closeMemoDrawer);
 byId("resetButton").addEventListener("click", () => {
   data = starterData();
   activeTag = null;
