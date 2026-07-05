@@ -75,25 +75,27 @@
           </div>
         </section>
 
-        <div class="side-column">
-          <aside class="focus-panel">
+        <div class="resize-handle" id="dashboardResizeHandle" title="드래그해서 너비 조절"></div>
+
+        <div class="side-column" id="sideColumn">
+          <aside class="focus-panel" draggable="true" data-block-id="focus">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">now</p>
                 <h2>집중 큐</h2>
               </div>
-              <span class="panel-icon" aria-hidden="true">✦</span>
+              <span class="panel-icon drag-handle" aria-hidden="true" title="드래그해서 순서 변경">⠿</span>
             </div>
             <div class="focus-list" id="focusList"></div>
           </aside>
 
-          <section class="pomodoro-panel">
+          <section class="pomodoro-panel" draggable="true" data-block-id="pomodoro">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">pomodoro</p>
                 <h2>타이머</h2>
               </div>
-              <span class="panel-icon" aria-hidden="true">◷</span>
+              <span class="panel-icon drag-handle" aria-hidden="true" title="드래그해서 순서 변경">⠿</span>
             </div>
             <div class="timer" id="timerLabel">25:00</div>
             <div class="segmented" id="timerModes">
@@ -111,13 +113,13 @@
             </div>
           </section>
 
-          <aside class="insight-panel">
+          <aside class="insight-panel" draggable="true" data-block-id="insight">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">review</p>
                 <h2>오늘의 흐름</h2>
               </div>
-              <span class="panel-icon" aria-hidden="true">◆</span>
+              <span class="panel-icon drag-handle" aria-hidden="true" title="드래그해서 순서 변경">⠿</span>
             </div>
             <div class="stat-grid" id="stats"></div>
             <div class="activity-title"><span aria-hidden="true">▦</span>28일 기록</div>

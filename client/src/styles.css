@@ -146,19 +146,51 @@ h3 {
 }
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.9fr);
-  gap: 16px;
+  display: flex;
   flex: 1;
   min-height: 0;
 }
 
+.resize-handle {
+  flex: 0 0 16px;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  cursor: col-resize;
+}
+
+.resize-handle::after {
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(89, 103, 127, 0.22);
+  content: "";
+}
+
+.resize-handle:hover::after,
+.resize-handle.active::after {
+  background: rgba(61, 123, 111, 0.55);
+}
+
 .side-column {
   display: flex;
+  flex: 0.9 1 0%;
   flex-direction: column;
   gap: 16px;
   min-height: 0;
+  min-width: 280px;
   overflow-y: auto;
+}
+
+.side-column .dragging {
+  opacity: 0.4;
+}
+
+.drag-handle {
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .focus-panel,
@@ -175,8 +207,10 @@ h3 {
 
 .todo-panel {
   display: flex;
+  flex: 1.6 1 0%;
   flex-direction: column;
   min-height: 0;
+  min-width: 360px;
 }
 
 .timestamp {
@@ -777,7 +811,17 @@ select {
 
 @media (max-width: 1080px) {
   .dashboard-grid {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .todo-panel,
+  .side-column {
+    flex: 1 1 auto !important;
+    min-width: 0;
+  }
+
+  .resize-handle {
+    display: none;
   }
 }
 

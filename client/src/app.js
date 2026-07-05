@@ -2,6 +2,8 @@ const STORAGE_KEY = "free-adhd-memo:v1";
 const API_BASE_KEY = "free-adhd-memo:api-base";
 const AUTH_TOKEN_KEY = "free-adhd-memo:auth-token";
 const TIMER_KEY = "free-adhd-memo:timer-minutes";
+const DASHBOARD_WIDTH_KEY = "free-adhd-memo:dashboard-width";
+const SIDE_ORDER_KEY = "free-adhd-memo:side-order";
 const scopeLabels = {
   day: "오늘",
   week: "이번 주",
@@ -835,6 +837,109 @@ byId("logoutButton").addEventListener("click", async () => {
   setSyncStatus("signed out", "warn");
   showLogin();
 });
+
+function applySideColumnOrder() {
+  const sideColumn = byId("sideColumn");
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(SIDE_ORDER_KEY) || "null");
+  } catch {
+    saved = null;
+  }
+  if (!Array.isArray(saved)) return;
+
+  const byBlockId = new Map(Array.from(sideColumn.children).map((el) => [el.dataset.blockId, el]));
+  saved.forEach((id) => {
+    const el = byBlockId.get(id);
+    if (el) sideColumn.appendChild(el);
+  });
+}
+
+function setupSideColumnReorder() {
+  const sideColumn = byId("sideColumn");
+  let draggedEl = null;
+
+  sideColumn.addEventListener("dragstart", (event) => {
+    const block = event.target.closest("[data-block-id]");
+    if (!block) return;
+    draggedEl = block;
+    event.dataTransfer.effectAllowed = "move";
+    block.classList.add("dragging");
+  });
+
+  sideColumn.addEventListener("dragend", () => {
+    if (draggedEl) draggedEl.classList.remove("dragging");
+    draggedEl = null;
+  });
+
+  sideColumn.addEventListener("dragover", (event) => {
+    if (!draggedEl) return;
+    event.preventDefault();
+    const target = event.target.closest("[data-block-id]");
+    if (!target || target === draggedEl) return;
+    const rect = target.getBoundingClientRect();
+    const before = event.clientY < rect.top + rect.height / 2;
+    sideColumn.insertBefore(draggedEl, before ? target : target.nextSibling);
+  });
+
+  sideColumn.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const order = Array.from(sideColumn.children).map((el) => el.dataset.blockId);
+    localStorage.setItem(SIDE_ORDER_KEY, JSON.stringify(order));
+  });
+}
+
+function setupDashboardResize() {
+  const handle = byId("dashboardResizeHandle");
+  const todoPanel = document.querySelector(".todo-panel");
+  const sideColumn = byId("sideColumn");
+  const wideEnough = () => window.matchMedia("(min-width: 1081px)").matches;
+
+  const savedWidth = Number(localStorage.getItem(DASHBOARD_WIDTH_KEY));
+  if (savedWidth > 0 && wideEnough()) {
+    todoPanel.style.flex = `0 0 ${savedWidth}px`;
+    sideColumn.style.flex = "1 1 0%";
+  }
+
+  let dragging = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  function onPointerMove(event) {
+    if (!dragging) return;
+    const delta = event.clientX - startX;
+    const containerWidth = handle.parentElement.clientWidth;
+    const minWidth = 360;
+    const maxWidth = containerWidth - 296;
+    const nextWidth = Math.min(maxWidth, Math.max(minWidth, startWidth + delta));
+    todoPanel.style.flex = `0 0 ${nextWidth}px`;
+    sideColumn.style.flex = "1 1 0%";
+  }
+
+  function onPointerUp() {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("active");
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    localStorage.setItem(DASHBOARD_WIDTH_KEY, String(Math.round(todoPanel.getBoundingClientRect().width)));
+  }
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (!wideEnough()) return;
+    dragging = true;
+    startX = event.clientX;
+    startWidth = todoPanel.getBoundingClientRect().width;
+    handle.classList.add("active");
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    event.preventDefault();
+  });
+}
+
+applySideColumnOrder();
+setupSideColumnReorder();
+setupDashboardResize();
 
 render();
 checkSession();
