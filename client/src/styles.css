@@ -775,9 +775,75 @@ select {
 }
 
 .activity-cell {
+  position: relative;
   aspect-ratio: 1;
+  width: 100%;
   border-radius: 5px;
   background: #e5eaf1;
+  padding: 0;
+}
+
+.activity-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 5;
+  display: none;
+  border-radius: 6px;
+  background: #172033;
+  color: #fff;
+  padding: 6px 10px;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .activity-cell:hover .activity-tooltip {
+    display: block;
+  }
+}
+
+.activity-card-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 16;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.activity-card-backdrop[hidden] {
+  display: none;
+}
+
+.activity-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 17;
+  width: min(320px, 84vw);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.24);
+  padding: 22px;
+  transform: translate(-50%, -50%);
+}
+
+.activity-card[hidden] {
+  display: none;
+}
+
+.activity-card #activityCardClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.activity-card h4 {
+  margin: 0 32px 14px 0;
+  font-size: 1.05rem;
 }
 
 .level-1 {

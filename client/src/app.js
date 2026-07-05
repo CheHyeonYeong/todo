@@ -503,9 +503,45 @@ function renderInsights() {
     const date = new Date();
     date.setDate(date.getDate() - (27 - index));
     const dayKey = date.toDateString();
-    const count = data.memos.filter((memo) => new Date(memo.createdAt).toDateString() === dayKey).length;
-    return `<span class="activity-cell level-${Math.min(count, 4)}" title="${date.getMonth() + 1}/${date.getDate()}: ${count}개"></span>`;
+    const memoCount = data.memos.filter((memo) => new Date(memo.createdAt).toDateString() === dayKey).length;
+    const doneOnDay = data.todos.filter(
+      (todo) => todo.completedAt && new Date(todo.completedAt).toDateString() === dayKey,
+    ).length;
+    const label = `${date.getMonth() + 1}/${date.getDate()} (${formatWeekdayShort(date)})`;
+    return `
+      <button
+        type="button"
+        class="activity-cell level-${Math.min(memoCount, 4)}"
+        data-action="activity-day"
+        data-label="${escapeHtml(label)}"
+        data-memo-count="${memoCount}"
+        data-done-count="${doneOnDay}"
+      >
+        <span class="activity-tooltip">${escapeHtml(label)}<br />메모 ${memoCount}개 · 완료 ${doneOnDay}개</span>
+      </button>
+    `;
   }).join("");
+}
+
+function formatWeekdayShort(date) {
+  return new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
+}
+
+function showActivityCard(label, memoCount, doneCount) {
+  byId("activityCardContent").innerHTML = `
+    <h4>${escapeHtml(label)}</h4>
+    <div class="stat-grid">
+      <div><strong>${memoCount}</strong><span>메모</span></div>
+      <div><strong>${doneCount}</strong><span>완료한 할 일</span></div>
+    </div>
+  `;
+  byId("activityCard").hidden = false;
+  byId("activityCardBackdrop").hidden = false;
+}
+
+function hideActivityCard() {
+  byId("activityCard").hidden = true;
+  byId("activityCardBackdrop").hidden = true;
 }
 
 function renderTimer() {
@@ -740,6 +776,9 @@ document.body.addEventListener("click", (event) => {
     selectedCalendarDate = target.dataset.date;
     renderCalendar();
   }
+  if (action === "activity-day" && window.matchMedia("(hover: none)").matches) {
+    showActivityCard(target.dataset.label, target.dataset.memoCount, target.dataset.doneCount);
+  }
 });
 
 byId("queryInput").addEventListener("input", (event) => {
@@ -808,6 +847,8 @@ function closeMemoDrawer() {
 byId("memoDrawerToggle").addEventListener("click", openMemoDrawer);
 byId("memoDrawerClose").addEventListener("click", closeMemoDrawer);
 byId("memoDrawerBackdrop").addEventListener("click", closeMemoDrawer);
+byId("activityCardClose").addEventListener("click", hideActivityCard);
+byId("activityCardBackdrop").addEventListener("click", hideActivityCard);
 byId("resetButton").addEventListener("click", () => {
   data = starterData();
   activeTag = null;
