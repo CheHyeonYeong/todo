@@ -52,6 +52,7 @@ create table if not exists public.todos (
   created_at timestamptz not null,
   completed_at timestamptz,
   source_memo_id text references public.memos(id) on delete set null,
+  due_date text,
   updated_at timestamptz not null default now()
 );
 
@@ -61,9 +62,11 @@ alter table public.todos enable row level security;
 alter table public.memos add column if not exists user_id text not null default 'default';
 alter table public.todos add column if not exists user_id text not null default 'default';
 alter table public.memos add column if not exists starred boolean not null default false;
+alter table public.todos add column if not exists due_date text;
 
 create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
 create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);
+create index if not exists todos_due_date_idx on public.todos (user_id, due_date);
 ```
 
 `.env.example`을 참고해 `.env`를 만들고 실행합니다.

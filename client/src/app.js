@@ -41,6 +41,9 @@ let starOnly = false;
 let serverBacked = false;
 let syncTimer = null;
 let authenticated = false;
+let calendarViewMode = false;
+let calendarMonth = new Date();
+let selectedCalendarDate = null;
 
 const urlParams = new URLSearchParams(window.location.search);
 const requestedApiBase = urlParams.get("api");
@@ -294,6 +297,13 @@ function minutesToLabel(seconds) {
   return `${minutes}:${rest}`;
 }
 
+function dateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function renderLabels() {
   byId("todayLabel").textContent = formatDate(nowIso());
   byId("nowLabel").textContent = new Date().toLocaleTimeString("ko-KR", {
@@ -349,6 +359,89 @@ function renderTodos() {
         )
         .join("")
     : `<p class="empty">비어 있습니다. 쉬어도 됩니다.</p>`;
+}
+
+function renderCalendar() {
+  if (!calendarViewMode) return;
+
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  byId("calendarMonthLabel").textContent = `${year}년 ${month + 1}월`;
+
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayKey = dateKey(new Date());
+
+  const countByDate = data.todos.reduce((acc, todo) => {
+    if (!todo.dueDate) return acc;
+    acc[todo.dueDate] = (acc[todo.dueDate] || 0) + 1;
+    return acc;
+  }, {});
+
+  const leadingBlanks = Array.from({ length: firstDay.getDay() }, () => `<div class="calendar-day empty"></div>`);
+  const dayCells = Array.from({ length: daysInMonth }, (_, index) => {
+    const day = index + 1;
+    const key = dateKey(new Date(year, month, day));
+    const count = countByDate[key] || 0;
+    const classes = ["calendar-day"];
+    if (key === todayKey) classes.push("today");
+    if (key === selectedCalendarDate) classes.push("selected");
+    return `
+      <button type="button" class="${classes.join(" ")}" data-action="select-calendar-day" data-date="${key}">
+        <span>${day}</span>
+        ${count ? `<span class="calendar-day-count">${count}</span>` : ""}
+      </button>
+    `;
+  });
+
+  byId("calendarGrid").innerHTML = [...leadingBlanks, ...dayCells].join("");
+  renderCalendarDayDetail();
+}
+
+function renderCalendarDayDetail() {
+  const detail = byId("calendarDayDetail");
+  if (!selectedCalendarDate) {
+    detail.innerHTML = `<p class="empty">날짜를 선택하면 그날 마감인 할 일을 보고 추가할 수 있습니다.</p>`;
+    return;
+  }
+
+  const items = data.todos
+    .filter((todo) => todo.dueDate === selectedCalendarDate)
+    .sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt.localeCompare(a.createdAt));
+
+  const rows = items.length
+    ? items
+        .map(
+          (todo) => `
+            <div class="todo-row ${todo.done ? "done" : ""}">
+              <button type="button" data-action="toggle-todo" data-id="${todo.id}" title="완료 전환">
+                ${todo.done ? "✓" : "○"}
+              </button>
+              <span>${escapeHtml(todo.title)}</span>
+              <button type="button" data-action="delete-todo" data-id="${todo.id}" title="삭제">×</button>
+            </div>
+          `,
+        )
+        .join("")
+    : `<p class="empty">이 날짜에 마감인 할 일이 없습니다.</p>`;
+
+  detail.innerHTML = `
+    <h4>${formatDate(`${selectedCalendarDate}T00:00:00`)}</h4>
+    <form class="calendar-quick-add" id="calendarQuickAdd">
+      <input id="calendarQuickAddInput" placeholder="이 날짜에 할 일 추가" />
+      <button type="submit" title="추가"><span aria-hidden="true">+</span></button>
+    </form>
+    ${rows}
+  `;
+
+  byId("calendarQuickAdd").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = byId("calendarQuickAddInput");
+    const title = input.value.trim();
+    if (!title) return;
+    addTodo({ title, scope: "day", dueDate: selectedCalendarDate });
+    input.value = "";
+  });
 }
 
 function renderTags() {
@@ -430,6 +523,7 @@ function renderTimer() {
 function render() {
   renderLabels();
   renderTodos();
+  renderCalendar();
   renderTags();
   renderMemos();
   renderInsights();
@@ -586,21 +680,16 @@ byId("memoForm").addEventListener("submit", (event) => {
   });
 });
 
-byId("todoForm").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const input = byId("todoDraft");
-  const title = input.value.trim();
-  if (!title) return;
-
+function addTodo({ title, scope, dueDate = null }) {
   const todo = {
     id: uid(),
     title,
-    scope: byId("todoScope").value,
+    scope,
     done: false,
     createdAt: nowIso(),
+    dueDate,
   };
   data.todos.unshift(todo);
-  input.value = "";
   saveData();
   render();
   sendMutation("/api/todos", {
@@ -610,6 +699,22 @@ byId("todoForm").addEventListener("submit", (event) => {
     },
     body: JSON.stringify(todo),
   });
+}
+
+byId("todoForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = byId("todoDraft");
+  const dueDateInput = byId("todoDueDate");
+  const title = input.value.trim();
+  if (!title) return;
+
+  addTodo({
+    title,
+    scope: byId("todoScope").value,
+    dueDate: dueDateInput.value || null,
+  });
+  input.value = "";
+  dueDateInput.value = "";
 });
 
 document.body.addEventListener("click", (event) => {
@@ -629,6 +734,10 @@ document.body.addEventListener("click", (event) => {
     activeTag = target.dataset.tag;
     render();
   }
+  if (action === "select-calendar-day") {
+    selectedCalendarDate = target.dataset.date;
+    renderCalendar();
+  }
 });
 
 byId("queryInput").addEventListener("input", (event) => {
@@ -640,6 +749,31 @@ byId("starFilterToggle").addEventListener("click", () => {
   starOnly = !starOnly;
   byId("starFilterToggle").classList.toggle("active", starOnly);
   renderMemos();
+});
+
+byId("todoViewToggle").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-view]");
+  if (!button) return;
+  calendarViewMode = button.dataset.view === "calendar";
+
+  document.querySelectorAll("#todoViewToggle button").forEach((viewButton) => {
+    viewButton.classList.toggle("active", viewButton.dataset.view === button.dataset.view);
+  });
+  byId("todoForm").hidden = calendarViewMode;
+  byId("todoColumns").hidden = calendarViewMode;
+  byId("calendarView").hidden = !calendarViewMode;
+
+  if (calendarViewMode) renderCalendar();
+});
+
+byId("calendarPrevMonth").addEventListener("click", () => {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
+  renderCalendar();
+});
+
+byId("calendarNextMonth").addEventListener("click", () => {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+  renderCalendar();
 });
 
 byId("timerModes").addEventListener("click", (event) => {

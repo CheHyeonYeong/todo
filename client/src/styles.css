@@ -308,6 +308,12 @@ select {
   flex: 1;
 }
 
+.todo-form input[type="date"] {
+  flex: none;
+  width: 150px;
+  color: #55647a;
+}
+
 .todo-form select {
   width: 110px;
 }
@@ -317,12 +323,156 @@ select {
   padding: 0;
 }
 
+.todo-view-toggle {
+  grid-template-columns: repeat(2, 1fr);
+  width: auto;
+}
+
 .todo-columns {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   flex: 1;
   min-height: 0;
+}
+
+.todo-form[hidden],
+.todo-columns[hidden] {
+  display: none;
+}
+
+.calendar-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+}
+
+.calendar-view[hidden] {
+  display: none;
+}
+
+.calendar-main {
+  display: flex;
+  flex: 1.4;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.calendar-header button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 7px;
+  background: #eef3f7;
+  color: #263349;
+  font-weight: 900;
+}
+
+.calendar-header h3 {
+  margin-bottom: 0;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 6px;
+  color: #8792a6;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.calendar-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 44px;
+  border-radius: 7px;
+  background: #f7f9fc;
+  padding: 6px 8px;
+  color: #263349;
+  font-weight: 800;
+}
+
+.calendar-day.empty {
+  background: transparent;
+}
+
+.calendar-day.today {
+  box-shadow: inset 0 0 0 2px #3d7b6f;
+}
+
+.calendar-day.selected {
+  background: #172033;
+  color: #fff;
+}
+
+.calendar-day-count {
+  align-self: flex-end;
+  border-radius: 999px;
+  background: #21725c;
+  color: #fff;
+  padding: 1px 7px;
+  font-size: 0.72rem;
+}
+
+.calendar-day.selected .calendar-day-count {
+  background: #fff;
+  color: #172033;
+}
+
+.calendar-day-detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border-radius: 8px;
+  background: #f7f9fc;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.calendar-day-detail h4 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.calendar-quick-add {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.calendar-quick-add input {
+  flex: 1;
+  min-width: 0;
+}
+
+.calendar-quick-add button {
+  width: 40px;
+  padding: 0;
 }
 
 .todo-column {
@@ -683,8 +833,21 @@ select {
   }
 
   .todo-form select,
+  .todo-form input[type="date"],
   .search-box {
     width: 100%;
+  }
+
+  .calendar-view {
+    flex-direction: column;
+  }
+
+  .calendar-grid {
+    overflow-y: visible;
+  }
+
+  .calendar-day-detail {
+    overflow-y: visible;
   }
 
   .log-actions {

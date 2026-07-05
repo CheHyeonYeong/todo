@@ -42,10 +42,14 @@
               <p class="eyebrow">todo</p>
               <h2>기간별 할 일</h2>
             </div>
-            <span class="panel-icon" aria-hidden="true">☑</span>
+            <div class="segmented todo-view-toggle" id="todoViewToggle">
+              <button class="active" type="button" data-view="list">목록</button>
+              <button type="button" data-view="calendar">캘린더</button>
+            </div>
           </div>
           <form class="todo-form" id="todoForm">
             <input id="todoDraft" placeholder="할 일 추가" />
+            <input type="date" id="todoDueDate" title="마감일 (선택)" />
             <select id="todoScope">
               <option value="day">오늘</option>
               <option value="week">이번 주</option>
@@ -54,6 +58,21 @@
             <button type="submit" title="추가"><span aria-hidden="true">+</span></button>
           </form>
           <div class="todo-columns" id="todoColumns"></div>
+
+          <div class="calendar-view" id="calendarView" hidden>
+            <div class="calendar-main">
+              <div class="calendar-header">
+                <button type="button" id="calendarPrevMonth" title="이전 달">‹</button>
+                <h3 id="calendarMonthLabel"></h3>
+                <button type="button" id="calendarNextMonth" title="다음 달">›</button>
+              </div>
+              <div class="calendar-weekdays">
+                <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+              </div>
+              <div class="calendar-grid" id="calendarGrid"></div>
+            </div>
+            <div class="calendar-day-detail" id="calendarDayDetail"></div>
+          </div>
         </section>
 
         <div class="side-column">
