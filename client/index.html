@@ -95,6 +95,10 @@
             <button type="button" data-mode="short">짧은 휴식</button>
             <button type="button" data-mode="long">긴 휴식</button>
           </div>
+          <div class="timer-config">
+            <label for="timerMinutesInput">분 설정</label>
+            <input type="number" id="timerMinutesInput" min="1" max="180" value="25" />
+          </div>
           <div class="timer-actions">
             <button type="button" id="timerToggle"><span aria-hidden="true">▶</span>시작</button>
             <button type="button" id="timerReset"><span aria-hidden="true">↺</span>리셋</button>
@@ -109,9 +113,12 @@
               <p class="eyebrow">memo</p>
               <h2>타임라인</h2>
             </div>
-            <div class="search-box">
-              <span aria-hidden="true">⌕</span>
-              <input id="queryInput" placeholder="검색" />
+            <div class="log-actions">
+              <div class="search-box">
+                <span aria-hidden="true">⌕</span>
+                <input id="queryInput" placeholder="검색" />
+              </div>
+              <button class="icon-button" id="starFilterToggle" type="button" title="즐겨찾기만 보기">★</button>
             </div>
           </div>
           <div class="tag-strip" id="tagStrip"></div>

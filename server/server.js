@@ -114,6 +114,7 @@ function cleanMemo(memo) {
     body: String(memo?.body || "").trim(),
     createdAt: memo?.createdAt || new Date().toISOString(),
     tags: Array.isArray(memo?.tags) ? memo.tags.map(String) : [],
+    starred: Boolean(memo?.starred),
   };
 }
 
@@ -182,6 +183,7 @@ async function ensureSchema() {
   `);
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists user_id text not null default 'default'`);
+  await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists starred boolean not null default false`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${memosTable}_user_created_idx`)} on ${quoteIdentifier(memosTable)} (user_id, created_at desc)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_user_created_idx`)} on ${quoteIdentifier(todosTable)} (user_id, created_at desc)`);
 }
@@ -190,7 +192,7 @@ async function readPostgresData(userId) {
   await ensureSchema();
   const memos = await pool.query(
     `
-      select id, body, tags, created_at
+      select id, body, tags, created_at, starred
       from ${quoteIdentifier(memosTable)}
       where user_id = $1
       order by created_at desc
@@ -212,6 +214,7 @@ async function readPostgresData(userId) {
       body: memo.body,
       tags: memo.tags || [],
       createdAt: memo.created_at.toISOString(),
+      starred: memo.starred,
     })),
     todos: todos.rows.map((todo) => ({
       id: todo.id,
@@ -236,10 +239,10 @@ async function writePostgresData(value, userId) {
     for (const memo of data.memos.map(cleanMemo).filter((memo) => memo.id && memo.body)) {
       await client.query(
         `
-          insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, updated_at)
-          values ($1, $2, $3, $4, $5, now())
+          insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, starred, updated_at)
+          values ($1, $2, $3, $4, $5, $6, now())
         `,
-        [memo.id, userId, memo.body, memo.tags, memo.createdAt],
+        [memo.id, userId, memo.body, memo.tags, memo.createdAt, memo.starred],
       );
     }
     for (const todo of data.todos.map(cleanTodo).filter((todo) => todo.id && todo.title)) {
@@ -281,12 +284,12 @@ async function createMemoWithTodos(value, userId) {
     await client.query("begin");
     await client.query(
       `
-        insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, updated_at)
-        values ($1, $2, $3, $4, $5, now())
+        insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, starred, updated_at)
+        values ($1, $2, $3, $4, $5, $6, now())
         on conflict (id)
         do update set body = excluded.body, tags = excluded.tags, updated_at = now()
       `,
-      [memo.id, userId, memo.body, memo.tags, memo.createdAt],
+      [memo.id, userId, memo.body, memo.tags, memo.createdAt, memo.starred],
     );
     for (const todo of todos.filter((todo) => todo.id && todo.title)) {
       await client.query(
@@ -365,6 +368,36 @@ async function updateTodo(id, patch, userId) {
     createdAt: todo.created_at.toISOString(),
     completedAt: todo.completed_at ? todo.completed_at.toISOString() : undefined,
     sourceMemoId: todo.source_memo_id || undefined,
+  };
+}
+
+async function updateMemo(id, patch, userId) {
+  if (!pool) {
+    const data = await readData(userId);
+    data.memos = data.memos.map((memo) => (memo.id === id ? { ...memo, ...patch } : memo));
+    await writeData(data, userId);
+    return data.memos.find((memo) => memo.id === id) || null;
+  }
+
+  await ensureSchema();
+  const result = await pool.query(
+    `
+      update ${quoteIdentifier(memosTable)}
+      set starred = coalesce($2, starred),
+        updated_at = now()
+      where id = $1 and user_id = $3
+      returning id, body, tags, created_at, starred
+    `,
+    [id, typeof patch.starred === "boolean" ? patch.starred : null, userId],
+  );
+  if (!result.rowCount) return null;
+  const memo = result.rows[0];
+  return {
+    id: memo.id,
+    body: memo.body,
+    tags: memo.tags || [],
+    createdAt: memo.created_at.toISOString(),
+    starred: memo.starred,
   };
 }
 
@@ -460,6 +493,17 @@ async function handleApi(request, response, pathname) {
   }
 
   const memoMatch = pathname.match(/^\/api\/memos\/([^/]+)$/);
+  if (memoMatch && request.method === "PATCH") {
+    const body = await readRequestBody(request);
+    const memo = await updateMemo(decodeURIComponent(memoMatch[1]), JSON.parse(body || "{}"), userId);
+    if (!memo) {
+      json(response, 404, { error: "Memo not found" });
+      return;
+    }
+    json(response, 200, memo);
+    return;
+  }
+
   if (memoMatch && request.method === "DELETE") {
     await deleteMemoById(decodeURIComponent(memoMatch[1]), userId);
     json(response, 200, { ok: true });

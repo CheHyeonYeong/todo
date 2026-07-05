@@ -39,6 +39,7 @@ create table if not exists public.memos (
   body text not null,
   tags text[] not null default '{}',
   created_at timestamptz not null,
+  starred boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
@@ -59,6 +60,7 @@ alter table public.todos enable row level security;
 
 alter table public.memos add column if not exists user_id text not null default 'default';
 alter table public.todos add column if not exists user_id text not null default 'default';
+alter table public.memos add column if not exists starred boolean not null default false;
 
 create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
 create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);

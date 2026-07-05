@@ -1,22 +1,43 @@
 const STORAGE_KEY = "free-adhd-memo:v1";
 const API_BASE_KEY = "free-adhd-memo:api-base";
 const AUTH_TOKEN_KEY = "free-adhd-memo:auth-token";
+const TIMER_KEY = "free-adhd-memo:timer-minutes";
 const scopeLabels = {
   day: "오늘",
   week: "이번 주",
   month: "이번 달",
 };
-const modeMinutes = {
+const defaultModeMinutes = {
   focus: 25,
   short: 5,
   long: 15,
 };
+
+function loadTimerMinutes() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TIMER_KEY) || "{}");
+    return {
+      focus: Number(parsed.focus) > 0 ? Number(parsed.focus) : defaultModeMinutes.focus,
+      short: Number(parsed.short) > 0 ? Number(parsed.short) : defaultModeMinutes.short,
+      long: Number(parsed.long) > 0 ? Number(parsed.long) : defaultModeMinutes.long,
+    };
+  } catch {
+    return { ...defaultModeMinutes };
+  }
+}
+
+function saveTimerMinutes() {
+  localStorage.setItem(TIMER_KEY, JSON.stringify(modeMinutes));
+}
+
+const modeMinutes = loadTimerMinutes();
 
 let timerMode = "focus";
 let secondsLeft = modeMinutes.focus * 60;
 let timerId = null;
 let activeTag = null;
 let query = "";
+let starOnly = false;
 let serverBacked = false;
 let syncTimer = null;
 let authenticated = false;
@@ -350,17 +371,19 @@ function renderMemos() {
     .filter((memo) => {
       const matchesQuery = normalized ? memo.body.toLowerCase().includes(normalized) : true;
       const matchesTag = activeTag ? memo.tags.includes(activeTag) : true;
-      return matchesQuery && matchesTag;
+      const matchesStar = starOnly ? memo.starred : true;
+      return matchesQuery && matchesTag && matchesStar;
     })
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .sort((a, b) => Number(Boolean(b.starred)) - Number(Boolean(a.starred)) || b.createdAt.localeCompare(a.createdAt));
 
   byId("memoList").innerHTML = memos.length
     ? memos
         .map(
           (memo) => `
-            <article class="memo-card">
+            <article class="memo-card ${memo.starred ? "starred" : ""}">
               <time>${formatTime(memo.createdAt)}</time>
               <p>${escapeHtml(memo.body)}</p>
+              <button type="button" class="star-button ${memo.starred ? "active" : ""}" data-action="toggle-star" data-id="${memo.id}" title="${memo.starred ? "즐겨찾기 해제" : "즐겨찾기"}">${memo.starred ? "★" : "☆"}</button>
               <button type="button" data-action="delete-memo" data-id="${memo.id}" title="메모 삭제">×</button>
             </article>
           `,
@@ -397,6 +420,11 @@ function renderTimer() {
   document.querySelectorAll("#timerModes button").forEach((button) => {
     button.classList.toggle("active", button.dataset.mode === timerMode);
   });
+
+  const minutesInput = byId("timerMinutesInput");
+  if (document.activeElement !== minutesInput) {
+    minutesInput.value = modeMinutes[timerMode];
+  }
 }
 
 function render() {
@@ -451,6 +479,22 @@ function deleteMemo(id) {
   render();
   sendMutation(`/api/memos/${encodeURIComponent(id)}`, {
     method: "DELETE",
+  });
+}
+
+function toggleMemoStar(id) {
+  const currentMemo = data.memos.find((memo) => memo.id === id);
+  if (!currentMemo) return;
+  const starred = !currentMemo.starred;
+  data.memos = data.memos.map((memo) => (memo.id === id ? { ...memo, starred } : memo));
+  saveData();
+  render();
+  sendMutation(`/api/memos/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ starred }),
   });
 }
 
@@ -522,6 +566,7 @@ byId("memoForm").addEventListener("submit", (event) => {
     body,
     createdAt,
     tags: extractTags(body),
+    starred: false,
   };
   data.memos.unshift(memo);
   data.todos.unshift(...extractedTodos);
@@ -575,6 +620,7 @@ document.body.addEventListener("click", (event) => {
   if (action === "toggle-todo") toggleTodo(target.dataset.id);
   if (action === "delete-todo") deleteTodo(target.dataset.id);
   if (action === "delete-memo") deleteMemo(target.dataset.id);
+  if (action === "toggle-star") toggleMemoStar(target.dataset.id);
   if (action === "tag-all") {
     activeTag = null;
     render();
@@ -590,9 +636,23 @@ byId("queryInput").addEventListener("input", (event) => {
   renderMemos();
 });
 
+byId("starFilterToggle").addEventListener("click", () => {
+  starOnly = !starOnly;
+  byId("starFilterToggle").classList.toggle("active", starOnly);
+  renderMemos();
+});
+
 byId("timerModes").addEventListener("click", (event) => {
   const button = event.target.closest("button[data-mode]");
   if (button) setTimerMode(button.dataset.mode);
+});
+
+byId("timerMinutesInput").addEventListener("change", (event) => {
+  const value = Math.max(1, Math.min(180, Math.round(Number(event.target.value)) || defaultModeMinutes[timerMode]));
+  modeMinutes[timerMode] = value;
+  saveTimerMinutes();
+  if (!timerId) secondsLeft = value * 60;
+  renderTimer();
 });
 
 byId("timerToggle").addEventListener("click", toggleTimer);

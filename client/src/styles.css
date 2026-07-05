@@ -411,6 +411,22 @@ select {
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 }
 
+.timer-config {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: #55647a;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.timer-config input {
+  width: 64px;
+  text-align: center;
+}
+
 .timer-actions {
   margin-top: auto;
   padding-top: 20px;
@@ -418,6 +434,12 @@ select {
 
 .timer-actions button {
   flex: 1;
+}
+
+.log-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .search-box {
@@ -456,12 +478,17 @@ select {
 
 .memo-card {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr) 28px;
+  grid-template-columns: 68px minmax(0, 1fr) 28px 28px;
   gap: 12px;
   border: 1px solid #e4e9f1;
   border-radius: 8px;
   background: #fff;
   padding: 13px;
+}
+
+.memo-card.starred {
+  border-color: #f0c419;
+  background: #fffdf5;
 }
 
 .memo-card time {
@@ -474,6 +501,15 @@ select {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.48;
+}
+
+.star-button.active {
+  color: #d4a017;
+}
+
+#starFilterToggle.active {
+  background: #fff6d9;
+  color: #d4a017;
 }
 
 .stat-grid {
@@ -591,12 +627,21 @@ select {
     width: 100%;
   }
 
+  .log-actions {
+    width: 100%;
+  }
+
+  .log-actions .search-box {
+    width: auto;
+    flex: 1;
+  }
+
   .todo-form button {
     width: 100%;
   }
 
   .memo-card {
-    grid-template-columns: 1fr 28px;
+    grid-template-columns: 1fr 28px 28px;
   }
 
   .memo-card time {
