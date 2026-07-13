@@ -42,7 +42,6 @@ let activeTag = null;
 let query = "";
 let starOnly = false;
 let serverBacked = false;
-let syncTimer = null;
 let authenticated = false;
 let calendarViewMode = false;
 let calendarMonth = new Date();
@@ -241,29 +240,6 @@ async function loadServerData() {
   } catch {
     serverBacked = false;
     setSyncStatus("local only", "warn");
-  }
-}
-
-function queueServerSave() {
-  if (!serverBacked || !authenticated) return;
-  setSyncStatus("syncing", "neutral");
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(saveServerData, 250);
-}
-
-async function saveServerData() {
-  try {
-    const response = await apiFetch("/api/data", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) throw new Error(`Save failed: ${response.status}`);
-    setSyncStatus("synced", "ok");
-  } catch {
-    setSyncStatus("offline", "warn");
   }
 }
 
@@ -597,61 +573,8 @@ function renderMemos() {
     : `<p class="empty">검색 결과가 없습니다.</p>`;
 }
 
-function renderInsights() {
-  const today = new Date().toDateString();
-  const todayMemoCount = data.memos.filter((memo) => new Date(memo.createdAt).toDateString() === today).length;
-  const doneCount = data.todos.filter((todo) => todo.done).length;
-  const tagCount = new Set(data.memos.flatMap((memo) => memo.tags)).size;
-
-  byId("stats").innerHTML = `
-    <div><strong>${todayMemoCount}</strong><span>오늘 메모</span></div>
-    <div><strong>${doneCount}</strong><span>완료</span></div>
-    <div><strong>${tagCount}</strong><span>태그</span></div>
-  `;
-
-  byId("activityGrid").innerHTML = Array.from({ length: 28 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (27 - index));
-    const dayKey = date.toDateString();
-    const memoCount = data.memos.filter((memo) => new Date(memo.createdAt).toDateString() === dayKey).length;
-    const doneOnDay = data.todos.filter(
-      (todo) => todo.completedAt && new Date(todo.completedAt).toDateString() === dayKey,
-    ).length;
-    const label = `${date.getMonth() + 1}/${date.getDate()} (${formatWeekdayShort(date)})`;
-    return `
-      <button
-        type="button"
-        class="activity-cell level-${Math.min(memoCount, 4)}"
-        data-action="activity-day"
-        data-label="${escapeHtml(label)}"
-        data-memo-count="${memoCount}"
-        data-done-count="${doneOnDay}"
-      >
-        <span class="activity-tooltip">${escapeHtml(label)}<br />메모 ${memoCount}개 · 완료 ${doneOnDay}개</span>
-      </button>
-    `;
-  }).join("");
-}
-
 function formatWeekdayShort(date) {
   return new Intl.DateTimeFormat("ko-KR", { weekday: "short" }).format(date);
-}
-
-function showActivityCard(label, memoCount, doneCount) {
-  byId("activityCardContent").innerHTML = `
-    <h4>${escapeHtml(label)}</h4>
-    <div class="stat-grid">
-      <div><strong>${memoCount}</strong><span>메모</span></div>
-      <div><strong>${doneCount}</strong><span>완료한 할 일</span></div>
-    </div>
-  `;
-  byId("activityCard").hidden = false;
-  byId("activityCardBackdrop").hidden = false;
-}
-
-function hideActivityCard() {
-  byId("activityCard").hidden = true;
-  byId("activityCardBackdrop").hidden = true;
 }
 
 function renderTimer() {
@@ -685,39 +608,172 @@ function sessionDurationMs(session) {
   return new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime();
 }
 
+const HOUR_PX = 44;
+const WEEK_HOUR_PX = 16;
+
+function labelHue(label) {
+  let hash = 0;
+  for (const char of label) hash = (hash * 31 + char.codePointAt(0)) % 360;
+  return hash;
+}
+
+function sessionMinutesOnDay(session, key) {
+  const dayStart = new Date(`${key}T00:00:00`).getTime();
+  const startMin = Math.max(0, (new Date(session.startedAt).getTime() - dayStart) / 60000);
+  const endMin = Math.min(1440, (new Date(session.endedAt).getTime() - dayStart) / 60000);
+  return { startMin, endMin: Math.max(endMin, startMin + 1) };
+}
+
+function renderDayTimetable() {
+  const todayKey = dateKey(new Date());
+  byId("timetableDateLabel").textContent =
+    timetableDateKey === todayKey ? "오늘" : formatDate(`${timetableDateKey}T00:00:00`);
+
+  const sessions = (data.sessions || [])
+    .filter((session) => dateKey(new Date(session.startedAt)) === timetableDateKey)
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+
+  const drawable = sessions.slice();
+  if (activeSession && timetableDateKey === todayKey) {
+    drawable.push({ ...activeSession, endedAt: nowIso(), running: true });
+  }
+
+  if (!drawable.length) {
+    byId("timetableList").innerHTML = `<p class="empty">기록이 없습니다. 위에서 시작을 눌러보세요.</p>`;
+    byId("timetableTotal").textContent = "";
+    return;
+  }
+
+  const previousGrid = byId("timetableList").querySelector(".timegrid");
+  const previousScroll = previousGrid ? previousGrid.scrollTop : null;
+
+  const spans = drawable.map((session) => ({ session, ...sessionMinutesOnDay(session, timetableDateKey) }));
+  const startHour = Math.min(8, ...spans.map((span) => Math.floor(span.startMin / 60)));
+  const endHour = Math.max(22, ...spans.map((span) => Math.ceil(span.endMin / 60)));
+
+  const hourLines = Array.from({ length: endHour - startHour }, (_, index) => {
+    return `<div class="timegrid-hour" style="top:${index * HOUR_PX}px"><span>${startHour + index}시</span></div>`;
+  }).join("");
+
+  const blocks = spans
+    .map(({ session, startMin, endMin }) => {
+      const top = (startMin - startHour * 60) * (HOUR_PX / 60);
+      const height = Math.max(20, (endMin - startMin) * (HOUR_PX / 60));
+      const label = session.label || "이름 없는 작업";
+      const timeText = `${formatTime(session.startedAt)} – ${session.running ? "지금" : formatTime(session.endedAt)}`;
+      return `
+        <div class="timegrid-block${session.running ? " running" : ""}"
+          style="top:${top}px;height:${height}px;--hue:${labelHue(label)}"
+          title="${escapeHtml(label)} · ${timeText}">
+          <span class="timegrid-block-label">${escapeHtml(label)}</span>
+          <span class="timegrid-block-time">${timeText}</span>
+          ${session.running ? "" : `<button type="button" data-action="delete-session" data-id="${session.id}" title="기록 삭제">×</button>`}
+        </div>
+      `;
+    })
+    .join("");
+
+  byId("timetableList").innerHTML = `
+    <div class="timegrid">
+      <div class="timegrid-body" style="height:${(endHour - startHour) * HOUR_PX}px">
+        ${hourLines}
+        ${blocks}
+      </div>
+    </div>
+  `;
+
+  const totalMs = sessions.reduce((sum, session) => sum + sessionDurationMs(session), 0);
+  byId("timetableTotal").textContent = totalMs ? `합계 ${formatDuration(totalMs)}` : "";
+
+  const grid = byId("timetableList").querySelector(".timegrid");
+  if (previousScroll !== null) {
+    grid.scrollTop = previousScroll;
+  } else {
+    const firstTop = Math.min(...spans.map((span) => (span.startMin - startHour * 60) * (HOUR_PX / 60)));
+    grid.scrollTop = Math.max(0, firstTop - 12);
+  }
+}
+
 function renderWeekTimetable() {
   const startKey = weekStartKey(timetableDateKey);
   const endKey = shiftDateKey(startKey, 6);
+  const todayKey = dateKey(new Date());
   byId("timetableDateLabel").textContent =
-    startKey === weekStartKey(dateKey(new Date())) ? "이번 주" : `${shortDate(startKey)} – ${shortDate(endKey)}`;
+    startKey === weekStartKey(todayKey) ? "이번 주" : `${shortDate(startKey)} – ${shortDate(endKey)}`;
 
-  const sessions = (data.sessions || []).filter((session) => {
+  const dayKeys = Array.from({ length: 7 }, (_, index) => shiftDateKey(startKey, index));
+  const byDay = new Map(dayKeys.map((key) => [key, []]));
+  (data.sessions || []).forEach((session) => {
     const key = dateKey(new Date(session.startedAt));
-    return key >= startKey && key <= endKey;
+    if (byDay.has(key)) byDay.get(key).push(session);
+  });
+  const weekSessions = dayKeys.flatMap((key) => byDay.get(key));
+
+  if (!weekSessions.length) {
+    byId("timetableList").innerHTML = `<p class="empty">이번 주 기록이 없습니다.</p>`;
+    byId("timetableTotal").textContent = "";
+    return;
+  }
+
+  let startHour = 8;
+  let endHour = 22;
+  dayKeys.forEach((key) => {
+    byDay.get(key).forEach((session) => {
+      const { startMin, endMin } = sessionMinutesOnDay(session, key);
+      startHour = Math.min(startHour, Math.floor(startMin / 60));
+      endHour = Math.max(endHour, Math.ceil(endMin / 60));
+    });
   });
 
+  const columns = dayKeys
+    .map((key) => {
+      const date = new Date(`${key}T00:00:00`);
+      const bars = byDay
+        .get(key)
+        .map((session) => {
+          const { startMin, endMin } = sessionMinutesOnDay(session, key);
+          const label = session.label || "이름 없는 작업";
+          const timeText = `${formatTime(session.startedAt)} – ${formatTime(session.endedAt)}`;
+          return `<div class="weekgrid-bar"
+            style="top:${(startMin - startHour * 60) * (WEEK_HOUR_PX / 60)}px;height:${Math.max(5, (endMin - startMin) * (WEEK_HOUR_PX / 60))}px;--hue:${labelHue(label)}"
+            title="${escapeHtml(label)} · ${timeText}"></div>`;
+        })
+        .join("");
+      return `
+        <div class="weekgrid-day${key === todayKey ? " today" : ""}">
+          <span class="weekgrid-day-head">${formatWeekdayShort(date)}<br />${date.getDate()}</span>
+          <div class="weekgrid-col" style="height:${(endHour - startHour) * WEEK_HOUR_PX}px">${bars}</div>
+        </div>
+      `;
+    })
+    .join("");
+
   const totals = new Map();
-  sessions.forEach((session) => {
+  weekSessions.forEach((session) => {
     const label = session.label || "이름 없는 작업";
     totals.set(label, (totals.get(label) || 0) + sessionDurationMs(session));
   });
+  const legend = [...totals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(
+      ([label, ms]) => `
+        <div class="week-legend-row">
+          <span class="week-legend-dot" style="--hue:${labelHue(label)}"></span>
+          <span class="session-label">${escapeHtml(label)}</span>
+          <span class="session-duration">${formatDuration(ms)}</span>
+        </div>
+      `,
+    )
+    .join("");
 
-  const rows = [...totals.entries()].sort((a, b) => b[1] - a[1]);
-  byId("timetableList").innerHTML = rows.length
-    ? rows
-        .map(
-          ([label, ms]) => `
-            <div class="session-row week">
-              <span class="session-label">${escapeHtml(label)}</span>
-              <span class="session-duration">${formatDuration(ms)}</span>
-            </div>
-          `,
-        )
-        .join("")
-    : `<p class="empty">이번 주 기록이 없습니다.</p>`;
+  byId("timetableList").innerHTML = `
+    <div class="weekgrid">${columns}</div>
+    <div class="week-legend">${legend}</div>
+  `;
 
-  const totalMs = sessions.reduce((sum, session) => sum + sessionDurationMs(session), 0);
-  byId("timetableTotal").textContent = rows.length ? `합계 ${formatDuration(totalMs)}` : "";
+  const totalMs = weekSessions.reduce((sum, session) => sum + sessionDurationMs(session), 0);
+  byId("timetableTotal").textContent = `합계 ${formatDuration(totalMs)}`;
 }
 
 function renderTimetable() {
@@ -726,30 +782,7 @@ function renderTimetable() {
     renderWeekTimetable();
     return;
   }
-  byId("timetableDateLabel").textContent =
-    timetableDateKey === dateKey(new Date()) ? "오늘" : formatDate(`${timetableDateKey}T00:00:00`);
-
-  const sessions = (data.sessions || [])
-    .filter((session) => dateKey(new Date(session.startedAt)) === timetableDateKey)
-    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-
-  byId("timetableList").innerHTML = sessions.length
-    ? sessions
-        .map(
-          (session) => `
-            <div class="session-row">
-              <time>${formatTime(session.startedAt)} – ${formatTime(session.endedAt)}</time>
-              <span class="session-label">${escapeHtml(session.label || "이름 없는 작업")}</span>
-              <span class="session-duration">${formatDuration(sessionDurationMs(session))}</span>
-              <button type="button" data-action="delete-session" data-id="${session.id}" title="기록 삭제">×</button>
-            </div>
-          `,
-        )
-        .join("")
-    : `<p class="empty">기록이 없습니다. 위에서 시작을 눌러보세요.</p>`;
-
-  const totalMs = sessions.reduce((sum, session) => sum + sessionDurationMs(session), 0);
-  byId("timetableTotal").textContent = sessions.length ? `합계 ${formatDuration(totalMs)}` : "";
+  renderDayTimetable();
 }
 
 function render() {
@@ -758,7 +791,6 @@ function render() {
   renderCalendar();
   renderTags();
   renderMemos();
-  renderInsights();
   renderTimer();
   renderTracker();
   renderTimetable();
@@ -940,20 +972,6 @@ function toggleTimer() {
   renderTimer();
 }
 
-function exportMarkdown() {
-  const lines = data.memos
-    .slice()
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    .map((memo) => `## ${new Date(memo.createdAt).toLocaleString("ko-KR")}\n\n${memo.body}`);
-  const blob = new Blob([lines.join("\n\n")], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `free-adhd-memo-${nowIso().slice(0, 10)}.md`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
 byId("memoForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const textarea = byId("memoDraft");
@@ -1066,9 +1084,6 @@ document.body.addEventListener("click", (event) => {
     selectedCalendarDate = target.dataset.date;
     renderCalendar();
   }
-  if (action === "activity-day" && window.matchMedia("(hover: none)").matches) {
-    showActivityCard(target.dataset.label, target.dataset.memoCount, target.dataset.doneCount);
-  }
 });
 
 byId("queryInput").addEventListener("input", (event) => {
@@ -1151,7 +1166,6 @@ byId("timerMinutesInput").addEventListener("change", (event) => {
 
 byId("timerToggle").addEventListener("click", toggleTimer);
 byId("timerReset").addEventListener("click", () => setTimerMode(timerMode));
-byId("exportButton").addEventListener("click", exportMarkdown);
 
 function openMemoDrawer() {
   byId("memoDrawer").classList.add("open");
@@ -1166,17 +1180,6 @@ function closeMemoDrawer() {
 byId("memoDrawerToggle").addEventListener("click", openMemoDrawer);
 byId("memoDrawerClose").addEventListener("click", closeMemoDrawer);
 byId("memoDrawerBackdrop").addEventListener("click", closeMemoDrawer);
-byId("activityCardClose").addEventListener("click", hideActivityCard);
-byId("activityCardBackdrop").addEventListener("click", hideActivityCard);
-byId("resetButton").addEventListener("click", () => {
-  data = starterData();
-  activeTag = null;
-  query = "";
-  byId("queryInput").value = "";
-  saveData();
-  queueServerSave();
-  render();
-});
 byId("googleLoginButton").addEventListener("click", async () => {
   if (!supabaseClient) {
     showLogin("Google 로그인 설정이 없습니다.");
@@ -1312,5 +1315,6 @@ checkSession();
 setInterval(() => {
   renderLabels();
   renderTracker();
+  if (activeSession) renderTimetable();
 }, 30000);
 setInterval(loadServerData, 20000);
