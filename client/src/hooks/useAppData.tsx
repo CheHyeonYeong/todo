@@ -11,7 +11,7 @@ import {
 } from "react";
 import { apiFetch, setAuthToken, supabase } from "@/lib/api";
 import { extractTags, extractTodos, nowIso, todayKey, uid } from "@/lib/helpers";
-import type { ActiveSession, AppData, Memo, Scope, Session, Todo } from "@/lib/types";
+import type { ActiveSession, AppData, Memo, Scope, Session, Todo, TodoPatch } from "@/lib/types";
 
 const STORAGE_KEY = "free-adhd-memo:v1";
 const ACTIVE_SESSION_KEY = "free-adhd-memo:active-session";
@@ -60,10 +60,10 @@ interface AppDataValue {
   pauseSyncRef: React.MutableRefObject<boolean>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  addTodo: (input: { title: string; scope: Scope; dueDate?: string | null }) => void;
+  addTodo: (input: { title: string; scope: Scope; dueDate?: string | null; category?: string | null }) => void;
   toggleTodo: (id: string) => void;
   deleteTodo: (id: string) => void;
-  updateTodoTitle: (id: string, title: string) => void;
+  updateTodo: (id: string, patch: TodoPatch) => void;
   addMemo: (body: string) => void;
   deleteMemo: (id: string) => void;
   toggleMemoStar: (id: string) => void;
@@ -188,8 +188,18 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addTodo = useCallback(
-    ({ title, scope, dueDate = null }: { title: string; scope: Scope; dueDate?: string | null }) => {
-      const todo: Todo = { id: uid(), title, scope, done: false, createdAt: nowIso(), dueDate };
+    ({
+      title,
+      scope,
+      dueDate = null,
+      category = null,
+    }: {
+      title: string;
+      scope: Scope;
+      dueDate?: string | null;
+      category?: string | null;
+    }) => {
+      const todo: Todo = { id: uid(), title, scope, done: false, createdAt: nowIso(), dueDate, category };
       persist((prev) => ({ ...prev, todos: [todo, ...prev.todos] }));
       sendMutation("/api/todos", {
         method: "POST",
@@ -227,16 +237,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [persist, sendMutation],
   );
 
-  const updateTodoTitle = useCallback(
-    (id: string, title: string) => {
+  const updateTodo = useCallback(
+    (id: string, patch: TodoPatch) => {
       persist((prev) => ({
         ...prev,
-        todos: prev.todos.map((todo) => (todo.id === id ? { ...todo, title } : todo)),
+        todos: prev.todos.map((todo) =>
+          todo.id === id
+            ? {
+                ...todo,
+                ...patch,
+                category: patch.category !== undefined ? patch.category?.trim() || null : todo.category,
+                note: patch.note !== undefined ? patch.note?.trim() || null : todo.note,
+              }
+            : todo,
+        ),
       }));
       sendMutation(`/api/todos/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify(patch),
       });
     },
     [persist, sendMutation],
@@ -339,7 +358,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addTodo,
       toggleTodo,
       deleteTodo,
-      updateTodoTitle,
+      updateTodo,
       addMemo,
       deleteMemo,
       toggleMemoStar,
@@ -360,7 +379,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addTodo,
       toggleTodo,
       deleteTodo,
-      updateTodoTitle,
+      updateTodo,
       addMemo,
       deleteMemo,
       toggleMemoStar,

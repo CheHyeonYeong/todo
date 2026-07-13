@@ -217,8 +217,10 @@ async function listTodos() {
     const number = dim(String(index).padStart(2, " "));
     const mark = todo.done ? green("✓") : "○";
     const title = todo.done ? dim(strike(todo.title)) : todo.title;
+    const category = todo.category ? cyan(`[${todo.category}] `) : "";
     const due = todo.dueDate ? dim(`  ~${todo.dueDate}`) : "";
-    console.log(`${number} ${mark} ${title}${due}`);
+    const note = todo.note ? dim(" ✎") : "";
+    console.log(`${number} ${mark} ${category}${title}${due}${note}`);
   }
   console.log();
 }
@@ -235,18 +237,31 @@ async function addTodo(args) {
   const scope = args.includes("-m") ? "month" : args.includes("-w") ? "week" : "day";
   const dueIndex = args.indexOf("-d");
   const dueDate = dueIndex >= 0 ? args[dueIndex + 1] : null;
+  const catIndex = args.indexOf("-c");
+  const category = catIndex >= 0 ? args[catIndex + 1] : null;
   const title = args
-    .filter((arg, i) => !arg.startsWith("-") && (dueIndex < 0 || i !== dueIndex + 1))
+    .filter(
+      (arg, i) =>
+        !arg.startsWith("-") && (dueIndex < 0 || i !== dueIndex + 1) && (catIndex < 0 || i !== catIndex + 1),
+    )
     .join(" ")
     .trim();
-  if (!title) fail('사용법: todo add "제목" [-w 이번주 | -m 이번달] [-d 2026-07-20]');
+  if (!title) fail('사용법: todo add "제목" [-w 이번주 | -m 이번달] [-d 2026-07-20] [-c 카테고리]');
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) fail("마감일은 YYYY-MM-DD 형식으로 넣으세요.");
   await api("/api/todos", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: randomUUID(), title, scope, done: false, createdAt: new Date().toISOString(), dueDate }),
+    body: JSON.stringify({
+      id: randomUUID(),
+      title,
+      scope,
+      done: false,
+      createdAt: new Date().toISOString(),
+      dueDate,
+      category,
+    }),
   });
-  console.log(green(`추가됨 (${scopeLabels[scope]}): ${title}`));
+  console.log(green(`추가됨 (${scopeLabels[scope]}): ${title}`) + (category ? dim(` [${category}]`) : ""));
 }
 
 async function toggleTodo(number) {
@@ -391,7 +406,7 @@ function help() {
   console.log(`${bold("todo")} — Free ADHD Memo 터미널 클라이언트
 
   todo                     할 일 목록 (번호 포함)
-  todo add "제목" [옵션]    할 일 추가  (-w 이번주, -m 이번달, -d 2026-07-20 마감일)
+  todo add "제목" [옵션]    할 일 추가  (-w 이번주, -m 이번달, -d 2026-07-20 마감일, -c 카테고리)
   todo done <번호>          완료 토글
   todo rm <번호>            삭제
   todo memo "내용 #태그"    메모 기록 (- [ ] 줄은 할 일로 자동 추출)

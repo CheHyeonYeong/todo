@@ -109,6 +109,8 @@ function cleanTodo(todo) {
     completedAt: todo?.completedAt || null,
     sourceMemoId: todo?.sourceMemoId || null,
     dueDate: /^\d{4}-\d{2}-\d{2}$/.test(todo?.dueDate) ? todo.dueDate : null,
+    category: typeof todo?.category === "string" && todo.category.trim() ? todo.category.trim() : null,
+    note: typeof todo?.note === "string" && todo.note.trim() ? todo.note.trim() : null,
   };
 }
 
@@ -209,6 +211,8 @@ async function ensureSchema() {
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists starred boolean not null default false`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists due_date text`);
+  await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists category text`);
+  await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists note text`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_due_date_idx`)} on ${quoteIdentifier(todosTable)} (user_id, due_date)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${memosTable}_user_created_idx`)} on ${quoteIdentifier(memosTable)} (user_id, created_at desc)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_user_created_idx`)} on ${quoteIdentifier(todosTable)} (user_id, created_at desc)`);
@@ -228,7 +232,7 @@ async function readPostgresData(userId) {
   );
   const todos = await pool.query(
     `
-      select id, title, scope, done, created_at, completed_at, source_memo_id, due_date
+      select id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note
       from ${quoteIdentifier(todosTable)}
       where user_id = $1
       order by created_at desc
@@ -261,6 +265,8 @@ async function readPostgresData(userId) {
       completedAt: todo.completed_at ? todo.completed_at.toISOString() : undefined,
       sourceMemoId: todo.source_memo_id || undefined,
       dueDate: todo.due_date || undefined,
+      category: todo.category || undefined,
+      note: todo.note || undefined,
     })),
     sessions: sessions.rows.map((session) => ({
       id: session.id,
@@ -293,10 +299,10 @@ async function writePostgresData(value, userId) {
       await client.query(
         `
           insert into ${quoteIdentifier(todosTable)}
-            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, updated_at)
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
         `,
-        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate],
+        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note],
       );
     }
     for (const session of data.sessions.map(cleanSession).filter((session) => session.id)) {
@@ -348,14 +354,14 @@ async function createMemoWithTodos(value, userId) {
       await client.query(
         `
           insert into ${quoteIdentifier(todosTable)}
-            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, updated_at)
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
           on conflict (id)
           do update set title = excluded.title, scope = excluded.scope, done = excluded.done,
             completed_at = excluded.completed_at, source_memo_id = excluded.source_memo_id,
-            due_date = excluded.due_date, updated_at = now()
+            due_date = excluded.due_date, category = excluded.category, note = excluded.note, updated_at = now()
         `,
-        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate],
+        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note],
       );
     }
     await client.query("commit");
@@ -381,14 +387,14 @@ async function createTodo(value, userId) {
   await pool.query(
     `
       insert into ${quoteIdentifier(todosTable)}
-        (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, updated_at)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+        (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, updated_at)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
       on conflict (id)
       do update set title = excluded.title, scope = excluded.scope, done = excluded.done,
         completed_at = excluded.completed_at, source_memo_id = excluded.source_memo_id,
-        due_date = excluded.due_date, updated_at = now()
+        due_date = excluded.due_date, category = excluded.category, note = excluded.note, updated_at = now()
     `,
-    [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate],
+    [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note],
   );
   return todo;
 }
@@ -430,7 +436,7 @@ async function deleteSessionById(id, userId) {
 async function updateTodo(id, patch, userId) {
   if (!pool) {
     const data = await readData(userId);
-    data.todos = data.todos.map((todo) => (todo.id === id ? { ...todo, ...patch } : todo));
+    data.todos = data.todos.map((todo) => (todo.id === id ? cleanTodo({ ...todo, ...patch }) : todo));
     await writeData(data, userId);
     return data.todos.find((todo) => todo.id === id) || null;
   }
@@ -443,9 +449,12 @@ async function updateTodo(id, patch, userId) {
         completed_at = case when $2::boolean is null then completed_at else $3 end,
         due_date = coalesce($5, due_date),
         title = coalesce($6, title),
+        scope = coalesce($7, scope),
+        category = case when $8::text is null then category else nullif(trim($8), '') end,
+        note = case when $9::text is null then note else nullif(trim($9), '') end,
         updated_at = now()
       where id = $1 and user_id = $4
-      returning id, title, scope, done, created_at, completed_at, source_memo_id, due_date
+      returning id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note
     `,
     [
       id,
@@ -454,6 +463,9 @@ async function updateTodo(id, patch, userId) {
       userId,
       /^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate) ? patch.dueDate : null,
       typeof patch.title === "string" && patch.title.trim() ? patch.title.trim() : null,
+      ["day", "week", "month"].includes(patch.scope) ? patch.scope : null,
+      typeof patch.category === "string" ? patch.category : null,
+      typeof patch.note === "string" ? patch.note : null,
     ],
   );
   if (!result.rowCount) return null;
@@ -467,6 +479,8 @@ async function updateTodo(id, patch, userId) {
     completedAt: todo.completed_at ? todo.completed_at.toISOString() : undefined,
     sourceMemoId: todo.source_memo_id || undefined,
     dueDate: todo.due_date || undefined,
+    category: todo.category || undefined,
+    note: todo.note || undefined,
   };
 }
 

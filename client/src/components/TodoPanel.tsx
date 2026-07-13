@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Pencil, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Pencil, Plus, StickyNote, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/hooks/useAppData";
-import { dateKey, formatDate, scopeLabels, todayKey } from "@/lib/helpers";
+import { dateKey, formatDate, labelHue, scopeLabels, todayKey } from "@/lib/helpers";
 import type { Scope, Todo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -14,83 +16,164 @@ function sortTodos(todos: Todo[]) {
   return [...todos].sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt.localeCompare(a.createdAt));
 }
 
-function TodoRow({ todo }: { todo: Todo }) {
-  const { toggleTodo, deleteTodo, updateTodoTitle, pauseSyncRef } = useAppData();
+function CategoryChip({ category, onClick, active }: { category: string; onClick?: () => void; active?: boolean }) {
+  const hue = labelHue(category);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex max-w-32 shrink-0 items-center truncate rounded-full px-2 py-px text-[11px] font-bold",
+        onClick && "cursor-pointer",
+        active && "ring-2 ring-offset-1",
+      )}
+      style={{ background: `hsl(${hue} 65% 88%)`, color: `hsl(${hue} 60% 28%)` }}
+    >
+      {category}
+    </button>
+  );
+}
+
+function TodoRow({ todo, draggable = false }: { todo: Todo; draggable?: boolean }) {
+  const { toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(todo.title);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(todo.note || "");
 
   useEffect(() => {
-    pauseSyncRef.current = editing;
+    pauseSyncRef.current = editing || noteOpen;
     return () => {
       pauseSyncRef.current = false;
     };
-  }, [editing, pauseSyncRef]);
+  }, [editing, noteOpen, pauseSyncRef]);
 
-  const commit = () => {
+  const commitTitle = () => {
     setEditing(false);
     const title = draft.trim();
-    if (title && title !== todo.title) updateTodoTitle(todo.id, title);
+    if (title && title !== todo.title) updateTodo(todo.id, { title });
     else setDraft(todo.title);
   };
 
+  const commitNote = () => {
+    setNoteOpen(false);
+    const note = noteDraft.trim();
+    if (note !== (todo.note || "")) updateTodo(todo.id, { note });
+  };
+
   return (
-    <div className="group flex items-start gap-2 py-1">
-      <button
-        type="button"
-        onClick={() => toggleTodo(todo.id)}
-        title="완료 전환"
-        className={cn(
-          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border transition-colors",
-          todo.done ? "border-emerald-600 bg-emerald-600 text-white" : "border-muted-foreground/40 text-transparent hover:border-emerald-600",
-        )}
-      >
-        <Check className="size-3.5" strokeWidth={3} />
-      </button>
-      {editing ? (
-        <Input
-          ref={inputRef}
-          autoFocus
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") commit();
-            if (event.key === "Escape") {
-              setDraft(todo.title);
-              setEditing(false);
-            }
-          }}
-          className="h-7 flex-1 px-2 text-sm"
-        />
-      ) : (
-        <span
+    <div
+      className="group py-1"
+      draggable={draggable && !editing && !noteOpen}
+      onDragStart={(event) => {
+        event.dataTransfer.setData("text/todo-id", todo.id);
+        event.dataTransfer.effectAllowed = "move";
+      }}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          onClick={() => toggleTodo(todo.id)}
+          title="완료 전환"
           className={cn(
-            "min-w-0 flex-1 break-words text-sm leading-snug",
-            todo.done && "text-muted-foreground line-through",
+            "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border transition-colors",
+            todo.done
+              ? "border-emerald-600 bg-emerald-600 text-white"
+              : "border-muted-foreground/40 text-transparent hover:border-emerald-600",
           )}
         >
-          {todo.title}
-          {todo.dueDate && <span className="ml-1.5 text-xs font-semibold text-muted-foreground">~{todo.dueDate}</span>}
-        </span>
-      )}
-      {!editing && (
-        <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-100">
-          <Button variant="ghost" size="icon" className="size-6" title="수정" onClick={() => setEditing(true)}>
-            <Pencil className="size-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="size-6" title="삭제" onClick={() => deleteTodo(todo.id)}>
-            <X className="size-3.5" />
-          </Button>
-        </div>
+          <Check className="size-3.5" strokeWidth={3} />
+        </button>
+        {editing ? (
+          <Input
+            autoFocus
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitTitle();
+              if (event.key === "Escape") {
+                setDraft(todo.title);
+                setEditing(false);
+              }
+            }}
+            className="h-7 flex-1 px-2 text-sm"
+          />
+        ) : (
+          <span
+            className={cn(
+              "min-w-0 flex-1 break-words text-sm leading-snug",
+              todo.done && "text-muted-foreground line-through",
+            )}
+          >
+            {todo.category && <CategoryChip category={todo.category} />}
+            {todo.category && " "}
+            {todo.title}
+            {todo.dueDate && (
+              <span className="ml-1.5 text-xs font-semibold text-muted-foreground">~{todo.dueDate}</span>
+            )}
+          </span>
+        )}
+        {!editing && (
+          <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-100">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn("size-6", todo.note && "text-amber-600")}
+              title={todo.note ? "메모 보기/수정" : "메모 달기"}
+              onClick={() => {
+                setNoteDraft(todo.note || "");
+                setNoteOpen((open) => !open);
+              }}
+            >
+              <StickyNote className="size-3.5" fill={todo.note ? "currentColor" : "none"} fillOpacity={0.25} />
+            </Button>
+            <Button variant="ghost" size="icon" className="size-6" title="수정" onClick={() => setEditing(true)}>
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="size-6" title="삭제" onClick={() => deleteTodo(todo.id)}>
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        )}
+      </div>
+      {noteOpen ? (
+        <Textarea
+          autoFocus
+          value={noteDraft}
+          onChange={(event) => setNoteDraft(event.target.value)}
+          onBlur={commitNote}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setNoteDraft(todo.note || "");
+              setNoteOpen(false);
+            }
+          }}
+          placeholder="이 할 일에 대한 메모 (비우고 저장하면 삭제)"
+          className="mt-1.5 ml-7 min-h-14 w-auto bg-background text-xs"
+        />
+      ) : (
+        todo.note && (
+          <p
+            className="mt-1 ml-7 cursor-pointer text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground"
+            title="클릭해서 수정"
+            onClick={() => {
+              setNoteDraft(todo.note || "");
+              setNoteOpen(true);
+            }}
+          >
+            {todo.note}
+          </p>
+        )
       )}
     </div>
   );
 }
 
-function TodoForm() {
+function TodoForm({ categories }: { categories: string[] }) {
   const { addTodo } = useAppData();
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
   const [scope, setScope] = useState<Scope>("day");
   const [dueDate, setDueDate] = useState(todayKey());
 
@@ -98,9 +181,8 @@ function TodoForm() {
     event.preventDefault();
     const trimmed = title.trim();
     if (!trimmed) return;
-    addTodo({ title: trimmed, scope, dueDate: dueDate || null });
+    addTodo({ title: trimmed, scope, dueDate: dueDate || null, category: category.trim() || null });
     setTitle("");
-    setDueDate(todayKey());
   };
 
   return (
@@ -109,8 +191,20 @@ function TodoForm() {
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         placeholder="할 일 추가"
-        className="min-w-40 flex-1"
+        className="min-w-36 flex-1"
       />
+      <Input
+        list="todo-categories"
+        value={category}
+        onChange={(event) => setCategory(event.target.value)}
+        placeholder="카테고리"
+        className="w-28 max-sm:flex-1"
+      />
+      <datalist id="todo-categories">
+        {categories.map((item) => (
+          <option key={item} value={item} />
+        ))}
+      </datalist>
       <Input
         type="date"
         value={dueDate}
@@ -153,19 +247,29 @@ function CalendarView() {
     return acc;
   }, {});
 
-  const selectedTodos = selected
-    ? sortTodos(data.todos.filter((todo) => todo.dueDate === selected))
-    : [];
+  const selectedTodos = selected ? sortTodos(data.todos.filter((todo) => todo.dueDate === selected)) : [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
       <div className="flex min-w-0 flex-[1.4] flex-col">
         <div className="mb-2 flex items-center justify-between">
-          <Button variant="secondary" size="icon" className="size-8" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="size-8"
+            onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}
+          >
             <ChevronLeft className="size-4" />
           </Button>
-          <h3 className="text-sm font-bold">{year}년 {monthIndex + 1}월</h3>
-          <Button variant="secondary" size="icon" className="size-8" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}>
+          <h3 className="text-sm font-bold">
+            {year}년 {monthIndex + 1}월
+          </h3>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="size-8"
+            onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}
+          >
             <ChevronRight className="size-4" />
           </Button>
         </div>
@@ -250,8 +354,22 @@ function CalendarView() {
 }
 
 export function TodoPanel() {
-  const { data } = useAppData();
+  const { data, updateTodo } = useAppData();
   const [view, setView] = useState("list");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [dropScope, setDropScope] = useState<Scope | null>(null);
+
+  const categories = useMemo(
+    () =>
+      Array.from(new Set(data.todos.map((todo) => todo.category).filter(Boolean) as string[])).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    [data.todos],
+  );
+
+  useEffect(() => {
+    if (categoryFilter && !categories.includes(categoryFilter)) setCategoryFilter(null);
+  }, [categories, categoryFilter]);
 
   return (
     <Card className="flex min-h-0 flex-1 flex-col gap-0 p-4.5">
@@ -269,17 +387,60 @@ export function TodoPanel() {
       </div>
       {view === "list" ? (
         <>
-          <div className="mb-3">
-            <TodoForm />
+          <div className="mb-2.5">
+            <TodoForm categories={categories} />
           </div>
+          {categories.length > 0 && (
+            <div className="mb-2.5 flex shrink-0 flex-wrap items-center gap-1.5">
+              <Badge
+                variant={categoryFilter ? "outline" : "default"}
+                className="cursor-pointer font-semibold"
+                onClick={() => setCategoryFilter(null)}
+              >
+                전체
+              </Badge>
+              {categories.map((category) => (
+                <CategoryChip
+                  key={category}
+                  category={category}
+                  active={categoryFilter === category}
+                  onClick={() => setCategoryFilter(categoryFilter === category ? null : category)}
+                />
+              ))}
+            </div>
+          )}
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
             {(Object.keys(scopeLabels) as Scope[]).map((scope) => {
-              const items = sortTodos(data.todos.filter((todo) => todo.scope === scope));
+              const items = sortTodos(
+                data.todos.filter(
+                  (todo) => todo.scope === scope && (!categoryFilter || todo.category === categoryFilter),
+                ),
+              );
               return (
-                <div key={scope} className="min-h-32 overflow-y-auto rounded-lg bg-muted p-3">
+                <div
+                  key={scope}
+                  className={cn(
+                    "min-h-32 overflow-y-auto rounded-lg bg-muted p-3 transition-shadow",
+                    dropScope === scope && "shadow-[inset_0_0_0_2px_theme(colors.emerald.500)]",
+                  )}
+                  onDragOver={(event) => {
+                    if (!event.dataTransfer.types.includes("text/todo-id")) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    setDropScope(scope);
+                  }}
+                  onDragLeave={() => setDropScope((current) => (current === scope ? null : current))}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setDropScope(null);
+                    const id = event.dataTransfer.getData("text/todo-id");
+                    const todo = data.todos.find((item) => item.id === id);
+                    if (todo && todo.scope !== scope) updateTodo(id, { scope });
+                  }}
+                >
                   <h3 className="mb-2 text-sm font-bold text-muted-foreground">{scopeLabels[scope]}</h3>
                   {items.length ? (
-                    items.map((todo) => <TodoRow key={todo.id} todo={todo} />)
+                    items.map((todo) => <TodoRow key={todo.id} todo={todo} draggable />)
                   ) : (
                     <p className="text-sm font-medium text-muted-foreground/70">없음</p>
                   )}

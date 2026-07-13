@@ -9,7 +9,11 @@ export interface Todo {
   completedAt?: string | null;
   sourceMemoId?: string | null;
   dueDate?: string | null;
+  category?: string | null;
+  note?: string | null;
 }
+
+export type TodoPatch = Partial<Pick<Todo, "title" | "scope" | "dueDate" | "category" | "note">>;
 
 export interface Memo {
   id: string;

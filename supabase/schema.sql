@@ -38,6 +38,8 @@ alter table public.memos add column if not exists user_id text not null default 
 alter table public.todos add column if not exists user_id text not null default 'default';
 alter table public.memos add column if not exists starred boolean not null default false;
 alter table public.todos add column if not exists due_date text;
+alter table public.todos add column if not exists category text;
+alter table public.todos add column if not exists note text;
 
 create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
 create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);
