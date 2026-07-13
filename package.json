@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "adhd": "./cli/adhd.js"
+    "todo": "./cli/todo.js"
   },
   "scripts": {
     "dev": "node server/server.js",

@@ -73,7 +73,9 @@ async function api(path, options = {}) {
   }
   const headers = { ...(options.headers || {}) };
   if (session.access_token) headers.Authorization = `Bearer ${session.access_token}`;
-  let response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let response = await fetch(`${API_BASE}${path}`, { ...options, headers }).catch(() => {
+    fail(`서버에 연결할 수 없습니다: ${API_BASE}`);
+  });
   if (response.status === 401 && session.refresh_token) {
     const refreshed = await refreshTokens(session);
     if (refreshed) {
@@ -81,7 +83,7 @@ async function api(path, options = {}) {
       response = await fetch(`${API_BASE}${path}`, { ...options, headers });
     }
   }
-  if (response.status === 401) fail("로그인이 필요합니다. 먼저 `adhd login`을 실행하세요.");
+  if (response.status === 401) fail("로그인이 필요합니다. 먼저 `todo login`을 실행하세요.");
   if (!response.ok) fail(`API 오류 (${response.status}): ${await response.text()}`);
   return response.json();
 }
@@ -196,7 +198,7 @@ async function listTodos() {
   const data = await api("/api/data");
   const flat = sortedTodos(data.todos);
   if (!flat.length) {
-    console.log(dim("할 일이 없습니다. `adhd add \"제목\"`으로 추가하세요."));
+    console.log(dim("할 일이 없습니다. `todo add \"제목\"`으로 추가하세요."));
     return;
   }
   let index = 0;
@@ -220,7 +222,7 @@ async function todoByNumber(number) {
   const data = await api("/api/data");
   const flat = sortedTodos(data.todos);
   const todo = flat[number - 1];
-  if (!todo) fail(`${number}번 할 일이 없습니다. \`adhd\`로 번호를 확인하세요.`);
+  if (!todo) fail(`${number}번 할 일이 없습니다. \`todo\`로 번호를 확인하세요.`);
   return todo;
 }
 
@@ -232,7 +234,7 @@ async function addTodo(args) {
     .filter((arg, i) => !arg.startsWith("-") && (dueIndex < 0 || i !== dueIndex + 1))
     .join(" ")
     .trim();
-  if (!title) fail('사용법: adhd add "제목" [-w 이번주 | -m 이번달] [-d 2026-07-20]');
+  if (!title) fail('사용법: todo add "제목" [-w 이번주 | -m 이번달] [-d 2026-07-20]');
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) fail("마감일은 YYYY-MM-DD 형식으로 넣으세요.");
   await api("/api/todos", {
     method: "POST",
@@ -260,7 +262,7 @@ async function removeTodo(number) {
 }
 
 async function addMemo(body) {
-  if (!body.trim()) fail('사용법: adhd memo "내용 #태그"');
+  if (!body.trim()) fail('사용법: todo memo "내용 #태그"');
   const createdAt = new Date().toISOString();
   const memoId = randomUUID();
   const todos = extractTodos(body).map((title) => ({
@@ -329,7 +331,7 @@ async function showLog(args) {
     .filter((session) => dateKey(new Date(session.startedAt)) === today)
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   if (!todaySessions.length) {
-    console.log(dim("오늘 기록이 없습니다. `adhd track \"작업명\"`으로 시작하세요."));
+    console.log(dim("오늘 기록이 없습니다. `todo track \"작업명\"`으로 시작하세요."));
     return;
   }
   console.log(bold(cyan("오늘 타임테이블")));
@@ -347,7 +349,7 @@ async function showLog(args) {
 async function trackStart(label) {
   const session = loadSession();
   if (session.tracking) {
-    fail(`이미 기록 중입니다: "${session.tracking.label}" (${formatTime(session.tracking.startedAt)}~). 먼저 \`adhd stop\`.`);
+    fail(`이미 기록 중입니다: "${session.tracking.label}" (${formatTime(session.tracking.startedAt)}~). 먼저 \`todo stop\`.`);
   }
   session.tracking = { id: randomUUID(), label: label.trim(), startedAt: new Date().toISOString() };
   saveSession(session);
@@ -356,7 +358,7 @@ async function trackStart(label) {
 
 async function trackStop() {
   const session = loadSession();
-  if (!session.tracking) fail("기록 중인 작업이 없습니다. `adhd track \"작업명\"`으로 시작하세요.");
+  if (!session.tracking) fail("기록 중인 작업이 없습니다. `todo track \"작업명\"`으로 시작하세요.");
   const finished = { ...session.tracking, endedAt: new Date().toISOString() };
   await api("/api/sessions", {
     method: "POST",
@@ -371,7 +373,7 @@ async function trackStop() {
 
 function status() {
   const session = loadSession();
-  console.log(`계정: ${session.email ? green(session.email) : dim("로그인 안 됨 (adhd login)")}`);
+  console.log(`계정: ${session.email ? green(session.email) : dim("로그인 안 됨 (todo login)")}`);
   if (session.tracking) {
     const ms = Date.now() - new Date(session.tracking.startedAt).getTime();
     console.log(`기록 중: ${yellow(session.tracking.label || "이름 없는 작업")} · ${formatDuration(ms)} 경과`);
@@ -381,19 +383,19 @@ function status() {
 }
 
 function help() {
-  console.log(`${bold("adhd")} — Free ADHD Memo 터미널 클라이언트
+  console.log(`${bold("todo")} — Free ADHD Memo 터미널 클라이언트
 
-  adhd                     할 일 목록 (번호 포함)
-  adhd add "제목" [옵션]    할 일 추가  (-w 이번주, -m 이번달, -d 2026-07-20 마감일)
-  adhd done <번호>          완료 토글
-  adhd rm <번호>            삭제
-  adhd memo "내용 #태그"    메모 기록 (- [ ] 줄은 할 일로 자동 추출)
-  adhd memos [개수]         최근 메모 (기본 10개)
-  adhd log [--week]        오늘 타임테이블 / 이번 주 작업별 합계
-  adhd track "작업명"       시간 기록 시작
-  adhd stop                시간 기록 종료 (서버에 저장)
-  adhd status              로그인/기록 상태
-  adhd login / logout      Google 로그인 / 로그아웃`);
+  todo                     할 일 목록 (번호 포함)
+  todo add "제목" [옵션]    할 일 추가  (-w 이번주, -m 이번달, -d 2026-07-20 마감일)
+  todo done <번호>          완료 토글
+  todo rm <번호>            삭제
+  todo memo "내용 #태그"    메모 기록 (- [ ] 줄은 할 일로 자동 추출)
+  todo memos [개수]         최근 메모 (기본 10개)
+  todo log [--week]        오늘 타임테이블 / 이번 주 작업별 합계
+  todo track "작업명"       시간 기록 시작
+  todo stop                시간 기록 종료 (서버에 저장)
+  todo status              로그인/기록 상태
+  todo login / logout      Google 로그인 / 로그아웃`);
 }
 
 const [command, ...args] = process.argv.slice(2);
@@ -406,10 +408,10 @@ switch (command) {
     await addTodo(args);
     break;
   case "done":
-    await toggleTodo(Number(args[0]) || fail("사용법: adhd done <번호>"));
+    await toggleTodo(Number(args[0]) || fail("사용법: todo done <번호>"));
     break;
   case "rm":
-    await removeTodo(Number(args[0]) || fail("사용법: adhd rm <번호>"));
+    await removeTodo(Number(args[0]) || fail("사용법: todo rm <번호>"));
     break;
   case "memo":
     await addMemo(args.join(" "));
@@ -421,7 +423,7 @@ switch (command) {
     await showLog(args);
     break;
   case "track":
-    await trackStart(args.join(" ") || fail('사용법: adhd track "작업명"'));
+    await trackStart(args.join(" ") || fail('사용법: todo track "작업명"'));
     break;
   case "stop":
     await trackStop();
