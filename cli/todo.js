@@ -89,16 +89,21 @@ async function api(path, options = {}) {
 }
 
 function openBrowser(url) {
-  for (const command of [["xdg-open", url], ["wslview", url], ["explorer.exe", url], ["open", url]]) {
-    try {
-      const child = spawn(command[0], command.slice(1), { stdio: "ignore", detached: true });
-      child.on("error", () => {});
-      child.unref();
-      return;
-    } catch {
-      // 다음 후보 시도
-    }
-  }
+  const candidates =
+    process.platform === "win32"
+      ? [["rundll32", "url.dll,FileProtocolHandler", url]]
+      : process.platform === "darwin"
+        ? [["open", url]]
+        : [["xdg-open", url], ["wslview", url], ["explorer.exe", url]];
+
+  const tryCandidate = (index) => {
+    if (index >= candidates.length) return;
+    const [command, ...rest] = candidates[index];
+    const child = spawn(command, rest, { stdio: "ignore", detached: true });
+    child.on("error", () => tryCandidate(index + 1));
+    child.unref();
+  };
+  tryCandidate(0);
 }
 
 function base64url(buffer) {
