@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Free ADHD Memo 터미널 클라이언트.
+// Todo 터미널 클라이언트.
 // 웹앱과 같은 API를 써서 todo/메모/타임테이블이 그대로 연동된다.
 // 의존성 없음 (Node 18+).
 import { createServer } from "node:http";
@@ -9,13 +9,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 
-const API_BASE = (process.env.ADHD_API_BASE || "https://158-179-193-175.nip.io").replace(/\/$/, "");
-const SUPABASE_URL = (process.env.ADHD_SUPABASE_URL || "https://mkvgbffihswfjzgegwlx.supabase.co").replace(/\/$/, "");
+const API_BASE = (process.env.TODO_API_BASE || process.env.ADHD_API_BASE || "https://158-179-193-175.nip.io").replace(/\/$/, "");
+const SUPABASE_URL = (process.env.TODO_SUPABASE_URL || process.env.ADHD_SUPABASE_URL || "https://mkvgbffihswfjzgegwlx.supabase.co").replace(/\/$/, "");
 const ANON_KEY =
+  process.env.TODO_SUPABASE_ANON_KEY ||
   process.env.ADHD_SUPABASE_ANON_KEY ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rdmdiZmZpaHN3Zmp6Z2Vnd2x4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NzA5NzksImV4cCI6MjA5ODU0Njk3OX0.MrKmcsAMCU9fepyD97HMuSSImARjtchiCAaGRzgqsQ8";
-const CONFIG_DIR = join(homedir(), ".config", "free-adhd-memo");
+const CONFIG_DIR = join(homedir(), ".config", "todo");
 const SESSION_FILE = join(CONFIG_DIR, "session.json");
+const LEGACY_SESSION_FILE = join(homedir(), ".config", "free-adhd-memo", "session.json");
 const CALLBACK_PORT = 8787;
 
 const style = (code, text) => `\x1b[${code}m${text}\x1b[0m`;
@@ -33,7 +35,11 @@ function loadSession() {
   try {
     return JSON.parse(readFileSync(SESSION_FILE, "utf8"));
   } catch {
-    return {};
+    try {
+      return JSON.parse(readFileSync(LEGACY_SESSION_FILE, "utf8"));
+    } catch {
+      return {};
+    }
   }
 }
 
@@ -192,11 +198,10 @@ function dateKey(date) {
 
 function sortedTodos(todos) {
   const order = ["day", "week", "month"];
-  return order.flatMap((scope) =>
-    todos
-      .filter((todo) => todo.scope === scope)
-      .sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt.localeCompare(a.createdAt)),
-  );
+  return order.flatMap((scope) => {
+    const roots = orderedSiblings(todos, scope);
+    return roots.flatMap((root) => [root, ...orderedSiblings(todos, scope, root.id)]);
+  });
 }
 
 async function listTodos() {
@@ -220,7 +225,10 @@ async function listTodos() {
     const category = todo.category ? cyan(`[${todo.category}] `) : "";
     const due = todo.dueDate ? dim(`  ~${todo.dueDate}`) : "";
     const note = todo.note ? dim(" ✎") : "";
-    console.log(`${number} ${mark} ${category}${title}${due}${note}`);
+    const children = flat.filter((item) => item.parentId === todo.id);
+    const prefix = todo.parentId ? "    └ " : children.length ? "▾ " : "  ";
+    const progress = children.length ? dim(` (${children.filter((item) => item.done).length}/${children.length})`) : "";
+    console.log(`${number} ${prefix}${mark} ${category}${title}${progress}${due}${note}`);
   }
   console.log();
 }
@@ -402,10 +410,477 @@ function status() {
   }
 }
 
-function help() {
-  console.log(`${bold("todo")} — Free ADHD Memo 터미널 클라이언트
+const tuiColors = {
+  reset: "\x1b[0m",
+  coral: "\x1b[38;5;209m",
+  mint: "\x1b[38;5;79m",
+  blue: "\x1b[38;5;117m",
+  cream: "\x1b[38;5;230m",
+  muted: "\x1b[38;5;245m",
+  danger: "\x1b[38;5;203m",
+  selected: "\x1b[48;5;236m",
+};
 
-  todo                     할 일 목록 (번호 포함)
+function terminalWidth(text) {
+  return [...String(text)].reduce((width, char) => {
+    const code = char.codePointAt(0);
+    return width + (code >= 0x1100 && (code <= 0x115f || code >= 0x2e80) ? 2 : 1);
+  }, 0);
+}
+
+function truncateTerminal(text, width) {
+  let result = "";
+  let used = 0;
+  for (const char of String(text)) {
+    const size = terminalWidth(char);
+    if (used + size > width) return `${result.slice(0, Math.max(0, result.length - 1))}…`;
+    result += char;
+    used += size;
+  }
+  return result;
+}
+
+function padTerminal(text, width) {
+  const clipped = truncateTerminal(text, width);
+  return clipped + " ".repeat(Math.max(0, width - terminalWidth(clipped)));
+}
+
+function localTimestamp(value) {
+  const date = new Date(value);
+  return `${dateKey(date)} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function todoOrderValue(todo) {
+  return Number.isFinite(Number(todo.sortOrder)) ? Number(todo.sortOrder) : Number.MAX_SAFE_INTEGER;
+}
+
+function orderedSiblings(todos, scope, parentId = null) {
+  return todos
+    .filter((todo) => todo.scope === scope && (todo.parentId || null) === parentId)
+    .sort((a, b) => todoOrderValue(a) - todoOrderValue(b) || a.createdAt.localeCompare(b.createdAt));
+}
+
+function visibleTree(todos, collapsed) {
+  const rows = [];
+  for (const scope of ["day", "week", "month"]) {
+    const roots = orderedSiblings(todos, scope);
+    for (const root of roots) {
+      const children = orderedSiblings(todos, scope, root.id);
+      rows.push({ todo: root, depth: 0, children, last: false });
+      if (!collapsed.has(root.id)) {
+        children.forEach((child, index) =>
+          rows.push({ todo: child, depth: 1, children: [], last: index === children.length - 1 }),
+        );
+      }
+    }
+  }
+  return rows;
+}
+
+function normalizedTreeItems(todos) {
+  const items = [];
+  for (const scope of ["day", "week", "month"]) {
+    orderedSiblings(todos, scope).forEach((root, rootIndex) => {
+      items.push({ id: root.id, parentId: null, sortOrder: rootIndex, scope });
+      orderedSiblings(todos, scope, root.id).forEach((child, childIndex) => {
+        items.push({ id: child.id, parentId: root.id, sortOrder: childIndex, scope });
+      });
+    });
+  }
+  return items;
+}
+
+function splitTerminalKeys(input) {
+  const keys = [];
+  const sequences = [
+    "\x1b[1;2A",
+    "\x1b[1;2B",
+    "\x1b[1;2C",
+    "\x1b[1;2D",
+    "\x1b[A",
+    "\x1b[B",
+    "\x1b[C",
+    "\x1b[D",
+    "\x1bOA",
+    "\x1bOB",
+    "\x1bOC",
+    "\x1bOD",
+  ];
+  let remaining = input;
+  while (remaining) {
+    const sequence = sequences.find((candidate) => remaining.startsWith(candidate));
+    if (sequence) {
+      keys.push(sequence);
+      remaining = remaining.slice(sequence.length);
+      continue;
+    }
+    const [char] = [...remaining];
+    keys.push(char);
+    remaining = remaining.slice(char.length);
+  }
+  return keys;
+}
+
+async function runTui() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    await listTodos();
+    return;
+  }
+
+  const state = {
+    todos: [],
+    mode: "insert",
+    input: "",
+    selected: 0,
+    selectedId: null,
+    collapsed: new Set(),
+    prompt: null,
+    message: "",
+    busy: false,
+    stopped: false,
+  };
+  let finish;
+  const finished = new Promise((resolve) => {
+    finish = resolve;
+  });
+
+  const cleanup = () => {
+    if (state.stopped) return;
+    state.stopped = true;
+    process.stdin.setRawMode(false);
+    process.stdin.pause();
+    process.stdout.write("\x1b[?25h\x1b[0m\x1b[2J\x1b[H");
+    finish();
+  };
+  process.once("exit", cleanup);
+  process.once("SIGINT", () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.once("SIGTERM", () => {
+    cleanup();
+    process.exit(0);
+  });
+
+  function rows() {
+    return visibleTree(state.todos, state.collapsed);
+  }
+
+  function syncSelection(preferredId = state.selectedId) {
+    const currentRows = rows();
+    if (!currentRows.length) {
+      state.selected = 0;
+      state.selectedId = null;
+      return;
+    }
+    const preferredIndex = preferredId ? currentRows.findIndex((row) => row.todo.id === preferredId) : -1;
+    state.selected = preferredIndex >= 0 ? preferredIndex : Math.min(state.selected, currentRows.length - 1);
+    state.selectedId = currentRows[state.selected].todo.id;
+  }
+
+  async function refresh(preferredId) {
+    const data = await api("/api/data");
+    state.todos = Array.isArray(data.todos) ? data.todos : [];
+    syncSelection(preferredId);
+  }
+
+  function selectedRow() {
+    return rows()[state.selected] || null;
+  }
+
+  function renderTodoRow(row, selected, contentWidth) {
+    const todo = row.todo;
+    const mark = todo.done ? "[x]" : "[ ]";
+    const children = row.children;
+    const tree = row.depth
+      ? `     ${row.last ? "└" : "├"} `
+      : children.length
+        ? `${state.collapsed.has(todo.id) ? "▸" : "▾"} `
+        : "  ";
+    const progress = children.length ? `  (${children.filter((child) => child.done).length}/${children.length})` : "";
+    const due = todo.dueDate ? `  ⏳ ${todo.dueDate}` : "";
+    const plain = `${tree}${mark} ${localTimestamp(todo.createdAt)}: ${todo.title}${progress}${due}`;
+    const overdue = todo.dueDate && todo.dueDate < dateKey(new Date()) && !todo.done;
+    const color = overdue ? tuiColors.danger : todo.done ? tuiColors.muted : row.depth ? tuiColors.cream : tuiColors.blue;
+    return `${selected ? tuiColors.selected : ""}${color}${padTerminal(plain, contentWidth)}${tuiColors.reset}`;
+  }
+
+  function render() {
+    const width = Math.max(52, Math.min(process.stdout.columns || 90, 110));
+    const height = Math.max(12, process.stdout.rows || 24);
+    const inner = width - 4;
+    const currentRows = rows();
+    syncSelection();
+    const rootCount = state.todos.filter((todo) => !todo.parentId).length;
+    const modeLabel = state.prompt ? state.prompt.label : state.mode === "insert" ? "-- INSERT --" : "-- NORMAL --";
+    const title = ` To-Do (${rootCount}개)  ${modeLabel} `;
+    const top = `┌${title}${"─".repeat(Math.max(0, width - terminalWidth(title) - 2))}┐`;
+    const heading = " 목록  [ ] 생성시각: 내용 ";
+    const divider = `├${heading}${"─".repeat(Math.max(0, width - terminalWidth(heading) - 2))}┤`;
+    const listHeight = Math.max(3, height - 7);
+    let start = Math.max(0, state.selected - Math.floor(listHeight / 2));
+    start = Math.min(start, Math.max(0, currentRows.length - listHeight));
+    const body = [];
+    let lastScope = null;
+    for (let index = start; index < Math.min(currentRows.length, start + listHeight); index += 1) {
+      const row = currentRows[index];
+      if (row.todo.scope !== lastScope && body.length < listHeight) {
+        lastScope = row.todo.scope;
+        const labelColor = row.todo.scope === "day" ? tuiColors.coral : row.todo.scope === "week" ? tuiColors.mint : tuiColors.blue;
+        body.push(`│ ${labelColor}${padTerminal(`· ${scopeLabels[row.todo.scope]}`, inner)}${tuiColors.reset} │`);
+        if (body.length >= listHeight) break;
+      }
+      body.push(`│ ${renderTodoRow(row, index === state.selected, inner)} │`);
+    }
+    if (!currentRows.length) body.push(`│ ${tuiColors.muted}${padTerminal("할 일이 없습니다. 아래에서 바로 입력해 보세요.", inner)}${tuiColors.reset} │`);
+    while (body.length < listHeight) body.push(`│ ${" ".repeat(inner)} │`);
+    const promptText = state.prompt
+      ? `${state.prompt.label}: ${state.prompt.value}`
+      : state.mode === "insert"
+        ? `새 할 일: ${state.input}`
+        : "NORMAL  i/a/Esc 입력 · s 하위 · e 편집 · t 마감 · Space 완료 · d 삭제 · q 종료";
+    const promptTitle = state.mode === "insert" || state.prompt ? " Enter 저장 · Esc 명령모드 " : " 명령 ";
+    const promptDivider = `├${promptTitle}${"─".repeat(Math.max(0, width - terminalWidth(promptTitle) - 2))}┤`;
+    const status = state.message ? `  ${state.message}` : "";
+    const promptLine = `│ ${padTerminal(`${promptText}${status}`, inner)} │`;
+    const bottom = `└${"─".repeat(width - 2)}┘`;
+    const cursor = state.mode === "insert" || state.prompt ? "\x1b[?25h" : "\x1b[?25l";
+    const cursorColumn = Math.min(width - 2, 3 + terminalWidth(promptText));
+    const cursorPosition = state.mode === "insert" || state.prompt ? `\x1b[${listHeight + 4};${cursorColumn}H` : "";
+    process.stdout.write(`\x1b[H${cursor}${top}\n${divider}\n${body.join("\n")}\n${promptDivider}\n${promptLine}\n${bottom}\x1b[J${cursorPosition}`);
+  }
+
+  async function mutate(callback) {
+    if (state.busy) return;
+    state.busy = true;
+    state.message = "저장 중…";
+    render();
+    try {
+      await callback();
+      state.message = "저장됨";
+    } finally {
+      state.busy = false;
+      render();
+    }
+  }
+
+  async function createTodoFromInput(title, parentId = null) {
+    const parent = parentId ? state.todos.find((todo) => todo.id === parentId) : null;
+    const scope = parent?.scope || "day";
+    const created = await api("/api/todos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: randomUUID(),
+        title,
+        scope,
+        parentId,
+        done: false,
+        createdAt: new Date().toISOString(),
+      }),
+    });
+    if (parentId) state.collapsed.delete(parentId);
+    await refresh(created.id);
+  }
+
+  async function saveTree(todos, preferredId) {
+    await api("/api/todos/order", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: normalizedTreeItems(todos) }),
+    });
+    await refresh(preferredId);
+  }
+
+  async function submitPrompt() {
+    const prompt = state.prompt;
+    if (!prompt) return;
+    const value = prompt.value.trim();
+    state.prompt = null;
+    if (prompt.kind === "child" && value) {
+      await mutate(() => createTodoFromInput(value, prompt.todoId));
+    } else if (prompt.kind === "edit" && value) {
+      await mutate(async () => {
+        await api(`/api/todos/${encodeURIComponent(prompt.todoId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: value }),
+        });
+        await refresh(prompt.todoId);
+      });
+    } else if (prompt.kind === "due") {
+      if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        state.message = "마감일 형식: YYYY-MM-DD";
+        state.prompt = prompt;
+        render();
+        return;
+      }
+      await mutate(async () => {
+        await api(`/api/todos/${encodeURIComponent(prompt.todoId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dueDate: value || null }),
+        });
+        await refresh(prompt.todoId);
+      });
+    }
+  }
+
+  async function handleKey(key) {
+    state.message = "";
+    if (key === "\x03") {
+      cleanup();
+      return;
+    }
+    if (state.prompt) {
+      if (key === "\x1b") {
+        state.prompt = null;
+      } else if (key === "\r" || key === "\n") {
+        await submitPrompt();
+      } else if (key === "\x7f" || key === "\b") {
+        state.prompt.value = [...state.prompt.value].slice(0, -1).join("");
+      } else if (!key.startsWith("\x1b") && !/[\x00-\x1f]/.test(key)) {
+        state.prompt.value += key;
+      }
+      render();
+      return;
+    }
+
+    const currentRows = rows();
+    const up = key === "\x1b[A" || key === "\x1bOA" || (state.mode === "normal" && key === "k");
+    const down = key === "\x1b[B" || key === "\x1bOB" || (state.mode === "normal" && key === "j");
+    const left = key === "\x1b[D" || key === "\x1bOD" || (state.mode === "normal" && key === "h");
+    const right = key === "\x1b[C" || key === "\x1bOC" || (state.mode === "normal" && key === "l");
+    const shiftUp = key === "\x1b[1;2A";
+    const shiftDown = key === "\x1b[1;2B";
+    const shiftLeft = key === "\x1b[1;2D";
+    const shiftRight = key === "\x1b[1;2C";
+
+    if (up || down) {
+      if (currentRows.length) {
+        state.selected = Math.max(0, Math.min(currentRows.length - 1, state.selected + (down ? 1 : -1)));
+        state.selectedId = currentRows[state.selected].todo.id;
+      }
+    } else if (left || right) {
+      const row = selectedRow();
+      if (row?.depth === 0 && row.children.length) {
+        if (left) state.collapsed.add(row.todo.id);
+        else state.collapsed.delete(row.todo.id);
+        syncSelection(row.todo.id);
+      }
+    } else if (shiftUp || shiftDown) {
+      const row = selectedRow();
+      if (row) {
+        const siblings = orderedSiblings(state.todos, row.todo.scope, row.todo.parentId || null);
+        const index = siblings.findIndex((todo) => todo.id === row.todo.id);
+        const otherIndex = index + (shiftDown ? 1 : -1);
+        if (index >= 0 && otherIndex >= 0 && otherIndex < siblings.length) {
+          [siblings[index], siblings[otherIndex]] = [siblings[otherIndex], siblings[index]];
+          const orderById = new Map(siblings.map((todo, siblingIndex) => [todo.id, siblingIndex]));
+          const next = state.todos.map((todo) =>
+            orderById.has(todo.id) ? { ...todo, sortOrder: orderById.get(todo.id) } : todo,
+          );
+          await mutate(() => saveTree(next, row.todo.id));
+        }
+      }
+    } else if (shiftLeft) {
+      const row = selectedRow();
+      if (row?.depth === 0) {
+        const roots = orderedSiblings(state.todos, row.todo.scope);
+        const index = roots.findIndex((todo) => todo.id === row.todo.id);
+        const parent = roots[index - 1];
+        if (parent) {
+          const childCount = orderedSiblings(state.todos, row.todo.scope, parent.id).length;
+          const next = state.todos.map((todo) =>
+            todo.id === row.todo.id ? { ...todo, parentId: parent.id, sortOrder: childCount } : todo,
+          );
+          state.collapsed.delete(parent.id);
+          await mutate(() => saveTree(next, row.todo.id));
+        }
+      }
+    } else if (shiftRight) {
+      const row = selectedRow();
+      if (row?.depth === 1) {
+        const parent = state.todos.find((todo) => todo.id === row.todo.parentId);
+        if (parent) {
+          const next = state.todos.map((todo) =>
+            todo.id === row.todo.id ? { ...todo, parentId: null, sortOrder: todoOrderValue(parent) + 0.5 } : todo,
+          );
+          await mutate(() => saveTree(next, row.todo.id));
+        }
+      }
+    } else if (state.mode === "insert") {
+      if (key === "\x1b") {
+        state.mode = "normal";
+      } else if (key === "\r" || key === "\n") {
+        const title = state.input.trim();
+        if (title) {
+          state.input = "";
+          await mutate(() => createTodoFromInput(title));
+        }
+      } else if (key === "\x7f" || key === "\b") {
+        state.input = [...state.input].slice(0, -1).join("");
+      } else if (!key.startsWith("\x1b") && !/[\x00-\x1f]/.test(key)) {
+        state.input += key;
+      }
+    } else if (key === "i" || key === "a" || key === "\x1b") {
+      state.mode = "insert";
+    } else if (key === "q") {
+      cleanup();
+      return;
+    } else {
+      const row = selectedRow();
+      if (row && key === "s") {
+        const parent = row.depth === 0 ? row.todo : state.todos.find((todo) => todo.id === row.todo.parentId);
+        state.prompt = { kind: "child", label: "하위 목표", value: "", todoId: parent.id };
+      } else if (row && key === "e") {
+        state.prompt = { kind: "edit", label: "내용 편집", value: row.todo.title, todoId: row.todo.id };
+      } else if (row && key === "t") {
+        state.prompt = { kind: "due", label: "마감일 YYYY-MM-DD (비우면 해제)", value: row.todo.dueDate || "", todoId: row.todo.id };
+      } else if (row && key === " ") {
+        await mutate(async () => {
+          await api(`/api/todos/${encodeURIComponent(row.todo.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ done: !row.todo.done, completedAt: !row.todo.done ? new Date().toISOString() : null }),
+          });
+          await refresh(row.todo.id);
+        });
+      } else if (row && key === "d") {
+        await mutate(async () => {
+          await api(`/api/todos/${encodeURIComponent(row.todo.id)}`, { method: "DELETE" });
+          await refresh();
+        });
+      }
+    }
+    render();
+  }
+
+  await refresh();
+  process.stdin.setEncoding("utf8");
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdout.write("\x1b[2J\x1b[H");
+  render();
+  let keyQueue = Promise.resolve();
+  process.stdin.on("data", (input) => {
+    for (const key of splitTerminalKeys(input)) {
+      keyQueue = keyQueue.then(() => handleKey(key)).catch((error) => {
+        state.message = error.message || String(error);
+        state.busy = false;
+        render();
+      });
+    }
+  });
+  process.stdout.on("resize", render);
+  await finished;
+}
+
+function help() {
+  console.log(`${bold("todo")} — Todo 터미널 클라이언트
+
+  todo                     Vim 스타일 대화형 TUI (비대화형 터미널에서는 목록)
+  todo list                할 일 목록 (번호 포함)
   todo add "제목" [옵션]    할 일 추가  (-w 이번주, -m 이번달, -d 2026-07-20 마감일, -c 카테고리)
   todo done <번호>          완료 토글
   todo rm <번호>            삭제
@@ -421,6 +896,8 @@ function help() {
 const [command, ...args] = process.argv.slice(2);
 switch (command) {
   case undefined:
+    await runTui();
+    break;
   case "list":
     await listTodos();
     break;
@@ -456,6 +933,7 @@ switch (command) {
     break;
   case "logout":
     rmSync(SESSION_FILE, { force: true });
+    rmSync(LEGACY_SESSION_FILE, { force: true });
     console.log("로그아웃 완료.");
     break;
   case "help":

@@ -11,6 +11,8 @@ export interface Todo {
   dueDate?: string | null;
   category?: string | null;
   note?: string | null;
+  parentId?: string | null;
+  sortOrder?: number;
 }
 
 export type TodoPatch = Partial<Pick<Todo, "title" | "scope" | "dueDate" | "category" | "note">>;

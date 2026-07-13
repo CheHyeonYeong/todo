@@ -1,4 +1,4 @@
-# Free ADHD Memo
+# Todo
 
 todo + timestamp memo + pomodoro 앱입니다.
 
@@ -12,8 +12,8 @@ todo + timestamp memo + pomodoro 앱입니다.
   - 분리 배포에서는 로그인 후 `Authorization: Bearer` 토큰으로 API를 호출합니다.
   - 앱 런타임 DB 연결은 Supabase shared transaction-mode pooler `:6543`을 씁니다.
 - Docker 배포
-  - `docker build -t free-adhd-memo .`
-  - `docker run -p 3000:3000 --env-file .env free-adhd-memo`
+  - `docker build -t todo .`
+  - `docker run -p 3000:3000 --env-file .env todo`
 
 ## 기능
 
@@ -58,6 +58,8 @@ create table if not exists public.todos (
   completed_at timestamptz,
   source_memo_id text references public.memos(id) on delete set null,
   due_date text,
+  parent_id text references public.todos(id) on delete cascade,
+  sort_order double precision,
   updated_at timestamptz not null default now()
 );
 
@@ -80,10 +82,13 @@ alter table public.memos add column if not exists starred boolean not null defau
 alter table public.todos add column if not exists due_date text;
 alter table public.todos add column if not exists category text;
 alter table public.todos add column if not exists note text;
+alter table public.todos add column if not exists parent_id text references public.todos(id) on delete cascade;
+alter table public.todos add column if not exists sort_order double precision;
 
 create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
 create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);
 create index if not exists todos_due_date_idx on public.todos (user_id, due_date);
+create index if not exists todos_tree_order_idx on public.todos (user_id, scope, parent_id, sort_order);
 create index if not exists sessions_user_started_idx on public.sessions (user_id, started_at desc);
 ```
 
@@ -206,7 +211,7 @@ npm install -g https://todo-cohe.vercel.app/cli.tgz
 `http://localhost:8787`을 추가해야 `todo login`(브라우저 Google 로그인)이 동작한다.
 
 ```bash
-todo login             # 브라우저로 Google 로그인, 토큰은 ~/.config/free-adhd-memo/에 저장
+todo login             # 브라우저로 Google 로그인, 토큰은 ~/.config/todo/에 저장
 todo                   # 할 일 목록
 todo add "제목" -w     # 이번 주 할 일 추가 (-m 이번 달, -d 2026-07-20 마감일)
 todo done 3            # 3번 완료 토글
@@ -216,7 +221,15 @@ todo stop              # 기록 종료 -> 타임테이블에 저장
 todo log --week        # 이번 주 작업별 시간 합계
 ```
 
-다른 서버를 쓰려면 `ADHD_API_BASE=http://localhost:3000` 환경변수로 바꾼다.
+`todo`를 인자 없이 실행하면 전체화면 TUI가 열리고 바로 Insert 모드로 시작한다. 입력 후 Enter로 오늘 할 일을 맨 아래에 추가한다.
+
+- Insert: `↑/↓` 선택, `←/→` 접기/펼치기, `Shift+←/→` 하위로/최상위로, `Shift+↑/↓` 순서 이동, `Esc` Normal 모드
+- Normal: `i`/`a`/`Esc` Insert 모드, `s` 하위 목표, `e` 편집, `t` 마감일, `Space` 완료, `d` 삭제, `hjkl` 이동·접기, `q` 종료
+- 하위 목표는 2뎁스까지만 지원한다. 부모 완료는 자식 전체에 전파되고, 자식이 모두 완료되면 부모도 자동 완료된다.
+- 생성 시각은 로컬 시간 `YYYY-MM-DD HH:MM`으로 표시되며 지난 마감일은 빨간색으로 표시된다.
+- 기존 명령형 목록은 `todo list`로 확인한다.
+
+다른 서버를 쓰려면 `TODO_API_BASE=http://localhost:3000` 환경변수로 바꾼다.
 
 ## 앱스토어 배포 (TWA)
 

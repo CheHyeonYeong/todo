@@ -1,4 +1,4 @@
-const CACHE_NAME = "free-adhd-memo-v2";
+const CACHE_NAME = "todo-v3";
 const PRECACHE_URLS = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {

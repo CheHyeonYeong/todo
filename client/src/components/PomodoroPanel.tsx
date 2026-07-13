@@ -95,7 +95,7 @@ export function PomodoroPanel() {
       playBeep();
       const message = modeRef.current === "focus" ? "집중 끝! 잠깐 쉬세요." : "휴식 끝! 다시 시작해볼까요.";
       if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("Free ADHD Memo", { body: message, icon: "/icons/icon-192.png" });
+        new Notification("Todo", { body: message, icon: "/icons/icon-192.png" });
       }
       recordFocusSegmentRef.current(endAt);
     };
