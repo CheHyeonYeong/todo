@@ -193,11 +193,15 @@ sudo systemctl restart free-adhd-memo
 
 ## 터미널 CLI
 
-웹앱과 같은 API를 쓰는 터미널 클라이언트가 `cli/todo.js`에 있다. 설치:
+웹앱과 같은 API를 쓰는 터미널 클라이언트가 `cli/todo.js`에 있다.
+
+설치 (Node.js 18+만 있으면 됨, 저장소 클론 불필요):
 
 ```bash
-npm link   # 저장소 루트에서 1회 실행하면 어디서든 `todo` 사용 가능
+npm install -g https://github.com/CheHyeonYeong/todo/archive/refs/heads/main.tar.gz
 ```
+
+업데이트도 같은 명령을 다시 실행하면 된다. 저장소를 클론해서 개발 중이라면 `npm link`가 더 편하다 (코드 수정이 바로 반영됨).
 
 처음 한 번 Supabase Dashboard -> Authentication -> URL Configuration -> Redirect URLs에
 `http://localhost:8787`을 추가해야 `todo login`(브라우저 Google 로그인)이 동작한다.
