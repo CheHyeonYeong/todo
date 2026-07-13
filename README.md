@@ -191,6 +191,22 @@ sudo journalctl -u free-adhd-memo -f
 sudo systemctl restart free-adhd-memo
 ```
 
+## 앱스토어 배포 (TWA)
+
+이 앱은 PWA라서 Google Play에는 TWA(Trusted Web Activity)로 그대로 올릴 수 있다.
+
+1. https://play.google.com/console 에서 개발자 계정 등록 ($25, 1회)
+2. https://www.pwabuilder.com 에 `https://todo-cohe.vercel.app` 입력 -> Package for stores -> Android
+   - package id는 `client/.well-known/assetlinks.json`의 `package_name`과 맞춘다
+   - 생성된 `.aab`를 Play Console에 업로드 (signing key도 함께 생성해 주니 잘 보관)
+3. Play Console -> Test and release -> App integrity -> App signing key certificate에서
+   SHA-256 fingerprint를 복사해 `client/.well-known/assetlinks.json`에 넣고 배포
+   - 이 파일이 맞아야 앱에서 브라우저 주소창이 사라진다
+4. 스토어 등록정보(스크린샷, 설명, 개인정보처리방침 URL) 채우고 심사 제출
+
+iOS App Store는 웹 래퍼 앱 심사 거절 위험이 크고 연 $99가 든다.
+아이폰 사용자는 Safari -> 공유 -> 홈 화면에 추가로 안내하는 것을 권장.
+
 ## 빌드
 
 ```bash
