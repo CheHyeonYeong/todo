@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const publicDir = process.env.PUBLIC_DIR || join(__dirname, "../client");
+const publicDir = process.env.PUBLIC_DIR || join(__dirname, "../client/dist");
 const port = Number(process.env.PORT || 3000);
 const dataFile = process.env.DATA_FILE || join(__dirname, "../data", "store.json");
 const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/$/, "");

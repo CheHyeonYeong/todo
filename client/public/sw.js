@@ -1,14 +1,5 @@
-const CACHE_NAME = "free-adhd-memo-v1";
-const PRECACHE_URLS = [
-  "/",
-  "/index.html",
-  "/manifest.webmanifest",
-  "/src/styles.css",
-  "/src/app.js",
-  "/src/config.js",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-];
+const CACHE_NAME = "free-adhd-memo-v2";
+const PRECACHE_URLS = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

@@ -121,15 +121,12 @@ DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-sou
 
 ## Vercel FE 분리
 
-Vercel에서 Project Root를 `client`로 설정합니다. 프론트엔드는 정적 파일이라 빌드가 필요 없습니다.
+Vercel에서 Project Root를 `client`로 설정합니다. 프론트엔드는 React + Vite + Tailwind + shadcn/ui이고,
+`client/vercel.json`의 `buildCommand`/`outputDirectory` 설정으로 Vercel이 자동 빌드합니다.
 
-`client/src/config.js`에 API와 Supabase public config를 넣습니다.
+로컬 개발은 `cd client && npm install && npm run dev`.
 
-```js
-window.FREE_ADHD_API_BASE_URL = "https://api.your-domain.com";
-window.FREE_ADHD_SUPABASE_URL = "https://your-project-ref.supabase.co";
-window.FREE_ADHD_SUPABASE_ANON_KEY = "your-public-anon-key";
-```
+API/Supabase public 설정값은 `client/src/config.ts`에 있습니다.
 
 API 주소는 첫 접속 때 `api` query로도 지정할 수 있고, 브라우저에 저장됩니다.
 
