@@ -198,7 +198,7 @@ sudo systemctl restart free-adhd-memo
 설치 (Node.js 18+만 있으면 됨, 저장소 클론 불필요):
 
 ```bash
-npm install -g https://github.com/CheHyeonYeong/todo/archive/refs/heads/main.tar.gz
+npm install -g https://todo-cohe.vercel.app/cli.tgz
 ```
 
 업데이트도 같은 명령을 다시 실행하면 된다. 저장소를 클론해서 개발 중이라면 `npm link`가 더 편하다 (코드 수정이 바로 반영됨).
