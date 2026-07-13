@@ -48,6 +48,8 @@ let calendarViewMode = false;
 let calendarMonth = new Date();
 let selectedCalendarDate = null;
 let timetableDateKey = null;
+let timetableView = "day";
+let editingTodoId = null;
 let activeSession = loadActiveSession();
 
 function loadActiveSession() {
@@ -220,6 +222,7 @@ async function checkSession() {
 
 async function loadServerData() {
   if (!authenticated) return;
+  if (editingTodoId) return;
   try {
     const response = await apiFetch("/api/data");
     if (!response.ok) throw new Error(`Sync failed: ${response.status}`);
@@ -337,6 +340,18 @@ function shiftDateKey(key, delta) {
   return dateKey(date);
 }
 
+function weekStartKey(key) {
+  const date = new Date(`${key}T00:00:00`);
+  const weekday = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - weekday);
+  return dateKey(date);
+}
+
+function shortDate(key) {
+  const date = new Date(`${key}T00:00:00`);
+  return `${date.getMonth() + 1}월 ${date.getDate()}일`;
+}
+
 function formatDuration(ms) {
   const minutes = Math.round(ms / 60000);
   if (minutes < 1) return "1분 미만";
@@ -364,17 +379,28 @@ function renderTodos() {
 
       const rows = items.length
         ? items
-            .map(
-              (todo) => `
+            .map((todo) => {
+              if (todo.id === editingTodoId) {
+                return `
+                  <div class="todo-row editing">
+                    <button type="button" data-action="toggle-todo" data-id="${todo.id}" title="완료 전환">
+                      ${todo.done ? "✓" : "○"}
+                    </button>
+                    <input class="todo-edit-input" id="todoEditInput" value="${escapeHtml(todo.title)}" />
+                  </div>
+                `;
+              }
+              return `
                 <div class="todo-row ${todo.done ? "done" : ""}">
                   <button type="button" data-action="toggle-todo" data-id="${todo.id}" title="완료 전환">
                     ${todo.done ? "✓" : "○"}
                   </button>
                   <span>${escapeHtml(todo.title)}</span>
+                  <button type="button" data-action="edit-todo" data-id="${todo.id}" title="수정">✎</button>
                   <button type="button" data-action="delete-todo" data-id="${todo.id}" title="삭제">×</button>
                 </div>
-              `,
-            )
+              `;
+            })
             .join("")
         : `<p class="empty">없음</p>`;
 
@@ -393,14 +419,58 @@ function renderTodos() {
     ? queue
         .map(
           (todo) => `
-            <button class="focus-item" type="button" data-action="toggle-todo" data-id="${todo.id}">
-              <span aria-hidden="true">○</span>
-              <span>${escapeHtml(todo.title)}</span>
-            </button>
+            <div class="focus-item-row">
+              <button class="focus-item" type="button" data-action="toggle-todo" data-id="${todo.id}">
+                <span aria-hidden="true">○</span>
+                <span>${escapeHtml(todo.title)}</span>
+              </button>
+              <button class="focus-track" type="button" data-action="track-todo" data-id="${todo.id}" title="이 일 기록 시작">▶</button>
+            </div>
           `,
         )
         .join("")
     : `<p class="empty">비어 있습니다. 쉬어도 됩니다.</p>`;
+
+  const editInput = byId("todoEditInput");
+  if (editInput && document.activeElement !== editInput) {
+    editInput.focus();
+    editInput.setSelectionRange(editInput.value.length, editInput.value.length);
+    editInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commitTodoEdit(editInput.value);
+      }
+      if (event.key === "Escape") cancelTodoEdit();
+    });
+    editInput.addEventListener("blur", () => commitTodoEdit(editInput.value));
+  }
+}
+
+function commitTodoEdit(value) {
+  if (!editingTodoId) return;
+  const id = editingTodoId;
+  editingTodoId = null;
+  const currentTodo = data.todos.find((todo) => todo.id === id);
+  const title = value.trim();
+  if (!currentTodo || !title || title === currentTodo.title) {
+    render();
+    return;
+  }
+  data.todos = data.todos.map((todo) => (todo.id === id ? { ...todo, title } : todo));
+  saveData();
+  render();
+  sendMutation(`/api/todos/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ title }),
+  });
+}
+
+function cancelTodoEdit() {
+  editingTodoId = null;
+  render();
 }
 
 function renderCalendar() {
@@ -611,8 +681,51 @@ function renderTracker() {
   )} 경과`;
 }
 
+function sessionDurationMs(session) {
+  return new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime();
+}
+
+function renderWeekTimetable() {
+  const startKey = weekStartKey(timetableDateKey);
+  const endKey = shiftDateKey(startKey, 6);
+  byId("timetableDateLabel").textContent =
+    startKey === weekStartKey(dateKey(new Date())) ? "이번 주" : `${shortDate(startKey)} – ${shortDate(endKey)}`;
+
+  const sessions = (data.sessions || []).filter((session) => {
+    const key = dateKey(new Date(session.startedAt));
+    return key >= startKey && key <= endKey;
+  });
+
+  const totals = new Map();
+  sessions.forEach((session) => {
+    const label = session.label || "이름 없는 작업";
+    totals.set(label, (totals.get(label) || 0) + sessionDurationMs(session));
+  });
+
+  const rows = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  byId("timetableList").innerHTML = rows.length
+    ? rows
+        .map(
+          ([label, ms]) => `
+            <div class="session-row week">
+              <span class="session-label">${escapeHtml(label)}</span>
+              <span class="session-duration">${formatDuration(ms)}</span>
+            </div>
+          `,
+        )
+        .join("")
+    : `<p class="empty">이번 주 기록이 없습니다.</p>`;
+
+  const totalMs = sessions.reduce((sum, session) => sum + sessionDurationMs(session), 0);
+  byId("timetableTotal").textContent = rows.length ? `합계 ${formatDuration(totalMs)}` : "";
+}
+
 function renderTimetable() {
   if (!timetableDateKey) timetableDateKey = dateKey(new Date());
+  if (timetableView === "week") {
+    renderWeekTimetable();
+    return;
+  }
   byId("timetableDateLabel").textContent =
     timetableDateKey === dateKey(new Date()) ? "오늘" : formatDate(`${timetableDateKey}T00:00:00`);
 
@@ -622,24 +735,20 @@ function renderTimetable() {
 
   byId("timetableList").innerHTML = sessions.length
     ? sessions
-        .map((session) => {
-          const duration = new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime();
-          return `
+        .map(
+          (session) => `
             <div class="session-row">
               <time>${formatTime(session.startedAt)} – ${formatTime(session.endedAt)}</time>
               <span class="session-label">${escapeHtml(session.label || "이름 없는 작업")}</span>
-              <span class="session-duration">${formatDuration(duration)}</span>
+              <span class="session-duration">${formatDuration(sessionDurationMs(session))}</span>
               <button type="button" data-action="delete-session" data-id="${session.id}" title="기록 삭제">×</button>
             </div>
-          `;
-        })
+          `,
+        )
         .join("")
     : `<p class="empty">기록이 없습니다. 위에서 시작을 눌러보세요.</p>`;
 
-  const totalMs = sessions.reduce(
-    (sum, session) => sum + (new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()),
-    0,
-  );
+  const totalMs = sessions.reduce((sum, session) => sum + sessionDurationMs(session), 0);
   byId("timetableTotal").textContent = sessions.length ? `합계 ${formatDuration(totalMs)}` : "";
 }
 
@@ -773,6 +882,32 @@ function stopTimer() {
   }
 }
 
+function playBeep() {
+  try {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.frequency.value = 880;
+    gain.gain.setValueAtTime(0.001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, context.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.9);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.95);
+  } catch {
+    // 사운드가 안 되는 환경이면 조용히 넘어간다.
+  }
+}
+
+function notifyTimerDone() {
+  playBeep();
+  const message = timerMode === "focus" ? "집중 끝! 잠깐 쉬세요." : "휴식 끝! 다시 시작해볼까요.";
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("Free ADHD Memo", { body: message, icon: "/icons/icon-192.png" });
+  }
+}
+
 function toggleTimer() {
   if (timerId) {
     stopTimer();
@@ -780,11 +915,16 @@ function toggleTimer() {
     return;
   }
 
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+
   timerId = setInterval(() => {
     secondsLeft -= 1;
     if (secondsLeft <= 0) {
       secondsLeft = 0;
       stopTimer();
+      notifyTimerDone();
       if (timerMode === "focus" && !activeSession) {
         const durationMs = modeMinutes.focus * 60 * 1000;
         recordSession({
@@ -911,6 +1051,17 @@ document.body.addEventListener("click", (event) => {
     render();
   }
   if (action === "delete-session") deleteSession(target.dataset.id);
+  if (action === "edit-todo") {
+    editingTodoId = target.dataset.id;
+    renderTodos();
+  }
+  if (action === "track-todo") {
+    const todo = data.todos.find((item) => item.id === target.dataset.id);
+    if (todo) {
+      if (activeSession) stopSession();
+      startSession(todo.title);
+    }
+  }
   if (action === "select-calendar-day") {
     selectedCalendarDate = target.dataset.date;
     renderCalendar();
@@ -966,12 +1117,22 @@ byId("trackerForm").addEventListener("submit", (event) => {
 byId("trackerStop").addEventListener("click", stopSession);
 
 byId("timetablePrevDay").addEventListener("click", () => {
-  timetableDateKey = shiftDateKey(timetableDateKey || dateKey(new Date()), -1);
+  timetableDateKey = shiftDateKey(timetableDateKey || dateKey(new Date()), timetableView === "week" ? -7 : -1);
   renderTimetable();
 });
 
 byId("timetableNextDay").addEventListener("click", () => {
-  timetableDateKey = shiftDateKey(timetableDateKey || dateKey(new Date()), 1);
+  timetableDateKey = shiftDateKey(timetableDateKey || dateKey(new Date()), timetableView === "week" ? 7 : 1);
+  renderTimetable();
+});
+
+byId("timetableViewToggle").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-view]");
+  if (!button) return;
+  timetableView = button.dataset.view;
+  document.querySelectorAll("#timetableViewToggle button").forEach((viewButton) => {
+    viewButton.classList.toggle("active", viewButton.dataset.view === timetableView);
+  });
   renderTimetable();
 });
 
@@ -1141,6 +1302,10 @@ function setupDashboardResize() {
 applySideColumnOrder();
 setupSideColumnReorder();
 setupDashboardResize();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
 
 render();
 checkSession();

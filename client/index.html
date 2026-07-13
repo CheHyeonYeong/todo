@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f8fafc" />
     <title>Free ADHD Memo</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="src/styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="src/config.js"></script>
@@ -131,10 +134,14 @@
               </div>
               <button type="button" id="trackerStop"><span aria-hidden="true">■</span>종료</button>
             </div>
+            <div class="segmented timetable-view-toggle" id="timetableViewToggle">
+              <button class="active" type="button" data-view="day">일</button>
+              <button type="button" data-view="week">주</button>
+            </div>
             <div class="timetable-header">
-              <button type="button" id="timetablePrevDay" title="이전 날">‹</button>
+              <button type="button" id="timetablePrevDay" title="이전">‹</button>
               <h3 id="timetableDateLabel"></h3>
-              <button type="button" id="timetableNextDay" title="다음 날">›</button>
+              <button type="button" id="timetableNextDay" title="다음">›</button>
             </div>
             <div class="timetable-list" id="timetableList"></div>
             <div class="timetable-total" id="timetableTotal"></div>

@@ -335,6 +335,25 @@ select:focus {
   overflow-wrap: anywhere;
 }
 
+.focus-item-row {
+  display: flex;
+  gap: 8px;
+}
+
+.focus-item-row .focus-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.focus-track {
+  flex-shrink: 0;
+  width: 42px;
+  border-radius: 8px;
+  background: #e2f4ea;
+  color: #217149;
+  font-weight: 900;
+}
+
 .todo-form,
 .search-box {
   display: flex;
@@ -558,6 +577,16 @@ select {
   text-decoration: line-through;
 }
 
+.todo-columns .todo-row {
+  grid-template-columns: 28px minmax(0, 1fr) 28px 28px;
+}
+
+.todo-row.editing .todo-edit-input {
+  grid-column: 2 / -1;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
 .todo-row button,
 .memo-card button {
   display: grid;
@@ -708,6 +737,11 @@ select {
   font-weight: 800;
 }
 
+.timetable-view-toggle {
+  grid-template-columns: repeat(2, 1fr);
+  margin-bottom: 12px;
+}
+
 .timetable-header {
   display: flex;
   align-items: center;
@@ -745,6 +779,11 @@ select {
   border-radius: 8px;
   background: #f7f9fc;
   padding: 9px 6px 9px 12px;
+}
+
+.session-row.week {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-right: 12px;
 }
 
 .session-row time {

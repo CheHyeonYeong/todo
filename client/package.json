@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "build": "rm -rf dist && mkdir -p dist && cp index.html dist/index.html && cp -R src dist/src"
+    "build": "rm -rf dist && mkdir -p dist && cp index.html sw.js manifest.webmanifest dist/ && cp -R src dist/src && cp -R icons dist/icons"
   }
 }

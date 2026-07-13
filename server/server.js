@@ -35,6 +35,7 @@ const mimeTypes = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -439,8 +440,9 @@ async function updateTodo(id, patch, userId) {
     `
       update ${quoteIdentifier(todosTable)}
       set done = coalesce($2, done),
-        completed_at = $3,
+        completed_at = case when $2::boolean is null then completed_at else $3 end,
         due_date = coalesce($5, due_date),
+        title = coalesce($6, title),
         updated_at = now()
       where id = $1 and user_id = $4
       returning id, title, scope, done, created_at, completed_at, source_memo_id, due_date
@@ -451,6 +453,7 @@ async function updateTodo(id, patch, userId) {
       patch.completedAt || null,
       userId,
       /^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate) ? patch.dueDate : null,
+      typeof patch.title === "string" && patch.title.trim() ? patch.title.trim() : null,
     ],
   );
   if (!result.rowCount) return null;
