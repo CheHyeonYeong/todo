@@ -51,10 +51,17 @@ export function MemoWorkspace() {
         <Textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           placeholder="회의에서 나온 말, 갑자기 떠오른 일, - [ ] 해야 할 일, #태그"
           className="min-h-16 resize-y bg-background"
         />
-        <div className="mt-2 flex items-center justify-end">
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Ctrl+Enter로 바로 기록</span>
           <Button type="submit" size="sm" className="font-bold">
             <Plus className="size-4" />
             기록

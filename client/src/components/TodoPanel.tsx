@@ -188,23 +188,23 @@ function TodoForm({ categories }: { categories: string[] }) {
   return (
     <form onSubmit={submit} className="flex shrink-0 flex-wrap items-center gap-2">
       <Input
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="할 일 추가"
-        className="min-w-36 flex-1"
-      />
-      <Input
         list="todo-categories"
         value={category}
         onChange={(event) => setCategory(event.target.value)}
-        placeholder="카테고리"
-        className="w-28 max-sm:flex-1"
+        placeholder="카테고리 (선택)"
+        className="w-30 max-sm:flex-1"
       />
       <datalist id="todo-categories">
         {categories.map((item) => (
           <option key={item} value={item} />
         ))}
       </datalist>
+      <Input
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        placeholder="할 일 추가"
+        className="min-w-36 flex-1"
+      />
       <Input
         type="date"
         value={dueDate}
