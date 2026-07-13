@@ -200,8 +200,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       dueDate?: string | null;
       category?: string | null;
     }) => {
-      const todo: Todo = { id: uid(), title, scope, done: false, createdAt: nowIso(), dueDate, category };
-      persist((prev) => ({ ...prev, todos: [todo, ...prev.todos] }));
+      const siblings = dataRef.current.todos.filter((item) => item.scope === scope && !item.parentId);
+      const sortOrder = Math.max(-1, ...siblings.map((item) => Number(item.sortOrder) || 0)) + 1;
+      const todo: Todo = { id: uid(), title, scope, done: false, createdAt: nowIso(), dueDate, category, sortOrder };
+      persist((prev) => ({ ...prev, todos: [...prev.todos, todo] }));
       sendMutation("/api/todos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -217,10 +219,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!current) return;
       const done = !current.done;
       const completedAt = done ? nowIso() : undefined;
-      persist((prev) => ({
-        ...prev,
-        todos: prev.todos.map((todo) => (todo.id === id ? { ...todo, done, completedAt } : todo)),
-      }));
+      persist((prev) => {
+        const selected = prev.todos.find((todo) => todo.id === id);
+        let todos = prev.todos.map((todo) =>
+          todo.id === id || (!selected?.parentId && todo.parentId === id) ? { ...todo, done, completedAt } : todo,
+        );
+        if (selected?.parentId) {
+          const siblings = todos.filter((todo) => todo.parentId === selected.parentId);
+          const parentDone = siblings.length > 0 && siblings.every((todo) => todo.done);
+          todos = todos.map((todo) =>
+            todo.id === selected.parentId
+              ? { ...todo, done: parentDone, completedAt: parentDone ? nowIso() : null }
+              : todo,
+          );
+        }
+        return { ...prev, todos };
+      });
       sendMutation(`/api/todos/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -232,7 +246,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const deleteTodo = useCallback(
     (id: string) => {
-      persist((prev) => ({ ...prev, todos: prev.todos.filter((todo) => todo.id !== id) }));
+      persist((prev) => ({ ...prev, todos: prev.todos.filter((todo) => todo.id !== id && todo.parentId !== id) }));
       sendMutation(`/api/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
     },
     [persist, sendMutation],
@@ -240,19 +254,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const updateTodo = useCallback(
     (id: string, patch: TodoPatch) => {
-      persist((prev) => ({
-        ...prev,
-        todos: prev.todos.map((todo) =>
-          todo.id === id
+      persist((prev) => {
+        const selected = prev.todos.find((todo) => todo.id === id);
+        return {
+          ...prev,
+          todos: prev.todos.map((todo) =>
+          todo.id === id || (patch.scope && !selected?.parentId && todo.parentId === id)
             ? {
                 ...todo,
-                ...patch,
+                ...(todo.id === id ? patch : { scope: patch.scope }),
                 category: patch.category !== undefined ? patch.category?.trim() || null : todo.category,
                 note: patch.note !== undefined ? patch.note?.trim() || null : todo.note,
               }
             : todo,
-        ),
-      }));
+          ),
+        };
+      });
       sendMutation(`/api/todos/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

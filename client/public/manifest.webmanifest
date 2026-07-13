@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Free ADHD Memo",
-  "short_name": "ADHD Memo",
+  "name": "Todo",
+  "short_name": "Todo",
   "description": "todo + 타임스탬프 메모 + 뽀모도로 + 타임테이블. 몇 시부터 몇 시까지 뭘 했는지 기록하는 생산성 앱.",
   "lang": "ko",
   "start_url": "/",

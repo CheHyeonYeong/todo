@@ -1,5 +1,5 @@
 [Unit]
-Description=Free ADHD Memo API server
+Description=Todo API server
 After=network-online.target
 Wants=network-online.target
 
@@ -11,7 +11,7 @@ EnvironmentFile=/home/opc/todo/.env
 ExecStart=/usr/bin/node /home/opc/todo/server/server.js
 Restart=always
 RestartSec=5
-SyslogIdentifier=free-adhd-memo
+SyslogIdentifier=todo
 
 [Install]
 WantedBy=multi-user.target

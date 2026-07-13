@@ -111,6 +111,11 @@ function cleanTodo(todo) {
     dueDate: /^\d{4}-\d{2}-\d{2}$/.test(todo?.dueDate) ? todo.dueDate : null,
     category: typeof todo?.category === "string" && todo.category.trim() ? todo.category.trim() : null,
     note: typeof todo?.note === "string" && todo.note.trim() ? todo.note.trim() : null,
+    parentId: typeof todo?.parentId === "string" && todo.parentId ? todo.parentId : null,
+    sortOrder:
+      todo?.sortOrder !== null && todo?.sortOrder !== undefined && Number.isFinite(Number(todo.sortOrder))
+        ? Number(todo.sortOrder)
+        : null,
   };
 }
 
@@ -136,8 +141,25 @@ function cleanSession(session) {
 }
 
 function cleanData(value) {
+  const todos = Array.isArray(value?.todos) ? value.todos.map(cleanTodo) : [];
+  for (const scope of ["day", "week", "month"]) {
+    const parentIds = new Set([null, ...todos.filter((todo) => todo.scope === scope).map((todo) => todo.parentId)]);
+    for (const parentId of parentIds) {
+      const siblings = todos
+        .filter((todo) => todo.scope === scope && todo.parentId === parentId)
+        .sort(
+          (a, b) =>
+            (a.sortOrder === null ? Number.MAX_SAFE_INTEGER : a.sortOrder) -
+              (b.sortOrder === null ? Number.MAX_SAFE_INTEGER : b.sortOrder) ||
+            a.createdAt.localeCompare(b.createdAt),
+        );
+      siblings.forEach((todo, index) => {
+        todo.sortOrder = index;
+      });
+    }
+  }
   return {
-    todos: Array.isArray(value?.todos) ? value.todos : [],
+    todos,
     memos: Array.isArray(value?.memos) ? value.memos : [],
     sessions: Array.isArray(value?.sessions) ? value.sessions : [],
     updatedAt: new Date().toISOString(),
@@ -217,9 +239,25 @@ async function ensureSchema() {
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists due_date text`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists category text`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists note text`);
+  await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists parent_id text references ${quoteIdentifier(todosTable)}(id) on delete cascade`);
+  await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists sort_order double precision`);
+  await pool.query(`
+    with ranked as (
+      select id, row_number() over (
+        partition by user_id, scope, parent_id order by created_at asc
+      ) - 1 as position
+      from ${quoteIdentifier(todosTable)}
+      where sort_order is null
+    )
+    update ${quoteIdentifier(todosTable)} todo
+    set sort_order = ranked.position
+    from ranked
+    where todo.id = ranked.id
+  `);
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_due_date_idx`)} on ${quoteIdentifier(todosTable)} (user_id, due_date)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${memosTable}_user_created_idx`)} on ${quoteIdentifier(memosTable)} (user_id, created_at desc)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_user_created_idx`)} on ${quoteIdentifier(todosTable)} (user_id, created_at desc)`);
+  await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_tree_order_idx`)} on ${quoteIdentifier(todosTable)} (user_id, scope, parent_id, sort_order)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${sessionsTable}_user_started_idx`)} on ${quoteIdentifier(sessionsTable)} (user_id, started_at desc)`);
 }
 
@@ -236,10 +274,10 @@ async function readPostgresData(userId) {
   );
   const todos = await pool.query(
     `
-      select id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note
+      select id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, sort_order
       from ${quoteIdentifier(todosTable)}
       where user_id = $1
-      order by created_at desc
+      order by scope, parent_id nulls first, sort_order asc nulls last, created_at asc
     `,
     [userId],
   );
@@ -273,6 +311,8 @@ async function readPostgresData(userId) {
       dueDate: todo.due_date || undefined,
       category: todo.category || undefined,
       note: todo.note || undefined,
+      parentId: todo.parent_id || undefined,
+      sortOrder: todo.sort_order === null ? undefined : Number(todo.sort_order),
     })),
     sessions: sessions.rows.map((session) => ({
       id: session.id,
@@ -305,10 +345,10 @@ async function writePostgresData(value, userId) {
       await client.query(
         `
           insert into ${quoteIdentifier(todosTable)}
-            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, updated_at)
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, sort_order, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
         `,
-        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note],
+        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note, todo.parentId, todo.sortOrder],
       );
     }
     for (const session of data.sessions.map(cleanSession).filter((session) => session.id)) {
@@ -339,7 +379,15 @@ async function createMemoWithTodos(value, userId) {
     }
     const todos = Array.isArray(value.todos) ? value.todos.map(cleanTodo) : [];
     data.memos.unshift(memo);
-    data.todos.unshift(...todos);
+    for (const todo of todos) {
+      if (todo.sortOrder === null) {
+        const siblings = data.todos.filter(
+          (item) => item.scope === todo.scope && (item.parentId || null) === todo.parentId,
+        );
+        todo.sortOrder = Math.max(-1, ...siblings.map((item) => Number(item.sortOrder) || 0)) + 1;
+      }
+      data.todos.push(todo);
+    }
     await writeData(data, userId);
     return { memo, todos };
   }
@@ -366,14 +414,18 @@ async function createMemoWithTodos(value, userId) {
       await client.query(
         `
           insert into ${quoteIdentifier(todosTable)}
-            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, updated_at)
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, sort_order, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+            coalesce($13::double precision,
+              (select coalesce(max(sort_order), -1) + 1 from ${quoteIdentifier(todosTable)} where user_id = $2 and scope = $4 and parent_id is not distinct from $12)),
+            now())
           on conflict (id)
           do update set title = excluded.title, scope = excluded.scope, done = excluded.done,
             completed_at = excluded.completed_at, source_memo_id = excluded.source_memo_id,
-            due_date = excluded.due_date, category = excluded.category, note = excluded.note, updated_at = now()
+            due_date = excluded.due_date, category = excluded.category, note = excluded.note,
+            parent_id = excluded.parent_id, sort_order = excluded.sort_order, updated_at = now()
         `,
-        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note],
+        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note, todo.parentId, todo.sortOrder],
       );
     }
     await client.query("commit");
@@ -390,25 +442,72 @@ async function createTodo(value, userId) {
   const todo = cleanTodo(value);
   if (!pool) {
     const data = await readData(userId);
-    data.todos.unshift(todo);
+    if (todo.parentId) {
+      const parent = data.todos.find((item) => item.id === todo.parentId && !item.parentId);
+      if (!parent) throw new Error("Parent todo not found or already nested");
+      todo.scope = parent.scope;
+    }
+    const siblings = data.todos.filter(
+      (item) => item.scope === todo.scope && (item.parentId || null) === todo.parentId,
+    );
+    if (todo.sortOrder === null) {
+      todo.sortOrder = Math.max(-1, ...siblings.map((item) => Number(item.sortOrder) || 0)) + 1;
+    }
+    data.todos.push(todo);
+    if (todo.parentId && !todo.done) {
+      data.todos = data.todos.map((item) =>
+        item.id === todo.parentId ? { ...item, done: false, completedAt: null } : item,
+      );
+    }
     await writeData(data, userId);
     return todo;
   }
 
   await ensureSchema();
-  await pool.query(
-    `
-      insert into ${quoteIdentifier(todosTable)}
-        (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, updated_at)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
-      on conflict (id)
-      do update set title = excluded.title, scope = excluded.scope, done = excluded.done,
-        completed_at = excluded.completed_at, source_memo_id = excluded.source_memo_id,
-        due_date = excluded.due_date, category = excluded.category, note = excluded.note, updated_at = now()
-    `,
-    [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note],
-  );
-  return todo;
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    if (todo.parentId) {
+      const parentResult = await client.query(
+        `select id, scope, parent_id from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2 for update`,
+        [todo.parentId, userId],
+      );
+      const parent = parentResult.rows[0];
+      if (!parent || parent.parent_id) throw new Error("Parent todo not found or already nested");
+      todo.scope = parent.scope;
+    }
+    const result = await client.query(
+      `
+        insert into ${quoteIdentifier(todosTable)}
+          (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, sort_order, updated_at)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+          coalesce($13::double precision,
+            (select coalesce(max(sort_order), -1) + 1 from ${quoteIdentifier(todosTable)} where user_id = $2 and scope = $4 and parent_id is not distinct from $12)),
+          now())
+        on conflict (id)
+        do update set title = excluded.title, scope = excluded.scope, done = excluded.done,
+          completed_at = excluded.completed_at, source_memo_id = excluded.source_memo_id,
+          due_date = excluded.due_date, category = excluded.category, note = excluded.note,
+          parent_id = excluded.parent_id, sort_order = excluded.sort_order, updated_at = now()
+        returning sort_order
+      `,
+      [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note, todo.parentId, todo.sortOrder],
+    );
+    if (todo.parentId && !todo.done) {
+      await client.query(
+        `update ${quoteIdentifier(todosTable)} set done = false, completed_at = null, updated_at = now() where id = $1 and user_id = $2`,
+        [todo.parentId, userId],
+      );
+    }
+    await client.query("commit");
+    todo.sortOrder = Number(result.rows[0].sort_order);
+    return todo;
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function createSession(value, userId) {
@@ -448,52 +547,231 @@ async function deleteSessionById(id, userId) {
 async function updateTodo(id, patch, userId) {
   if (!pool) {
     const data = await readData(userId);
-    data.todos = data.todos.map((todo) => (todo.id === id ? cleanTodo({ ...todo, ...patch }) : todo));
+    const current = data.todos.find((todo) => todo.id === id);
+    if (!current) return null;
+    const nextPatch = { ...patch };
+    if (Object.hasOwn(patch, "dueDate")) nextPatch.dueDate = patch.dueDate || null;
+    const updated = cleanTodo({ ...current, ...nextPatch });
+    data.todos = data.todos.map((todo) => (todo.id === id ? updated : todo));
+    if (current.parentId && typeof patch.done === "boolean") {
+      const siblings = data.todos.filter((todo) => todo.parentId === current.parentId);
+      const parentDone = siblings.length > 0 && siblings.every((todo) => todo.done);
+      data.todos = data.todos.map((todo) =>
+        todo.id === current.parentId
+          ? { ...todo, done: parentDone, completedAt: parentDone ? new Date().toISOString() : null }
+          : todo,
+      );
+    } else if (!current.parentId) {
+      if (typeof patch.done === "boolean") {
+        data.todos = data.todos.map((todo) =>
+          todo.parentId === id
+            ? { ...todo, done: patch.done, completedAt: patch.done ? patch.completedAt || new Date().toISOString() : null }
+            : todo,
+        );
+      }
+      if (["day", "week", "month"].includes(patch.scope)) {
+        data.todos = data.todos.map((todo) => (todo.parentId === id ? { ...todo, scope: patch.scope } : todo));
+      }
+    }
     await writeData(data, userId);
     return data.todos.find((todo) => todo.id === id) || null;
   }
 
   await ensureSchema();
-  const result = await pool.query(
-    `
-      update ${quoteIdentifier(todosTable)}
-      set done = coalesce($2, done),
-        completed_at = case when $2::boolean is null then completed_at else $3 end,
-        due_date = coalesce($5, due_date),
-        title = coalesce($6, title),
-        scope = coalesce($7, scope),
-        category = case when $8::text is null then category else nullif(trim($8), '') end,
-        note = case when $9::text is null then note else nullif(trim($9), '') end,
-        updated_at = now()
-      where id = $1 and user_id = $4
-      returning id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note
-    `,
-    [
-      id,
-      typeof patch.done === "boolean" ? patch.done : null,
-      patch.completedAt || null,
-      userId,
-      /^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate) ? patch.dueDate : null,
-      typeof patch.title === "string" && patch.title.trim() ? patch.title.trim() : null,
-      ["day", "week", "month"].includes(patch.scope) ? patch.scope : null,
-      typeof patch.category === "string" ? patch.category : null,
-      typeof patch.note === "string" ? patch.note : null,
-    ],
-  );
-  if (!result.rowCount) return null;
-  const todo = result.rows[0];
-  return {
-    id: todo.id,
-    title: todo.title,
-    scope: todo.scope,
-    done: todo.done,
-    createdAt: todo.created_at.toISOString(),
-    completedAt: todo.completed_at ? todo.completed_at.toISOString() : undefined,
-    sourceMemoId: todo.source_memo_id || undefined,
-    dueDate: todo.due_date || undefined,
-    category: todo.category || undefined,
-    note: todo.note || undefined,
-  };
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const currentResult = await client.query(
+      `select id, parent_id from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2 for update`,
+      [id, userId],
+    );
+    const current = currentResult.rows[0];
+    if (!current) {
+      await client.query("rollback");
+      return null;
+    }
+    const hasDone = typeof patch.done === "boolean";
+    const hasDueDate = Object.hasOwn(patch, "dueDate");
+    const hasCategory = Object.hasOwn(patch, "category");
+    const hasNote = Object.hasOwn(patch, "note");
+    const nextScope = ["day", "week", "month"].includes(patch.scope) ? patch.scope : null;
+    await client.query(
+      `
+        update ${quoteIdentifier(todosTable)}
+        set done = case when $2::boolean then $3 else done end,
+          completed_at = case when $2::boolean then $4::timestamptz else completed_at end,
+          due_date = case when $5::boolean then $6::text else due_date end,
+          title = coalesce($7::text, title),
+          scope = coalesce($8::text, scope),
+          category = case when $9::boolean then nullif(trim($10::text), '') else category end,
+          note = case when $11::boolean then nullif(trim($12::text), '') else note end,
+          updated_at = now()
+        where id = $1 and user_id = $13
+      `,
+      [
+        id,
+        hasDone,
+        hasDone ? patch.done : false,
+        hasDone && patch.done ? patch.completedAt || new Date().toISOString() : null,
+        hasDueDate,
+        /^\d{4}-\d{2}-\d{2}$/.test(patch.dueDate) ? patch.dueDate : null,
+        typeof patch.title === "string" && patch.title.trim() ? patch.title.trim() : null,
+        nextScope,
+        hasCategory,
+        typeof patch.category === "string" ? patch.category : "",
+        hasNote,
+        typeof patch.note === "string" ? patch.note : "",
+        userId,
+      ],
+    );
+    if (!current.parent_id) {
+      if (hasDone) {
+        await client.query(
+          `update ${quoteIdentifier(todosTable)} set done = $1, completed_at = $2, updated_at = now() where parent_id = $3 and user_id = $4`,
+          [patch.done, patch.done ? patch.completedAt || new Date().toISOString() : null, id, userId],
+        );
+      }
+      if (nextScope) {
+        await client.query(
+          `update ${quoteIdentifier(todosTable)} set scope = $1, updated_at = now() where parent_id = $2 and user_id = $3`,
+          [nextScope, id, userId],
+        );
+      }
+    } else if (hasDone) {
+      await client.query(
+        `
+          update ${quoteIdentifier(todosTable)} parent
+          set done = not exists (
+              select 1 from ${quoteIdentifier(todosTable)} child
+              where child.parent_id = parent.id and child.user_id = $2 and not child.done
+            ),
+            completed_at = case when not exists (
+              select 1 from ${quoteIdentifier(todosTable)} child
+              where child.parent_id = parent.id and child.user_id = $2 and not child.done
+            ) then now() else null end,
+            updated_at = now()
+          where parent.id = $1 and parent.user_id = $2
+        `,
+        [current.parent_id, userId],
+      );
+    }
+    const result = await client.query(
+      `select id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, sort_order from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2`,
+      [id, userId],
+    );
+    await client.query("commit");
+    const todo = result.rows[0];
+    return {
+      id: todo.id,
+      title: todo.title,
+      scope: todo.scope,
+      done: todo.done,
+      createdAt: todo.created_at.toISOString(),
+      completedAt: todo.completed_at ? todo.completed_at.toISOString() : undefined,
+      sourceMemoId: todo.source_memo_id || undefined,
+      dueDate: todo.due_date || undefined,
+      category: todo.category || undefined,
+      note: todo.note || undefined,
+      parentId: todo.parent_id || undefined,
+      sortOrder: todo.sort_order === null ? undefined : Number(todo.sort_order),
+    };
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function validateTodoTree(todos) {
+  const byId = new Map(todos.map((todo) => [todo.id, todo]));
+  for (const todo of todos) {
+    if (!todo.parentId) continue;
+    const parent = byId.get(todo.parentId);
+    if (!parent) throw new Error(`Parent todo not found: ${todo.parentId}`);
+    if (parent.parentId) throw new Error("Todo nesting is limited to 2 levels");
+    if (parent.scope !== todo.scope) throw new Error("Parent and child must use the same scope");
+  }
+}
+
+async function reorderTodos(items, userId) {
+  const parsedItems = items.map((item, index) => ({
+    id: String(item?.id || ""),
+    parentId: typeof item?.parentId === "string" && item.parentId ? item.parentId : null,
+    sortOrder: Number.isFinite(Number(item?.sortOrder)) ? Number(item.sortOrder) : index,
+    scope: ["day", "week", "month"].includes(item?.scope) ? item.scope : null,
+  }));
+  if (!pool) {
+    const data = await readData(userId);
+    const changes = new Map(parsedItems.map((item) => [item.id, item]));
+    data.todos = data.todos.map((todo) => {
+      const change = changes.get(todo.id);
+      return change
+        ? { ...todo, parentId: change.parentId, sortOrder: change.sortOrder, scope: change.scope || todo.scope }
+        : todo;
+    });
+    validateTodoTree(data.todos.map(cleanTodo));
+    data.todos = data.todos.map((todo) => {
+      if (todo.parentId) return todo;
+      const children = data.todos.filter((child) => child.parentId === todo.id);
+      if (!children.length) return todo;
+      const done = children.every((child) => child.done);
+      return { ...todo, done, completedAt: done ? todo.completedAt || new Date().toISOString() : null };
+    });
+    await writeData(data, userId);
+    return;
+  }
+  await ensureSchema();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const result = await client.query(
+      `select id, scope, parent_id from ${quoteIdentifier(todosTable)} where user_id = $1 for update`,
+      [userId],
+    );
+    const ownedIds = new Set(result.rows.map((row) => row.id));
+    if (parsedItems.some((item) => !ownedIds.has(item.id) || (item.parentId && !ownedIds.has(item.parentId)))) {
+      throw new Error("Todo tree contains an unknown item");
+    }
+    const changes = new Map(parsedItems.map((item) => [item.id, item]));
+    const todos = result.rows.map((row) => {
+      const change = changes.get(row.id);
+      return {
+        id: row.id,
+        scope: change?.scope || row.scope,
+        parentId: change ? change.parentId : row.parent_id,
+      };
+    });
+    validateTodoTree(todos);
+    for (const item of parsedItems) {
+      await client.query(
+        `update ${quoteIdentifier(todosTable)} set parent_id = $1, sort_order = $2, scope = coalesce($3, scope), updated_at = now() where id = $4 and user_id = $5`,
+        [item.parentId, item.sortOrder, item.scope, item.id, userId],
+      );
+    }
+    await client.query(
+      `
+        update ${quoteIdentifier(todosTable)} parent
+        set done = children.done,
+          completed_at = case when children.done then coalesce(parent.completed_at, now()) else null end,
+          updated_at = now()
+        from (
+          select parent_id, bool_and(done) as done
+          from ${quoteIdentifier(todosTable)}
+          where user_id = $1 and parent_id is not null
+          group by parent_id
+        ) children
+        where parent.id = children.parent_id and parent.user_id = $1
+      `,
+      [userId],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function updateMemo(id, patch, userId) {
@@ -573,12 +851,56 @@ async function reorderMemosByIds(ids, userId) {
 async function deleteTodoById(id, userId) {
   if (!pool) {
     const data = await readData(userId);
-    data.todos = data.todos.filter((todo) => todo.id !== id);
+    const target = data.todos.find((todo) => todo.id === id);
+    data.todos = data.todos.filter((todo) => todo.id !== id && todo.parentId !== id);
+    if (target?.parentId) {
+      const siblings = data.todos.filter((todo) => todo.parentId === target.parentId);
+      if (siblings.length) {
+        const done = siblings.every((todo) => todo.done);
+        data.todos = data.todos.map((todo) =>
+          todo.id === target.parentId ? { ...todo, done, completedAt: done ? new Date().toISOString() : null } : todo,
+        );
+      }
+    }
     await writeData(data, userId);
     return;
   }
   await ensureSchema();
-  await pool.query(`delete from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2`, [id, userId]);
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const target = await client.query(
+      `select parent_id from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2 for update`,
+      [id, userId],
+    );
+    await client.query(`delete from ${quoteIdentifier(todosTable)} where id = $1 and user_id = $2`, [id, userId]);
+    const parentId = target.rows[0]?.parent_id;
+    if (parentId) {
+      await client.query(
+        `
+          update ${quoteIdentifier(todosTable)} parent
+          set done = not exists (
+              select 1 from ${quoteIdentifier(todosTable)} child
+              where child.parent_id = parent.id and child.user_id = $2 and not child.done
+            ),
+            completed_at = case when not exists (
+              select 1 from ${quoteIdentifier(todosTable)} child
+              where child.parent_id = parent.id and child.user_id = $2 and not child.done
+            ) then now() else null end,
+            updated_at = now()
+          where parent.id = $1 and parent.user_id = $2
+            and exists (select 1 from ${quoteIdentifier(todosTable)} child where child.parent_id = parent.id and child.user_id = $2)
+        `,
+        [parentId, userId],
+      );
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function deleteMemoById(id, userId) {
@@ -650,6 +972,15 @@ async function handleApi(request, response, pathname) {
   if (pathname === "/api/todos" && request.method === "POST") {
     const body = await readRequestBody(request);
     json(response, 201, await createTodo(JSON.parse(body || "{}"), userId));
+    return;
+  }
+
+  if (pathname === "/api/todos/order" && request.method === "PUT") {
+    const body = await readRequestBody(request);
+    const parsed = JSON.parse(body || "{}");
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    await reorderTodos(items, userId);
+    json(response, 200, { ok: true });
     return;
   }
 
@@ -775,5 +1106,5 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Free ADHD Memo listening on http://0.0.0.0:${port}`);
+  console.log(`Todo listening on http://0.0.0.0:${port}`);
 });

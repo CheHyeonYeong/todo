@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Pencil, Plus, StickyNote, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, StickyNote, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,12 @@ import type { Scope, Todo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function sortTodos(todos: Todo[]) {
-  return [...todos].sort((a, b) => Number(a.done) - Number(b.done) || b.createdAt.localeCompare(a.createdAt));
+  return [...todos].sort(
+    (a, b) =>
+      (Number.isFinite(a.sortOrder) ? a.sortOrder! : Number.MAX_SAFE_INTEGER) -
+        (Number.isFinite(b.sortOrder) ? b.sortOrder! : Number.MAX_SAFE_INTEGER) ||
+      a.createdAt.localeCompare(b.createdAt),
+  );
 }
 
 function CategoryChip({ category, onClick, active }: { category: string; onClick?: () => void; active?: boolean }) {
@@ -34,12 +39,23 @@ function CategoryChip({ category, onClick, active }: { category: string; onClick
   );
 }
 
-function TodoRow({ todo, draggable = false }: { todo: Todo; draggable?: boolean }) {
+function TodoRow({
+  todo,
+  draggable = false,
+  depth = 0,
+  children = [],
+}: {
+  todo: Todo;
+  draggable?: boolean;
+  depth?: number;
+  children?: Todo[];
+}) {
   const { toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(todo.title);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState(todo.note || "");
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     pauseSyncRef.current = editing || noteOpen;
@@ -63,7 +79,7 @@ function TodoRow({ todo, draggable = false }: { todo: Todo; draggable?: boolean 
 
   return (
     <div
-      className="group py-1"
+      className={cn("group py-1", depth === 1 && "ml-7 border-l-2 border-border/70 pl-3")}
       draggable={draggable && !editing && !noteOpen}
       onDragStart={(event) => {
         event.dataTransfer.setData("text/todo-id", todo.id);
@@ -71,6 +87,16 @@ function TodoRow({ todo, draggable = false }: { todo: Todo; draggable?: boolean 
       }}
     >
       <div className="flex items-start gap-2">
+        {children.length > 0 && (
+          <button
+            type="button"
+            className="mt-0.5 grid size-5 shrink-0 place-items-center text-muted-foreground"
+            title={collapsed ? "하위 목표 펼치기" : "하위 목표 접기"}
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            <ChevronDown className={cn("size-4 transition-transform", collapsed && "-rotate-90")} />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => toggleTodo(todo.id)}
@@ -109,6 +135,11 @@ function TodoRow({ todo, draggable = false }: { todo: Todo; draggable?: boolean 
             {todo.category && <CategoryChip category={todo.category} />}
             {todo.category && " "}
             {todo.title}
+            {children.length > 0 && (
+              <span className="ml-1.5 text-xs font-bold text-muted-foreground">
+                ({children.filter((child) => child.done).length}/{children.length})
+              </span>
+            )}
             {todo.dueDate && (
               <span className="ml-1.5 text-xs font-semibold text-muted-foreground">~{todo.dueDate}</span>
             )}
@@ -165,6 +196,13 @@ function TodoRow({ todo, draggable = false }: { todo: Todo; draggable?: boolean 
             {todo.note}
           </p>
         )
+      )}
+      {!collapsed && children.length > 0 && (
+        <div className="mt-0.5">
+          {children.map((child) => (
+            <TodoRow key={child.id} todo={child} depth={1} />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -411,11 +449,14 @@ export function TodoPanel() {
           )}
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
             {(Object.keys(scopeLabels) as Scope[]).map((scope) => {
-              const items = sortTodos(
-                data.todos.filter(
-                  (todo) => todo.scope === scope && (!categoryFilter || todo.category === categoryFilter),
-                ),
-              );
+              const scopeTodos = data.todos.filter((todo) => todo.scope === scope);
+              const items = sortTodos(scopeTodos.filter((todo) => !todo.parentId)).filter((todo) => {
+                if (!categoryFilter) return true;
+                return (
+                  todo.category === categoryFilter ||
+                  scopeTodos.some((child) => child.parentId === todo.id && child.category === categoryFilter)
+                );
+              });
               return (
                 <div
                   key={scope}
@@ -440,7 +481,14 @@ export function TodoPanel() {
                 >
                   <h3 className="mb-2 text-sm font-bold text-muted-foreground">{scopeLabels[scope]}</h3>
                   {items.length ? (
-                    items.map((todo) => <TodoRow key={todo.id} todo={todo} draggable />)
+                    items.map((todo) => (
+                      <TodoRow
+                        key={todo.id}
+                        todo={todo}
+                        children={sortTodos(scopeTodos.filter((child) => child.parentId === todo.id))}
+                        draggable
+                      />
+                    ))
                   ) : (
                     <p className="text-sm font-medium text-muted-foreground/70">없음</p>
                   )}
