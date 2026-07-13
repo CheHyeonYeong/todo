@@ -187,7 +187,9 @@ async function apiFetch(path, options = {}) {
 
 function showLogin(message = "") {
   authenticated = false;
-  byId("loginScreen").hidden = false;
+  const screen = byId("loginScreen");
+  screen.hidden = false;
+  screen.classList.remove("checking");
   byId("loginError").textContent = message;
 }
 
