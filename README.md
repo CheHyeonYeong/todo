@@ -23,6 +23,7 @@ todo + timestamp memo + pomodoro 앱입니다.
 - `- [ ] 할 일` 또는 `todo: 할 일` 형태 메모에서 todo 자동 생성
 - 오늘 로그, 검색, 태그 필터
 - 뽀모도로 타이머
+- 타임 트래커와 타임테이블 (몇 시부터 몇 시까지 뭘 했는지 기록, 집중 뽀모도로 완료 시 자동 기록)
 - 활동 그래프와 오늘의 집중 큐
 - 폰/PC 간 서버 동기화
 - memo/todo 항목 단위 저장으로 폰과 PC의 동시 사용 충돌 완화
@@ -56,8 +57,18 @@ create table if not exists public.todos (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.sessions (
+  id text primary key,
+  user_id text not null default 'default',
+  label text not null default '',
+  started_at timestamptz not null,
+  ended_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
 alter table public.memos enable row level security;
 alter table public.todos enable row level security;
+alter table public.sessions enable row level security;
 
 alter table public.memos add column if not exists user_id text not null default 'default';
 alter table public.todos add column if not exists user_id text not null default 'default';
@@ -67,7 +78,10 @@ alter table public.todos add column if not exists due_date text;
 create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
 create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);
 create index if not exists todos_due_date_idx on public.todos (user_id, due_date);
+create index if not exists sessions_user_started_idx on public.sessions (user_id, started_at desc);
 ```
+
+서버가 시작할 때 `ensureSchema`로 같은 테이블을 자동 생성하므로, 기존 배포는 서버 업데이트만 해도 sessions 테이블이 만들어집니다.
 
 `.env.example`을 참고해 `.env`를 만들고 실행합니다.
 

@@ -112,6 +112,34 @@
             </div>
           </section>
 
+          <section class="timetable-panel" draggable="true" data-block-id="timetable">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">time</p>
+                <h2>타임테이블</h2>
+              </div>
+              <span class="panel-icon drag-handle" aria-hidden="true" title="드래그해서 순서 변경">⠿</span>
+            </div>
+            <form class="tracker-form" id="trackerForm">
+              <input id="trackerInput" placeholder="지금 뭐 하는 중?" />
+              <button type="submit" title="기록 시작"><span aria-hidden="true">▶</span>시작</button>
+            </form>
+            <div class="tracker-running" id="trackerRunning" hidden>
+              <div class="tracker-running-info">
+                <strong id="trackerRunningLabel"></strong>
+                <span id="trackerRunningTime"></span>
+              </div>
+              <button type="button" id="trackerStop"><span aria-hidden="true">■</span>종료</button>
+            </div>
+            <div class="timetable-header">
+              <button type="button" id="timetablePrevDay" title="이전 날">‹</button>
+              <h3 id="timetableDateLabel"></h3>
+              <button type="button" id="timetableNextDay" title="다음 날">›</button>
+            </div>
+            <div class="timetable-list" id="timetableList"></div>
+            <div class="timetable-total" id="timetableTotal"></div>
+          </section>
+
           <aside class="insight-panel" draggable="true" data-block-id="insight">
             <div class="panel-heading">
               <div>

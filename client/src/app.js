@@ -4,6 +4,7 @@ const AUTH_TOKEN_KEY = "free-adhd-memo:auth-token";
 const TIMER_KEY = "free-adhd-memo:timer-minutes";
 const DASHBOARD_WIDTH_KEY = "free-adhd-memo:dashboard-width";
 const SIDE_ORDER_KEY = "free-adhd-memo:side-order";
+const ACTIVE_SESSION_KEY = "free-adhd-memo:active-session";
 const scopeLabels = {
   day: "오늘",
   week: "이번 주",
@@ -46,6 +47,26 @@ let authenticated = false;
 let calendarViewMode = false;
 let calendarMonth = new Date();
 let selectedCalendarDate = null;
+let timetableDateKey = null;
+let activeSession = loadActiveSession();
+
+function loadActiveSession() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ACTIVE_SESSION_KEY) || "null");
+    if (!parsed?.startedAt || Number.isNaN(new Date(parsed.startedAt).getTime())) return null;
+    return { id: String(parsed.id || ""), label: String(parsed.label || ""), startedAt: parsed.startedAt };
+  } catch {
+    return null;
+  }
+}
+
+function saveActiveSession() {
+  if (activeSession) {
+    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(activeSession));
+  } else {
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+  }
+}
 
 const urlParams = new URLSearchParams(window.location.search);
 const requestedApiBase = urlParams.get("api");
@@ -115,6 +136,7 @@ function starterData() {
         tags: ["free-adhd"],
       },
     ],
+    sessions: [],
   };
 }
 
@@ -127,6 +149,7 @@ function loadData() {
     return {
       todos: Array.isArray(parsed.todos) ? parsed.todos : [],
       memos: Array.isArray(parsed.memos) ? parsed.memos : [],
+      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
     };
   } catch {
     return starterData();
@@ -206,6 +229,7 @@ async function loadServerData() {
     data = {
       todos: serverData.todos,
       memos: serverData.memos,
+      sessions: Array.isArray(serverData.sessions) ? serverData.sessions : data.sessions || [],
     };
     serverBacked = true;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -305,6 +329,21 @@ function dateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function shiftDateKey(key, delta) {
+  const date = new Date(`${key}T00:00:00`);
+  date.setDate(date.getDate() + delta);
+  return dateKey(date);
+}
+
+function formatDuration(ms) {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return "1분 미만";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${rest}분`;
+  return rest ? `${hours}시간 ${rest}분` : `${hours}시간`;
 }
 
 function renderLabels() {
@@ -559,6 +598,51 @@ function renderTimer() {
   }
 }
 
+function renderTracker() {
+  const form = byId("trackerForm");
+  const running = byId("trackerRunning");
+  form.hidden = Boolean(activeSession);
+  running.hidden = !activeSession;
+  if (!activeSession) return;
+
+  byId("trackerRunningLabel").textContent = activeSession.label || "이름 없는 작업";
+  byId("trackerRunningTime").textContent = `${formatTime(activeSession.startedAt)} 시작 · ${formatDuration(
+    Date.now() - new Date(activeSession.startedAt).getTime(),
+  )} 경과`;
+}
+
+function renderTimetable() {
+  if (!timetableDateKey) timetableDateKey = dateKey(new Date());
+  byId("timetableDateLabel").textContent =
+    timetableDateKey === dateKey(new Date()) ? "오늘" : formatDate(`${timetableDateKey}T00:00:00`);
+
+  const sessions = (data.sessions || [])
+    .filter((session) => dateKey(new Date(session.startedAt)) === timetableDateKey)
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+
+  byId("timetableList").innerHTML = sessions.length
+    ? sessions
+        .map((session) => {
+          const duration = new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime();
+          return `
+            <div class="session-row">
+              <time>${formatTime(session.startedAt)} – ${formatTime(session.endedAt)}</time>
+              <span class="session-label">${escapeHtml(session.label || "이름 없는 작업")}</span>
+              <span class="session-duration">${formatDuration(duration)}</span>
+              <button type="button" data-action="delete-session" data-id="${session.id}" title="기록 삭제">×</button>
+            </div>
+          `;
+        })
+        .join("")
+    : `<p class="empty">기록이 없습니다. 위에서 시작을 눌러보세요.</p>`;
+
+  const totalMs = sessions.reduce(
+    (sum, session) => sum + (new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()),
+    0,
+  );
+  byId("timetableTotal").textContent = sessions.length ? `합계 ${formatDuration(totalMs)}` : "";
+}
+
 function render() {
   renderLabels();
   renderTodos();
@@ -567,6 +651,8 @@ function render() {
   renderMemos();
   renderInsights();
   renderTimer();
+  renderTracker();
+  renderTimetable();
 }
 
 function toggleTodo(id) {
@@ -631,6 +717,48 @@ function toggleMemoStar(id) {
   });
 }
 
+function startSession(label) {
+  activeSession = {
+    id: uid(),
+    label,
+    startedAt: nowIso(),
+  };
+  saveActiveSession();
+  renderTracker();
+}
+
+function recordSession(session) {
+  if (!data.sessions) data.sessions = [];
+  data.sessions.unshift(session);
+  saveData();
+  render();
+  sendMutation("/api/sessions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(session),
+  });
+}
+
+function stopSession() {
+  if (!activeSession) return;
+  const session = { ...activeSession, endedAt: nowIso() };
+  activeSession = null;
+  saveActiveSession();
+  timetableDateKey = dateKey(new Date());
+  recordSession(session);
+}
+
+function deleteSession(id) {
+  data.sessions = (data.sessions || []).filter((session) => session.id !== id);
+  saveData();
+  render();
+  sendMutation(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
 function setTimerMode(mode) {
   timerMode = mode;
   secondsLeft = modeMinutes[mode] * 60;
@@ -657,6 +785,15 @@ function toggleTimer() {
     if (secondsLeft <= 0) {
       secondsLeft = 0;
       stopTimer();
+      if (timerMode === "focus" && !activeSession) {
+        const durationMs = modeMinutes.focus * 60 * 1000;
+        recordSession({
+          id: uid(),
+          label: "뽀모도로 집중",
+          startedAt: new Date(Date.now() - durationMs).toISOString(),
+          endedAt: nowIso(),
+        });
+      }
     }
     renderTimer();
   }, 1000);
@@ -773,6 +910,7 @@ document.body.addEventListener("click", (event) => {
     activeTag = target.dataset.tag;
     render();
   }
+  if (action === "delete-session") deleteSession(target.dataset.id);
   if (action === "select-calendar-day") {
     selectedCalendarDate = target.dataset.date;
     renderCalendar();
@@ -816,6 +954,25 @@ byId("calendarPrevMonth").addEventListener("click", () => {
 byId("calendarNextMonth").addEventListener("click", () => {
   calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
   renderCalendar();
+});
+
+byId("trackerForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = byId("trackerInput");
+  startSession(input.value.trim());
+  input.value = "";
+});
+
+byId("trackerStop").addEventListener("click", stopSession);
+
+byId("timetablePrevDay").addEventListener("click", () => {
+  timetableDateKey = shiftDateKey(timetableDateKey || dateKey(new Date()), -1);
+  renderTimetable();
+});
+
+byId("timetableNextDay").addEventListener("click", () => {
+  timetableDateKey = shiftDateKey(timetableDateKey || dateKey(new Date()), 1);
+  renderTimetable();
 });
 
 byId("timerModes").addEventListener("click", (event) => {
@@ -892,9 +1049,10 @@ function applySideColumnOrder() {
   if (!Array.isArray(saved)) return;
 
   const byBlockId = new Map(Array.from(sideColumn.children).map((el) => [el.dataset.blockId, el]));
-  saved.forEach((id) => {
-    const el = byBlockId.get(id);
-    if (el) sideColumn.appendChild(el);
+  const savedIds = saved.filter((id) => byBlockId.has(id));
+  const newIds = Array.from(byBlockId.keys()).filter((id) => !savedIds.includes(id));
+  [...savedIds, ...newIds].forEach((id) => {
+    sideColumn.appendChild(byBlockId.get(id));
   });
 }
 
@@ -986,5 +1144,8 @@ setupDashboardResize();
 
 render();
 checkSession();
-setInterval(renderLabels, 30000);
+setInterval(() => {
+  renderLabels();
+  renderTracker();
+}, 30000);
 setInterval(loadServerData, 20000);

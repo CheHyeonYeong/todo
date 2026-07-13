@@ -16,6 +16,7 @@ const maxBodyBytes = 1024 * 1024 * 2;
 const databaseUrl = process.env.DATABASE_URL || "";
 const todosTable = process.env.TODOS_TABLE || "todos";
 const memosTable = process.env.MEMOS_TABLE || "memos";
+const sessionsTable = process.env.SESSIONS_TABLE || "sessions";
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -93,6 +94,7 @@ function emptyData() {
   return {
     todos: [],
     memos: [],
+    sessions: [],
   };
 }
 
@@ -119,10 +121,20 @@ function cleanMemo(memo) {
   };
 }
 
+function cleanSession(session) {
+  return {
+    id: String(session?.id || ""),
+    label: String(session?.label || "").trim(),
+    startedAt: session?.startedAt || new Date().toISOString(),
+    endedAt: session?.endedAt || new Date().toISOString(),
+  };
+}
+
 function cleanData(value) {
   return {
     todos: Array.isArray(value?.todos) ? value.todos : [],
     memos: Array.isArray(value?.memos) ? value.memos : [],
+    sessions: Array.isArray(value?.sessions) ? value.sessions : [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -182,6 +194,16 @@ async function ensureSchema() {
       updated_at timestamptz not null default now()
     )
   `);
+  await pool.query(`
+    create table if not exists ${quoteIdentifier(sessionsTable)} (
+      id text primary key,
+      user_id text not null default 'default',
+      label text not null default '',
+      started_at timestamptz not null,
+      ended_at timestamptz not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists starred boolean not null default false`);
@@ -189,6 +211,7 @@ async function ensureSchema() {
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_due_date_idx`)} on ${quoteIdentifier(todosTable)} (user_id, due_date)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${memosTable}_user_created_idx`)} on ${quoteIdentifier(memosTable)} (user_id, created_at desc)`);
   await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_user_created_idx`)} on ${quoteIdentifier(todosTable)} (user_id, created_at desc)`);
+  await pool.query(`create index if not exists ${quoteIdentifier(`${sessionsTable}_user_started_idx`)} on ${quoteIdentifier(sessionsTable)} (user_id, started_at desc)`);
 }
 
 async function readPostgresData(userId) {
@@ -211,6 +234,15 @@ async function readPostgresData(userId) {
     `,
     [userId],
   );
+  const sessions = await pool.query(
+    `
+      select id, label, started_at, ended_at
+      from ${quoteIdentifier(sessionsTable)}
+      where user_id = $1
+      order by started_at desc
+    `,
+    [userId],
+  );
   return {
     memos: memos.rows.map((memo) => ({
       id: memo.id,
@@ -229,6 +261,12 @@ async function readPostgresData(userId) {
       sourceMemoId: todo.source_memo_id || undefined,
       dueDate: todo.due_date || undefined,
     })),
+    sessions: sessions.rows.map((session) => ({
+      id: session.id,
+      label: session.label,
+      startedAt: session.started_at.toISOString(),
+      endedAt: session.ended_at.toISOString(),
+    })),
   };
 }
 
@@ -240,6 +278,7 @@ async function writePostgresData(value, userId) {
     await client.query("begin");
     await client.query(`delete from ${quoteIdentifier(todosTable)} where user_id = $1`, [userId]);
     await client.query(`delete from ${quoteIdentifier(memosTable)} where user_id = $1`, [userId]);
+    await client.query(`delete from ${quoteIdentifier(sessionsTable)} where user_id = $1`, [userId]);
     for (const memo of data.memos.map(cleanMemo).filter((memo) => memo.id && memo.body)) {
       await client.query(
         `
@@ -257,6 +296,15 @@ async function writePostgresData(value, userId) {
           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
         `,
         [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate],
+      );
+    }
+    for (const session of data.sessions.map(cleanSession).filter((session) => session.id)) {
+      await client.query(
+        `
+          insert into ${quoteIdentifier(sessionsTable)} (id, user_id, label, started_at, ended_at, updated_at)
+          values ($1, $2, $3, $4, $5, now())
+        `,
+        [session.id, userId, session.label, session.startedAt, session.endedAt],
       );
     }
     await client.query("commit");
@@ -342,6 +390,40 @@ async function createTodo(value, userId) {
     [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate],
   );
   return todo;
+}
+
+async function createSession(value, userId) {
+  const session = cleanSession(value);
+  if (!pool) {
+    const data = await readData(userId);
+    data.sessions.unshift(session);
+    await writeData(data, userId);
+    return session;
+  }
+
+  await ensureSchema();
+  await pool.query(
+    `
+      insert into ${quoteIdentifier(sessionsTable)} (id, user_id, label, started_at, ended_at, updated_at)
+      values ($1, $2, $3, $4, $5, now())
+      on conflict (id)
+      do update set label = excluded.label, started_at = excluded.started_at,
+        ended_at = excluded.ended_at, updated_at = now()
+    `,
+    [session.id, userId, session.label, session.startedAt, session.endedAt],
+  );
+  return session;
+}
+
+async function deleteSessionById(id, userId) {
+  if (!pool) {
+    const data = await readData(userId);
+    data.sessions = data.sessions.filter((session) => session.id !== id);
+    await writeData(data, userId);
+    return;
+  }
+  await ensureSchema();
+  await pool.query(`delete from ${quoteIdentifier(sessionsTable)} where id = $1 and user_id = $2`, [id, userId]);
 }
 
 async function updateTodo(id, patch, userId) {
@@ -485,6 +567,19 @@ async function handleApi(request, response, pathname) {
   if (pathname === "/api/todos" && request.method === "POST") {
     const body = await readRequestBody(request);
     json(response, 201, await createTodo(JSON.parse(body || "{}"), userId));
+    return;
+  }
+
+  if (pathname === "/api/sessions" && request.method === "POST") {
+    const body = await readRequestBody(request);
+    json(response, 201, await createSession(JSON.parse(body || "{}"), userId));
+    return;
+  }
+
+  const sessionMatch = pathname.match(/^\/api\/sessions\/([^/]+)$/);
+  if (sessionMatch && request.method === "DELETE") {
+    await deleteSessionById(decodeURIComponent(sessionMatch[1]), userId);
+    json(response, 200, { ok: true });
     return;
   }
 

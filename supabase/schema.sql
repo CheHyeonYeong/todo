@@ -21,8 +21,18 @@ create table if not exists public.todos (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.sessions (
+  id text primary key,
+  user_id text not null default 'default',
+  label text not null default '',
+  started_at timestamptz not null,
+  ended_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
 alter table public.memos enable row level security;
 alter table public.todos enable row level security;
+alter table public.sessions enable row level security;
 
 alter table public.memos add column if not exists user_id text not null default 'default';
 alter table public.todos add column if not exists user_id text not null default 'default';
@@ -32,6 +42,7 @@ alter table public.todos add column if not exists due_date text;
 create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
 create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);
 create index if not exists todos_due_date_idx on public.todos (user_id, due_date);
+create index if not exists sessions_user_started_idx on public.sessions (user_id, started_at desc);
 
 -- The Node server connects with the Postgres connection string.
 -- Browser clients never connect to this table directly.
