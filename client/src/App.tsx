@@ -104,8 +104,8 @@ function Shell() {
         <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
           <div
             ref={leftRef}
-            className="flex min-h-0 flex-col lg:min-w-[360px]"
-            style={isDesktop && leftWidth ? { flex: `0 0 ${leftWidth}px` } : { flex: "1.6 1 0%" }}
+            className="flex min-h-0 flex-col max-lg:shrink-0 lg:min-w-[360px]"
+            style={isDesktop ? (leftWidth ? { flex: `0 0 ${leftWidth}px` } : { flex: "1.6 1 0%" }) : undefined}
           >
             <TodoPanel />
             {isDesktop && (
@@ -146,7 +146,7 @@ function Shell() {
               dragBase.current = 0;
             }}
           />
-          <div className="flex min-w-0 flex-1 flex-col gap-3 lg:min-w-[280px] lg:overflow-y-auto">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 max-lg:shrink-0 lg:min-w-[280px] lg:overflow-y-auto">
             <FocusPanel />
             <PomodoroPanel />
             <TimetablePanel />

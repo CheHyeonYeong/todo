@@ -1,19 +1,40 @@
-import { Play } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppData } from "@/hooks/useAppData";
+import { cn } from "@/lib/utils";
+
+const COLLAPSE_KEY = "free-adhd-memo:collapse:focus";
 
 export function FocusPanel() {
   const { data, toggleTodo, activeSession, startSession, stopSession } = useAppData();
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
   const queue = data.todos.filter((todo) => !todo.done).slice(0, 4);
+
+  useEffect(() => {
+    localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
 
   return (
     <Card className="shrink-0 gap-0 p-4.5">
-      <div className="mb-3">
-        <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">now</p>
-        <h2 className="text-lg font-bold">집중 큐</h2>
-      </div>
-      <div className="grid gap-2">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left lg:pointer-events-none"
+        onClick={() => setCollapsed((current) => !current)}
+      >
+        <div>
+          <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">now</p>
+          <h2 className="text-lg font-bold">집중 큐</h2>
+        </div>
+        <div className="flex items-center gap-2 lg:hidden">
+          {collapsed && queue.length > 0 && (
+            <span className="text-sm font-bold text-muted-foreground">{queue.length}개</span>
+          )}
+          <ChevronDown className={cn("size-5 text-muted-foreground transition-transform", collapsed && "-rotate-90")} />
+        </div>
+      </button>
+      <div className={cn("mt-3 grid gap-2", collapsed && "max-lg:hidden")}>
         {queue.length ? (
           queue.map((todo) => (
             <div key={todo.id} className="flex gap-2">
