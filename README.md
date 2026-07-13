@@ -224,9 +224,10 @@ todo log --week        # 이번 주 작업별 시간 합계
 `todo`를 인자 없이 실행하면 전체화면 TUI가 열리고 바로 Insert 모드로 시작한다. 입력 후 Enter로 오늘 할 일을 맨 아래에 추가한다.
 
 - Insert: `↑/↓` 선택, `←/→` 접기/펼치기, `Shift+←/→` 하위로/최상위로, `Shift+↑/↓` 순서 이동, `Esc` Normal 모드
+- 입력 중: `←/→`, `Home/End`, `Delete/Backspace`, `Ctrl+←/→`, `Ctrl+W/U/K/A/E`로 커서 이동과 편집
 - Normal: `i`/`a`/`Esc` Insert 모드, `s` 하위 목표, `e` 편집, `t` 마감일, `Space` 완료, `d` 삭제, `hjkl` 이동·접기, `q` 종료
 - 하위 목표는 2뎁스까지만 지원한다. 부모 완료는 자식 전체에 전파되고, 자식이 모두 완료되면 부모도 자동 완료된다.
-- 생성 시각은 로컬 시간 `YYYY-MM-DD HH:MM`으로 표시되며 지난 마감일은 빨간색으로 표시된다.
+- 생성 시각은 우측 정렬된 로컬 시간 `YYYY-MM-DD HH:MM`이다. `⏳마감 YYYY-MM-DD`는 마감일이며, 지난 마감은 빨간색으로 표시된다.
 - 기존 명령형 목록은 `todo list`로 확인한다.
 
 다른 서버를 쓰려면 `TODO_API_BASE=http://localhost:3000` 환경변수로 바꾼다.

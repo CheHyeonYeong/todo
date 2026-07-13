@@ -429,11 +429,15 @@ function terminalWidth(text) {
 }
 
 function truncateTerminal(text, width) {
+  if (width <= 0) return "";
   let result = "";
   let used = 0;
   for (const char of String(text)) {
     const size = terminalWidth(char);
-    if (used + size > width) return `${result.slice(0, Math.max(0, result.length - 1))}…`;
+    if (used + size > width) {
+      while (result && terminalWidth(result) + 1 > width) result = [...result].slice(0, -1).join("");
+      return width > 1 ? `${result}…` : "…";
+    }
     result += char;
     used += size;
   }
@@ -497,6 +501,13 @@ function splitTerminalKeys(input) {
     "\x1b[1;2B",
     "\x1b[1;2C",
     "\x1b[1;2D",
+    "\x1b[1;5C",
+    "\x1b[1;5D",
+    "\x1b[3~",
+    "\x1b[H",
+    "\x1b[F",
+    "\x1bOH",
+    "\x1bOF",
     "\x1b[A",
     "\x1b[B",
     "\x1b[C",
@@ -521,6 +532,83 @@ function splitTerminalKeys(input) {
   return keys;
 }
 
+function createEditor(value = "") {
+  return { value, cursor: [...value].length };
+}
+
+function editTerminalInput(editor, key) {
+  const chars = [...editor.value];
+  const cursor = Math.max(0, Math.min(editor.cursor, chars.length));
+  const left = key === "\x1b[D" || key === "\x1bOD";
+  const right = key === "\x1b[C" || key === "\x1bOC";
+  const wordLeft = key === "\x1b[1;5D";
+  const wordRight = key === "\x1b[1;5C";
+  if (left) editor.cursor = Math.max(0, cursor - 1);
+  else if (right) editor.cursor = Math.min(chars.length, cursor + 1);
+  else if (wordLeft) {
+    let next = cursor;
+    while (next > 0 && /\s/.test(chars[next - 1])) next -= 1;
+    while (next > 0 && !/\s/.test(chars[next - 1])) next -= 1;
+    editor.cursor = next;
+  } else if (wordRight) {
+    let next = cursor;
+    while (next < chars.length && !/\s/.test(chars[next])) next += 1;
+    while (next < chars.length && /\s/.test(chars[next])) next += 1;
+    editor.cursor = next;
+  } else if (key === "\x1b[H" || key === "\x1bOH" || key === "\x01") editor.cursor = 0;
+  else if (key === "\x1b[F" || key === "\x1bOF" || key === "\x05") editor.cursor = chars.length;
+  else if (key === "\x7f" || key === "\b") {
+    if (cursor > 0) {
+      chars.splice(cursor - 1, 1);
+      editor.value = chars.join("");
+      editor.cursor = cursor - 1;
+    }
+  } else if (key === "\x1b[3~") {
+    if (cursor < chars.length) {
+      chars.splice(cursor, 1);
+      editor.value = chars.join("");
+    }
+  } else if (key === "\x17") {
+    let start = cursor;
+    while (start > 0 && /\s/.test(chars[start - 1])) start -= 1;
+    while (start > 0 && !/\s/.test(chars[start - 1])) start -= 1;
+    chars.splice(start, cursor - start);
+    editor.value = chars.join("");
+    editor.cursor = start;
+  } else if (key === "\x15") {
+    chars.splice(0, cursor);
+    editor.value = chars.join("");
+    editor.cursor = 0;
+  } else if (key === "\x0b") {
+    chars.splice(cursor);
+    editor.value = chars.join("");
+  } else if (!key.startsWith("\x1b") && !/[\x00-\x1f]/.test(key)) {
+    chars.splice(cursor, 0, key);
+    editor.value = chars.join("");
+    editor.cursor = cursor + 1;
+  } else return false;
+  return true;
+}
+
+function editorViewport(editor, width) {
+  const chars = [...editor.value];
+  const cursor = Math.max(0, Math.min(editor.cursor, chars.length));
+  let start = 0;
+  while (start < cursor && terminalWidth(chars.slice(start, cursor).join("")) >= width) start += 1;
+  let end = start;
+  let used = 0;
+  while (end < chars.length) {
+    const next = terminalWidth(chars[end]);
+    if (used + next > width) break;
+    used += next;
+    end += 1;
+  }
+  return {
+    text: chars.slice(start, end).join(""),
+    cursorWidth: terminalWidth(chars.slice(start, cursor).join("")),
+  };
+}
+
 async function runTui() {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     await listTodos();
@@ -530,7 +618,7 @@ async function runTui() {
   const state = {
     todos: [],
     mode: "insert",
-    input: "",
+    input: createEditor(),
     selected: 0,
     selectedId: null,
     collapsed: new Set(),
@@ -538,6 +626,7 @@ async function runTui() {
     message: "",
     busy: false,
     stopped: false,
+    lastRender: "",
   };
   let finish;
   const finished = new Promise((resolve) => {
@@ -549,7 +638,7 @@ async function runTui() {
     state.stopped = true;
     process.stdin.setRawMode(false);
     process.stdin.pause();
-    process.stdout.write("\x1b[?25h\x1b[0m\x1b[2J\x1b[H");
+    process.stdout.write("\x1b[?2026l\x1b[?25h\x1b[0 q\x1b[0m\x1b[?1049l");
     finish();
   };
   process.once("exit", cleanup);
@@ -597,27 +686,36 @@ async function runTui() {
       : children.length
         ? `${state.collapsed.has(todo.id) ? "▸" : "▾"} `
         : "  ";
-    const progress = children.length ? `  (${children.filter((child) => child.done).length}/${children.length})` : "";
-    const due = todo.dueDate ? `  ⏳ ${todo.dueDate}` : "";
-    const plain = `${tree}${mark} ${localTimestamp(todo.createdAt)}: ${todo.title}${progress}${due}`;
+    const progress = children.length ? ` (${children.filter((child) => child.done).length}/${children.length})` : "";
+    const created = contentWidth >= 46 ? localTimestamp(todo.createdAt) : localTimestamp(todo.createdAt).slice(11);
+    const due = todo.dueDate && contentWidth >= 58 ? `  ⏳마감 ${todo.dueDate}` : "";
+    const prefix = `${tree}${mark} `;
+    const metadataWidth = terminalWidth(created) + terminalWidth(due);
+    const leftWidth = Math.max(4, contentWidth - metadataWidth - 2);
+    const left = padTerminal(`${prefix}${todo.title}${progress}`, leftWidth);
+    const gap = " ".repeat(Math.max(1, contentWidth - terminalWidth(left) - metadataWidth));
     const overdue = todo.dueDate && todo.dueDate < dateKey(new Date()) && !todo.done;
-    const color = overdue ? tuiColors.danger : todo.done ? tuiColors.muted : row.depth ? tuiColors.cream : tuiColors.blue;
-    return `${selected ? tuiColors.selected : ""}${color}${padTerminal(plain, contentWidth)}${tuiColors.reset}`;
+    const color = todo.done ? tuiColors.muted : row.depth ? tuiColors.cream : tuiColors.blue;
+    const background = selected ? tuiColors.selected : "";
+    const dueColor = overdue ? tuiColors.danger : tuiColors.muted;
+    return `${background}${color}${left}${gap}${tuiColors.muted}${created}${dueColor}${due}${tuiColors.reset}`;
   }
 
   function render() {
-    const width = Math.max(52, Math.min(process.stdout.columns || 90, 110));
-    const height = Math.max(12, process.stdout.rows || 24);
+    const width = Math.max(16, Math.min(process.stdout.columns || 90, 110));
+    const height = Math.max(7, process.stdout.rows || 24);
     const inner = width - 4;
     const currentRows = rows();
     syncSelection();
     const rootCount = state.todos.filter((todo) => !todo.parentId).length;
     const modeLabel = state.prompt ? state.prompt.label : state.mode === "insert" ? "-- INSERT --" : "-- NORMAL --";
-    const title = ` To-Do (${rootCount}개)  ${modeLabel} `;
+    const title = truncateTerminal(` To-Do (${rootCount}개)  ${modeLabel} `, width - 2);
     const top = `┌${title}${"─".repeat(Math.max(0, width - terminalWidth(title) - 2))}┐`;
-    const heading = " 목록  [ ] 생성시각: 내용 ";
-    const divider = `├${heading}${"─".repeat(Math.max(0, width - terminalWidth(heading) - 2))}┤`;
-    const listHeight = Math.max(3, height - 7);
+    const headingLeft = width >= 32 ? " 목록  [ ] 내용 " : " 목록 ";
+    const headingRight = width >= 58 ? " 생성시각 / 마감 " : width >= 24 ? " 시각 " : "";
+    const dividerFill = "─".repeat(Math.max(0, width - terminalWidth(headingLeft) - terminalWidth(headingRight) - 2));
+    const divider = `├${headingLeft}${dividerFill}${headingRight}┤`;
+    const listHeight = Math.max(1, height - 7);
     let start = Math.max(0, state.selected - Math.floor(listHeight / 2));
     start = Math.min(start, Math.max(0, currentRows.length - listHeight));
     const body = [];
@@ -634,20 +732,33 @@ async function runTui() {
     }
     if (!currentRows.length) body.push(`│ ${tuiColors.muted}${padTerminal("할 일이 없습니다. 아래에서 바로 입력해 보세요.", inner)}${tuiColors.reset} │`);
     while (body.length < listHeight) body.push(`│ ${" ".repeat(inner)} │`);
-    const promptText = state.prompt
-      ? `${state.prompt.label}: ${state.prompt.value}`
+    const editor = state.prompt || (state.mode === "insert" ? state.input : null);
+    const promptTitle = state.prompt
+      ? ` ${state.prompt.label} · Enter 저장 · Esc 취소 `
       : state.mode === "insert"
-        ? `새 할 일: ${state.input}`
-        : "NORMAL  i/a/Esc 입력 · s 하위 · e 편집 · t 마감 · Space 완료 · d 삭제 · q 종료";
-    const promptTitle = state.mode === "insert" || state.prompt ? " Enter 저장 · Esc 명령모드 " : " 명령 ";
-    const promptDivider = `├${promptTitle}${"─".repeat(Math.max(0, width - terminalWidth(promptTitle) - 2))}┤`;
-    const status = state.message ? `  ${state.message}` : "";
-    const promptLine = `│ ${padTerminal(`${promptText}${status}`, inner)} │`;
+        ? " 새 할 일 · Enter 추가 · Esc 명령모드 "
+        : " 명령 ";
+    const safePromptTitle = truncateTerminal(promptTitle, width - 2);
+    const promptDivider = `├${safePromptTitle}${"─".repeat(Math.max(0, width - terminalWidth(safePromptTitle) - 2))}┤`;
+    const status = state.message ? truncateTerminal(state.message, Math.min(12, Math.floor(inner / 3))) : "";
+    const statusWidth = status ? terminalWidth(status) + 2 : 0;
+    const editorWidth = Math.max(1, inner - statusWidth);
+    const viewport = editor ? editorViewport(editor, editorWidth) : null;
+    const normalHelp = "i 입력  s 하위  e 편집  t 마감  Space 완료  d 삭제  ↑↓/jk 이동  q 종료";
+    const promptContent = editor
+      ? `${padTerminal(viewport.text, editorWidth)}${status ? `  ${status}` : ""}`
+      : padTerminal(normalHelp, inner);
+    const promptLine = `│ ${promptContent} │`;
     const bottom = `└${"─".repeat(width - 2)}┘`;
-    const cursor = state.mode === "insert" || state.prompt ? "\x1b[?25h" : "\x1b[?25l";
-    const cursorColumn = Math.min(width - 2, 3 + terminalWidth(promptText));
-    const cursorPosition = state.mode === "insert" || state.prompt ? `\x1b[${listHeight + 4};${cursorColumn}H` : "";
-    process.stdout.write(`\x1b[H${cursor}${top}\n${divider}\n${body.join("\n")}\n${promptDivider}\n${promptLine}\n${bottom}\x1b[J${cursorPosition}`);
+    const cursorColumn = Math.min(width - 2, 3 + (viewport?.cursorWidth || 0));
+    const cursorPosition = editor ? `\x1b[${listHeight + 4};${cursorColumn}H\x1b[5 q\x1b[?25h` : "\x1b[?25l";
+    const screen = `${top}\n${divider}\n${body.join("\n")}\n${promptDivider}\n${promptLine}\n${bottom}\x1b[J`;
+    const renderKey = `${width}x${height}\n${screen}\n${cursorPosition}`;
+    if (renderKey === state.lastRender) return;
+    state.lastRender = renderKey;
+    process.stdout.write(
+      `\x1b[?2026h\x1b[?25l\x1b[H${screen}${cursorPosition}\x1b[?2026l`,
+    );
   }
 
   async function mutate(callback) {
@@ -737,24 +848,23 @@ async function runTui() {
         state.prompt = null;
       } else if (key === "\r" || key === "\n") {
         await submitPrompt();
-      } else if (key === "\x7f" || key === "\b") {
-        state.prompt.value = [...state.prompt.value].slice(0, -1).join("");
-      } else if (!key.startsWith("\x1b") && !/[\x00-\x1f]/.test(key)) {
-        state.prompt.value += key;
-      }
+      } else editTerminalInput(state.prompt, key);
       render();
       return;
     }
 
     const currentRows = rows();
+    const editingInput = state.mode === "insert" && state.input.value.length > 0;
     const up = key === "\x1b[A" || key === "\x1bOA" || (state.mode === "normal" && key === "k");
     const down = key === "\x1b[B" || key === "\x1bOB" || (state.mode === "normal" && key === "j");
-    const left = key === "\x1b[D" || key === "\x1bOD" || (state.mode === "normal" && key === "h");
-    const right = key === "\x1b[C" || key === "\x1bOC" || (state.mode === "normal" && key === "l");
+    const left =
+      (!editingInput && (key === "\x1b[D" || key === "\x1bOD")) || (state.mode === "normal" && key === "h");
+    const right =
+      (!editingInput && (key === "\x1b[C" || key === "\x1bOC")) || (state.mode === "normal" && key === "l");
     const shiftUp = key === "\x1b[1;2A";
     const shiftDown = key === "\x1b[1;2B";
-    const shiftLeft = key === "\x1b[1;2D";
-    const shiftRight = key === "\x1b[1;2C";
+    const shiftLeft = !editingInput && key === "\x1b[1;2D";
+    const shiftRight = !editingInput && key === "\x1b[1;2C";
 
     if (up || down) {
       if (currentRows.length) {
@@ -813,16 +923,12 @@ async function runTui() {
       if (key === "\x1b") {
         state.mode = "normal";
       } else if (key === "\r" || key === "\n") {
-        const title = state.input.trim();
+        const title = state.input.value.trim();
         if (title) {
-          state.input = "";
+          state.input = createEditor();
           await mutate(() => createTodoFromInput(title));
         }
-      } else if (key === "\x7f" || key === "\b") {
-        state.input = [...state.input].slice(0, -1).join("");
-      } else if (!key.startsWith("\x1b") && !/[\x00-\x1f]/.test(key)) {
-        state.input += key;
-      }
+      } else editTerminalInput(state.input, key);
     } else if (key === "i" || key === "a" || key === "\x1b") {
       state.mode = "insert";
     } else if (key === "q") {
@@ -832,11 +938,16 @@ async function runTui() {
       const row = selectedRow();
       if (row && key === "s") {
         const parent = row.depth === 0 ? row.todo : state.todos.find((todo) => todo.id === row.todo.parentId);
-        state.prompt = { kind: "child", label: "하위 목표", value: "", todoId: parent.id };
+        state.prompt = { kind: "child", label: "하위 목표", ...createEditor(), todoId: parent.id };
       } else if (row && key === "e") {
-        state.prompt = { kind: "edit", label: "내용 편집", value: row.todo.title, todoId: row.todo.id };
+        state.prompt = { kind: "edit", label: "내용 편집", ...createEditor(row.todo.title), todoId: row.todo.id };
       } else if (row && key === "t") {
-        state.prompt = { kind: "due", label: "마감일 YYYY-MM-DD (비우면 해제)", value: row.todo.dueDate || "", todoId: row.todo.id };
+        state.prompt = {
+          kind: "due",
+          label: "마감일 YYYY-MM-DD (비우면 해제)",
+          ...createEditor(row.todo.dueDate || ""),
+          todoId: row.todo.id,
+        };
       } else if (row && key === " ") {
         await mutate(async () => {
           await api(`/api/todos/${encodeURIComponent(row.todo.id)}`, {
@@ -860,7 +971,7 @@ async function runTui() {
   process.stdin.setEncoding("utf8");
   process.stdin.setRawMode(true);
   process.stdin.resume();
-  process.stdout.write("\x1b[2J\x1b[H");
+  process.stdout.write("\x1b[?1049h\x1b[?25l\x1b[2J\x1b[H");
   render();
   let keyQueue = Promise.resolve();
   process.stdin.on("data", (input) => {
