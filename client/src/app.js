@@ -5,6 +5,7 @@ const TIMER_KEY = "free-adhd-memo:timer-minutes";
 const DASHBOARD_WIDTH_KEY = "free-adhd-memo:dashboard-width";
 const SIDE_ORDER_KEY = "free-adhd-memo:side-order";
 const ACTIVE_SESSION_KEY = "free-adhd-memo:active-session";
+const MEMO_DOCK_HEIGHT_KEY = "free-adhd-memo:memo-dock-height";
 const scopeLabels = {
   day: "오늘",
   week: "이번 주",
@@ -1256,7 +1257,7 @@ function setupSideColumnReorder() {
 
 function setupDashboardResize() {
   const handle = byId("dashboardResizeHandle");
-  const todoPanel = document.querySelector(".todo-panel");
+  const todoPanel = byId("leftColumn");
   const sideColumn = byId("sideColumn");
   const wideEnough = () => window.matchMedia("(min-width: 1081px)").matches;
 
@@ -1302,6 +1303,68 @@ function setupDashboardResize() {
   });
 }
 
+const dockMedia = window.matchMedia("(min-width: 1081px)");
+
+function placeMemoWorkspace() {
+  const workspace = byId("memoWorkspace");
+  const dock = byId("memoDock");
+  const drawerToggle = byId("memoDrawerToggle");
+  if (dockMedia.matches) {
+    dock.hidden = false;
+    dock.appendChild(workspace);
+    drawerToggle.hidden = true;
+    closeMemoDrawer();
+  } else {
+    dock.hidden = true;
+    byId("memoDrawer").appendChild(workspace);
+    drawerToggle.hidden = false;
+  }
+}
+
+function setupMemoDockResize() {
+  const handle = byId("memoDockResizeHandle");
+  const dock = byId("memoDock");
+  const leftColumn = byId("leftColumn");
+
+  const savedHeight = Number(localStorage.getItem(MEMO_DOCK_HEIGHT_KEY));
+  if (savedHeight > 0) dock.style.flex = `0 0 ${savedHeight}px`;
+
+  let dragging = false;
+  let startY = 0;
+  let startHeight = 0;
+
+  function onPointerMove(event) {
+    if (!dragging) return;
+    const delta = event.clientY - startY;
+    const maxHeight = leftColumn.clientHeight - 280;
+    const nextHeight = Math.min(maxHeight, Math.max(120, startHeight - delta));
+    dock.style.flex = `0 0 ${nextHeight}px`;
+  }
+
+  function onPointerUp() {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("active");
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    localStorage.setItem(MEMO_DOCK_HEIGHT_KEY, String(Math.round(dock.getBoundingClientRect().height)));
+  }
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (!dockMedia.matches) return;
+    dragging = true;
+    startY = event.clientY;
+    startHeight = dock.getBoundingClientRect().height;
+    handle.classList.add("active");
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    event.preventDefault();
+  });
+}
+
+dockMedia.addEventListener("change", placeMemoWorkspace);
+placeMemoWorkspace();
+setupMemoDockResize();
 applySideColumnOrder();
 setupSideColumnReorder();
 setupDashboardResize();

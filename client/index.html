@@ -13,7 +13,7 @@
     <script src="src/config.js"></script>
   </head>
   <body>
-    <section class="login-screen" id="loginScreen" hidden>
+    <section class="login-screen" id="loginScreen">
       <div class="login-panel">
         <p class="eyebrow">private workspace</p>
         <h1>Free ADHD Memo</h1>
@@ -34,6 +34,7 @@
       </header>
 
       <section class="dashboard-grid">
+        <div class="left-column" id="leftColumn">
         <section class="todo-panel">
           <div class="panel-heading">
             <div>
@@ -72,6 +73,10 @@
             <div class="calendar-day-detail" id="calendarDayDetail"></div>
           </div>
         </section>
+
+        <div class="v-resize-handle" id="memoDockResizeHandle" title="드래그해서 높이 조절"></div>
+        <section class="memo-dock" id="memoDock" hidden></section>
+        </div>
 
         <div class="resize-handle" id="dashboardResizeHandle" title="드래그해서 너비 조절"></div>
 
@@ -153,6 +158,7 @@
         <p class="eyebrow">quick capture</p>
         <button class="icon-button" id="memoDrawerClose" type="button" title="닫기">×</button>
       </div>
+      <div class="memo-workspace" id="memoWorkspace">
       <form id="memoForm">
         <div class="panel-heading">
           <h2>생각나는 즉시 기록</h2>
@@ -177,6 +183,7 @@
       </div>
       <div class="tag-strip" id="tagStrip"></div>
       <div class="memo-list" id="memoList"></div>
+      </div>
     </aside>
 
     <script src="src/app.js"></script>
