@@ -191,6 +191,30 @@ sudo journalctl -u free-adhd-memo -f
 sudo systemctl restart free-adhd-memo
 ```
 
+## 터미널 CLI
+
+웹앱과 같은 API를 쓰는 터미널 클라이언트가 `cli/adhd.js`에 있다. 설치:
+
+```bash
+npm link   # 저장소 루트에서 1회 실행하면 어디서든 `adhd` 사용 가능
+```
+
+처음 한 번 Supabase Dashboard -> Authentication -> URL Configuration -> Redirect URLs에
+`http://localhost:8787`을 추가해야 `adhd login`(브라우저 Google 로그인)이 동작한다.
+
+```bash
+adhd login             # 브라우저로 Google 로그인, 토큰은 ~/.config/free-adhd-memo/에 저장
+adhd                   # 할 일 목록
+adhd add "제목" -w     # 이번 주 할 일 추가 (-m 이번 달, -d 2026-07-20 마감일)
+adhd done 3            # 3번 완료 토글
+adhd memo "생각 #태그" # 메모 (- [ ] 줄은 할 일로 자동 추출)
+adhd track "코딩"      # 시간 기록 시작
+adhd stop              # 기록 종료 -> 타임테이블에 저장
+adhd log --week        # 이번 주 작업별 시간 합계
+```
+
+다른 서버를 쓰려면 `ADHD_API_BASE=http://localhost:3000` 환경변수로 바꾼다.
+
 ## 앱스토어 배포 (TWA)
 
 이 앱은 PWA라서 Google Play에는 TWA(Trusted Web Activity)로 그대로 올릴 수 있다.

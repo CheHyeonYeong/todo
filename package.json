@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "adhd": "./cli/adhd.js"
+  },
   "scripts": {
     "dev": "node server/server.js",
     "start": "node server/server.js",
