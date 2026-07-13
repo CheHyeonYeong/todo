@@ -11,7 +11,7 @@ import {
 } from "react";
 import { apiFetch, setAuthToken, supabase } from "@/lib/api";
 import { extractTags, extractTodos, nowIso, todayKey, uid } from "@/lib/helpers";
-import type { ActiveSession, AppData, Memo, Scope, Session, Todo, TodoPatch } from "@/lib/types";
+import type { ActiveSession, AppData, Memo, MemoPatch, Scope, Session, Todo, TodoPatch } from "@/lib/types";
 
 const STORAGE_KEY = "free-adhd-memo:v1";
 const ACTIVE_SESSION_KEY = "free-adhd-memo:active-session";
@@ -64,9 +64,10 @@ interface AppDataValue {
   toggleTodo: (id: string) => void;
   deleteTodo: (id: string) => void;
   updateTodo: (id: string, patch: TodoPatch) => void;
-  addMemo: (body: string) => void;
+  addMemo: (input: { title?: string; body: string }) => void;
+  updateMemo: (id: string, patch: MemoPatch) => void;
   deleteMemo: (id: string) => void;
-  toggleMemoStar: (id: string) => void;
+  reorderMemos: (ids: string[]) => Promise<boolean>;
   recordSession: (session: Session) => void;
   deleteSession: (id: string) => void;
   startSession: (label: string) => void;
@@ -262,23 +263,56 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const addMemo = useCallback(
-    (body: string) => {
+    ({ title = "", body }: { title?: string; body: string }) => {
       const createdAt = nowIso();
       const memoId = uid();
-      const todos: Todo[] = extractTodos(body).map((title) => ({
+      const todos: Todo[] = extractTodos(body).map((todoTitle) => ({
         id: uid(),
-        title,
+        title: todoTitle,
         scope: "day",
         done: false,
         createdAt,
         sourceMemoId: memoId,
       }));
-      const memo: Memo = { id: memoId, body, createdAt, tags: extractTags(body), starred: false };
+      const sortOrder =
+        Math.min(0, ...dataRef.current.memos.map((memo) => (Number.isFinite(memo.sortOrder) ? memo.sortOrder! : 0))) - 1;
+      const memo: Memo = {
+        id: memoId,
+        title: title.trim(),
+        body,
+        createdAt,
+        tags: extractTags(body),
+        starred: false,
+        sortOrder,
+      };
       persist((prev) => ({ ...prev, memos: [memo, ...prev.memos], todos: [...todos, ...prev.todos] }));
       sendMutation("/api/memos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ memo, todos }),
+      });
+    },
+    [persist, sendMutation],
+  );
+
+  const updateMemo = useCallback(
+    (id: string, patch: MemoPatch) => {
+      persist((prev) => ({
+        ...prev,
+        memos: prev.memos.map((memo) =>
+          memo.id === id
+            ? {
+                ...memo,
+                ...patch,
+                tags: patch.body !== undefined ? extractTags(patch.body) : memo.tags,
+              }
+            : memo,
+        ),
+      }));
+      sendMutation(`/api/memos/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
       });
     },
     [persist, sendMutation],
@@ -292,22 +326,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [persist, sendMutation],
   );
 
-  const toggleMemoStar = useCallback(
-    (id: string) => {
-      const current = dataRef.current.memos.find((memo) => memo.id === id);
-      if (!current) return;
-      const starred = !current.starred;
-      persist((prev) => ({
-        ...prev,
-        memos: prev.memos.map((memo) => (memo.id === id ? { ...memo, starred } : memo)),
-      }));
-      sendMutation(`/api/memos/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ starred }),
+  /* 드래그앤드롭 순서 저장. 서버 저장 실패 시 기존 순서로 복원하고 false를 반환한다. */
+  const reorderMemos = useCallback(
+    async (ids: string[]) => {
+      const prevMemos = dataRef.current.memos;
+      const byId = new Map(prevMemos.map((memo) => [memo.id, memo]));
+      const ordered: Memo[] = [];
+      ids.forEach((id) => {
+        const memo = byId.get(id);
+        if (memo) ordered.push({ ...memo, sortOrder: ordered.length });
       });
+      const rest = prevMemos.filter((memo) => !ids.includes(memo.id));
+      persist((prev) => ({ ...prev, memos: [...ordered, ...rest] }));
+
+      if (!serverBacked.current || authRef.current !== "ready") return true;
+      setSync({ label: "syncing", tone: "neutral" });
+      try {
+        const response = await apiFetch("/api/memos/order", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+        if (!response.ok) throw new Error(`Reorder failed: ${response.status}`);
+        setSync({ label: "synced", tone: "ok" });
+        return true;
+      } catch {
+        persist((prev) => ({ ...prev, memos: prevMemos }));
+        setSync({ label: "offline", tone: "warn" });
+        return false;
+      }
     },
-    [persist, sendMutation],
+    [persist],
   );
 
   const recordSession = useCallback(
@@ -360,8 +409,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteTodo,
       updateTodo,
       addMemo,
+      updateMemo,
       deleteMemo,
-      toggleMemoStar,
+      reorderMemos,
       recordSession,
       deleteSession,
       startSession,
@@ -381,8 +431,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteTodo,
       updateTodo,
       addMemo,
+      updateMemo,
       deleteMemo,
-      toggleMemoStar,
+      reorderMemos,
       recordSession,
       deleteSession,
       startSession,

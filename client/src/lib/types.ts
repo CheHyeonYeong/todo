@@ -17,11 +17,15 @@ export type TodoPatch = Partial<Pick<Todo, "title" | "scope" | "dueDate" | "cate
 
 export interface Memo {
   id: string;
+  title?: string;
   body: string;
   createdAt: string;
   tags: string[];
   starred?: boolean;
+  sortOrder?: number;
 }
+
+export type MemoPatch = Partial<Pick<Memo, "title" | "body">>;
 
 export interface Session {
   id: string;

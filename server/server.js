@@ -117,10 +117,12 @@ function cleanTodo(todo) {
 function cleanMemo(memo) {
   return {
     id: String(memo?.id || ""),
+    title: String(memo?.title || "").trim(),
     body: String(memo?.body || "").trim(),
     createdAt: memo?.createdAt || new Date().toISOString(),
     tags: Array.isArray(memo?.tags) ? memo.tags.map(String) : [],
     starred: Boolean(memo?.starred),
+    sortOrder: Number.isFinite(Number(memo?.sortOrder)) ? Number(memo.sortOrder) : null,
   };
 }
 
@@ -158,7 +160,7 @@ async function writeData(value, userId) {
   if (pool) return writePostgresData(value, userId);
 
   const data = cleanData(value);
-  const tempFile = `${dataFile}.tmp`;
+  const tempFile = `${dataFile}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
   await mkdir(dirname(dataFile), { recursive: true });
   await writeFile(tempFile, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(tempFile, dataFile);
@@ -210,6 +212,8 @@ async function ensureSchema() {
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists starred boolean not null default false`);
+  await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists title text not null default ''`);
+  await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists sort_order double precision`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists due_date text`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists category text`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists note text`);
@@ -223,10 +227,10 @@ async function readPostgresData(userId) {
   await ensureSchema();
   const memos = await pool.query(
     `
-      select id, body, tags, created_at, starred
+      select id, title, body, tags, created_at, starred, sort_order
       from ${quoteIdentifier(memosTable)}
       where user_id = $1
-      order by created_at desc
+      order by sort_order asc nulls last, created_at desc
     `,
     [userId],
   );
@@ -251,10 +255,12 @@ async function readPostgresData(userId) {
   return {
     memos: memos.rows.map((memo) => ({
       id: memo.id,
+      title: memo.title || "",
       body: memo.body,
       tags: memo.tags || [],
       createdAt: memo.created_at.toISOString(),
       starred: memo.starred,
+      sortOrder: memo.sort_order === null ? undefined : Number(memo.sort_order),
     })),
     todos: todos.rows.map((todo) => ({
       id: todo.id,
@@ -286,13 +292,13 @@ async function writePostgresData(value, userId) {
     await client.query(`delete from ${quoteIdentifier(todosTable)} where user_id = $1`, [userId]);
     await client.query(`delete from ${quoteIdentifier(memosTable)} where user_id = $1`, [userId]);
     await client.query(`delete from ${quoteIdentifier(sessionsTable)} where user_id = $1`, [userId]);
-    for (const memo of data.memos.map(cleanMemo).filter((memo) => memo.id && memo.body)) {
+    for (const memo of data.memos.map(cleanMemo).filter((memo) => memo.id && (memo.body || memo.title))) {
       await client.query(
         `
-          insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, starred, updated_at)
-          values ($1, $2, $3, $4, $5, $6, now())
+          insert into ${quoteIdentifier(memosTable)} (id, user_id, title, body, tags, created_at, starred, sort_order, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, now())
         `,
-        [memo.id, userId, memo.body, memo.tags, memo.createdAt, memo.starred],
+        [memo.id, userId, memo.title, memo.body, memo.tags, memo.createdAt, memo.starred, memo.sortOrder],
       );
     }
     for (const todo of data.todos.map(cleanTodo).filter((todo) => todo.id && todo.title)) {
@@ -328,6 +334,9 @@ async function createMemoWithTodos(value, userId) {
   if (!pool) {
     const data = await readData(userId);
     const memo = cleanMemo(value.memo);
+    if (memo.sortOrder === null) {
+      memo.sortOrder = Math.min(0, ...data.memos.map((item) => (Number.isFinite(item.sortOrder) ? item.sortOrder : 0))) - 1;
+    }
     const todos = Array.isArray(value.todos) ? value.todos.map(cleanTodo) : [];
     data.memos.unshift(memo);
     data.todos.unshift(...todos);
@@ -343,12 +352,15 @@ async function createMemoWithTodos(value, userId) {
     await client.query("begin");
     await client.query(
       `
-        insert into ${quoteIdentifier(memosTable)} (id, user_id, body, tags, created_at, starred, updated_at)
-        values ($1, $2, $3, $4, $5, $6, now())
+        insert into ${quoteIdentifier(memosTable)} (id, user_id, title, body, tags, created_at, starred, sort_order, updated_at)
+        values ($1, $2, $3, $4, $5, $6, $7,
+          coalesce($8::double precision,
+            (select coalesce(min(sort_order), 0) - 1 from ${quoteIdentifier(memosTable)} where user_id = $2)),
+          now())
         on conflict (id)
-        do update set body = excluded.body, tags = excluded.tags, updated_at = now()
+        do update set title = excluded.title, body = excluded.body, tags = excluded.tags, updated_at = now()
       `,
-      [memo.id, userId, memo.body, memo.tags, memo.createdAt, memo.starred],
+      [memo.id, userId, memo.title, memo.body, memo.tags, memo.createdAt, memo.starred, memo.sortOrder],
     );
     for (const todo of todos.filter((todo) => todo.id && todo.title)) {
       await client.query(
@@ -497,21 +509,65 @@ async function updateMemo(id, patch, userId) {
     `
       update ${quoteIdentifier(memosTable)}
       set starred = coalesce($2, starred),
+        title = coalesce($4, title),
+        body = coalesce($5, body),
         updated_at = now()
       where id = $1 and user_id = $3
-      returning id, body, tags, created_at, starred
+      returning id, title, body, tags, created_at, starred, sort_order
     `,
-    [id, typeof patch.starred === "boolean" ? patch.starred : null, userId],
+    [
+      id,
+      typeof patch.starred === "boolean" ? patch.starred : null,
+      userId,
+      typeof patch.title === "string" ? patch.title.trim() : null,
+      typeof patch.body === "string" ? patch.body.trim() : null,
+    ],
   );
   if (!result.rowCount) return null;
   const memo = result.rows[0];
   return {
     id: memo.id,
+    title: memo.title || "",
     body: memo.body,
     tags: memo.tags || [],
     createdAt: memo.created_at.toISOString(),
     starred: memo.starred,
+    sortOrder: memo.sort_order === null ? undefined : Number(memo.sort_order),
   };
+}
+
+async function reorderMemosByIds(ids, userId) {
+  if (!pool) {
+    const data = await readData(userId);
+    const orderById = new Map(ids.map((memoId, index) => [memoId, index]));
+    data.memos = data.memos
+      .map((memo) => (orderById.has(memo.id) ? { ...memo, sortOrder: orderById.get(memo.id) } : memo))
+      .sort(
+        (a, b) =>
+          (Number.isFinite(a.sortOrder) ? a.sortOrder : Number.MAX_SAFE_INTEGER) -
+          (Number.isFinite(b.sortOrder) ? b.sortOrder : Number.MAX_SAFE_INTEGER),
+      );
+    await writeData(data, userId);
+    return;
+  }
+
+  await ensureSchema();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query(
+        `update ${quoteIdentifier(memosTable)} set sort_order = $1, updated_at = now() where id = $2 and user_id = $3`,
+        [index, ids[index], userId],
+      );
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function deleteTodoById(id, userId) {
@@ -624,6 +680,15 @@ async function handleApi(request, response, pathname) {
 
   if (todoMatch && request.method === "DELETE") {
     await deleteTodoById(decodeURIComponent(todoMatch[1]), userId);
+    json(response, 200, { ok: true });
+    return;
+  }
+
+  if (pathname === "/api/memos/order" && request.method === "PUT") {
+    const body = await readRequestBody(request);
+    const parsed = JSON.parse(body || "{}");
+    const ids = Array.isArray(parsed.ids) ? parsed.ids.map(String).filter(Boolean) : [];
+    await reorderMemosByIds(ids, userId);
     json(response, 200, { ok: true });
     return;
   }

@@ -1,10 +1,12 @@
 create table if not exists public.memos (
   id text primary key,
   user_id text not null default 'default',
+  title text not null default '',
   body text not null,
   tags text[] not null default '{}',
   created_at timestamptz not null,
   starred boolean not null default false,
+  sort_order double precision,
   updated_at timestamptz not null default now()
 );
 
@@ -37,6 +39,8 @@ alter table public.sessions enable row level security;
 alter table public.memos add column if not exists user_id text not null default 'default';
 alter table public.todos add column if not exists user_id text not null default 'default';
 alter table public.memos add column if not exists starred boolean not null default false;
+alter table public.memos add column if not exists title text not null default '';
+alter table public.memos add column if not exists sort_order double precision;
 alter table public.todos add column if not exists due_date text;
 alter table public.todos add column if not exists category text;
 alter table public.todos add column if not exists note text;
