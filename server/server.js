@@ -535,9 +535,19 @@ async function readRequestBody(request) {
 
 async function handleApi(request, response, pathname) {
   if (pathname === "/api/health" && request.method === "GET") {
-    json(response, 200, {
-      ok: true,
+    let database = "none";
+    if (pool) {
+      try {
+        await pool.query("select 1");
+        database = "ok";
+      } catch (error) {
+        database = `error: ${error.message}`;
+      }
+    }
+    json(response, database.startsWith("error") ? 503 : 200, {
+      ok: !database.startsWith("error"),
       storage: pool ? "postgres" : "file",
+      database,
     });
     return;
   }
