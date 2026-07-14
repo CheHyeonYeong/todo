@@ -126,6 +126,8 @@ pub struct App {
     pub undo_stack: Vec<UndoEntry>,
     pub message: String,
     pub quit: bool,
+    /// ? 를 눌렀을 때만 뜨는 단축키 오버레이
+    pub help_open: bool,
     /// 순서 이동은 연타되기 쉬워서 이 시각까지 모았다가 한 번만 보낸다.
     reorder_due: Option<Instant>,
     /// 새로고침 요청이 이미 워커에 가 있는지 (중복 요청 방지)
@@ -149,6 +151,7 @@ impl App {
             undo_stack: Vec::new(),
             message: String::new(),
             quit: false,
+            help_open: false,
             reorder_due: None,
             refresh_pending: false,
         };
@@ -299,6 +302,7 @@ impl App {
             due_date,
             category,
             note: None,
+            routine_id: None,
             sort_order: Some(local::next_sort_order(&self.todos, &scope, parent_id.as_deref())),
             parent_id,
         };
@@ -666,7 +670,13 @@ impl App {
     }
 
     fn handle_normal_key(&mut self, key: &KeyEvent) {
+        // 도움말이 떠 있으면 아무 키나 눌러 닫는다.
+        if self.help_open {
+            self.help_open = false;
+            return;
+        }
         match key.code {
+            KeyCode::Char('?') => self.help_open = true,
             KeyCode::Char('i') | KeyCode::Char('a') | KeyCode::Esc => self.mode = Mode::Insert,
             KeyCode::Char('q') => self.quit = true,
             KeyCode::Char('j') => self.move_selection(true),

@@ -1,6 +1,6 @@
 use crate::app::{App, Editor, Mode};
 use crate::model::{scope_label, Row};
-use crate::util::{days_from_today, local_timestamp};
+use crate::util::days_from_today;
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
@@ -37,11 +37,40 @@ enum ListLine {
     Item(usize),
 }
 
+/// 카테고리마다 다른 색. 웹의 카테고리 색과 같은 방식(이름 해시)으로 고른다.
+fn category_color(category: &str) -> Color {
+    const PALETTE: [Color; 6] = [
+        Color::Cyan,
+        Color::Magenta,
+        Color::Green,
+        Color::Yellow,
+        Color::Blue,
+        Color::LightRed,
+    ];
+    let hash = category.chars().fold(0usize, |acc, ch| acc.wrapping_mul(31).wrapping_add(ch as usize));
+    PALETTE[hash % PALETTE.len()]
+}
+
+/// 마감을 사람이 읽는 말로. 오늘/내일/3일 지남.
+fn due_label(due: &str, done: bool) -> (String, Color) {
+    let days = days_from_today(due);
+    if done {
+        return (due.to_string(), Color::DarkGray);
+    }
+    match days {
+        d if d < 0 => (format!("{}일 지남", -d), Color::Red),
+        0 => ("오늘".to_string(), Color::Yellow),
+        1 => ("내일".to_string(), Color::DarkGray),
+        d if d < 7 => (format!("{d}일 뒤"), Color::DarkGray),
+        _ => (due.get(5..).unwrap_or(due).replace('-', "/"), Color::DarkGray),
+    }
+}
+
 fn row_line<'a>(row: &Row, selected: bool, width: usize, filtered: bool) -> Line<'a> {
     let todo = &row.todo;
-    let mark = if todo.done { "[x]" } else { "[ ]" };
+    let mark = if todo.done { "✓" } else { "○" };
     let tree = if row.depth > 0 {
-        if row.last { "     └ " } else { "     ├ " }
+        if row.last { "    └ " } else { "    ├ " }
     } else if row.children_total > 0 {
         "▾ "
     } else {
@@ -52,56 +81,52 @@ fn row_line<'a>(row: &Row, selected: bool, width: usize, filtered: bool) -> Line
     } else {
         String::new()
     };
+    let repeat = if todo.routine_id.is_some() { " ↻" } else { "" };
     let category_tag = match (&todo.category, row.depth, filtered) {
-        (Some(category), 0, false) => format!("[{category}] "),
-        _ => String::new(),
+        (Some(category), 0, false) => Some(category.clone()),
+        _ => None,
     };
-    let created = local_timestamp(&todo.created_at, width >= 46);
-    let overdue_days = match &todo.due_date {
-        Some(due) if !todo.done => -days_from_today(due),
-        _ => 0,
-    };
-    // 마감은 폭에 상관없이 보여준다. 좁으면 "7/15", 넓으면 "⏳마감 2026-07-15 (3일 지남)".
-    let due = match &todo.due_date {
+    let (due_text, due_color) = match &todo.due_date {
         Some(due) => {
-            let overdue_tag = if overdue_days > 0 && width >= 58 {
-                format!(" ({overdue_days}일 지남)")
-            } else {
-                String::new()
-            };
-            if width >= 58 {
-                format!("  ⏳마감 {due}{overdue_tag}")
-            } else {
-                let short = due.get(5..).unwrap_or(due).replace('-', "/");
-                format!("  {}", short.trim_start_matches('0'))
-            }
+            let (text, color) = due_label(due, todo.done);
+            (format!("  {text}"), color)
         }
-        None => String::new(),
+        None => (String::new(), Color::DarkGray),
     };
-    let metadata_width = UnicodeWidthStr::width(created.as_str()) + UnicodeWidthStr::width(due.as_str());
-    let left_width = width.saturating_sub(metadata_width + 1).max(4);
-    let left = pad(
-        &format!("{tree}{mark} {category_tag}{}{progress}", todo.title),
-        left_width,
-    );
-    let overdue = overdue_days > 0;
+
+    let mark_width = UnicodeWidthStr::width(tree) + UnicodeWidthStr::width(mark) + 1;
+    let tag_width = category_tag
+        .as_deref()
+        .map(|category| UnicodeWidthStr::width(category) + 3)
+        .unwrap_or(0);
+    let due_width = UnicodeWidthStr::width(due_text.as_str());
+    let title_width = width
+        .saturating_sub(mark_width + tag_width + due_width + 1)
+        .max(4);
+
     let text_color = if todo.done {
         Color::DarkGray
     } else if row.depth > 0 {
         Color::Reset
     } else {
-        Color::Cyan
+        Color::Reset
     };
-    let mut spans = vec![
-        Span::styled(left, Style::new().fg(text_color)),
-        Span::raw(" "),
-        Span::styled(created, Style::new().fg(Color::DarkGray)),
-    ];
-    if !due.is_empty() {
+    let mut spans = vec![Span::styled(
+        format!("{tree}{mark} "),
+        Style::new().fg(if todo.done { Color::Green } else { Color::DarkGray }),
+    )];
+    if let Some(category) = &category_tag {
         spans.push(Span::styled(
-            due,
-            Style::new().fg(if overdue { Color::Red } else { Color::DarkGray }),
+            format!("[{category}] "),
+            Style::new().fg(category_color(category)),
         ));
+    }
+    spans.push(Span::styled(
+        pad(&format!("{}{progress}{repeat}", todo.title), title_width),
+        Style::new().fg(text_color),
+    ));
+    if !due_text.is_empty() {
+        spans.push(Span::styled(due_text, Style::new().fg(due_color)));
     }
     let line = Line::from(spans);
     if selected {
@@ -143,68 +168,90 @@ fn tab_line<'a>(app: &App, width: usize) -> Line<'a> {
     Line::from(spans)
 }
 
-/// 단축키 안내. 한 줄에 다 넣으면 잘리므로 터미널 폭에 맞춰 여러 줄로 채운다.
-const HELP_ITEMS: [&str; 16] = [
-    "i 입력",
-    "Esc 명령모드",
-    "j/k 이동",
-    "h/l 접기",
-    "Space 완료",
-    "s 하위",
-    "e 편집",
-    "t 마감",
-    "c 분류",
-    "Tab 분류전환",
-    "Shift+↑↓ 순서",
-    "Shift+←→ 하위/상위",
-    "d 삭제",
-    "u 되돌림",
-    "r 새로고침",
-    "q 종료",
+/// ? 를 눌렀을 때만 뜨는 도움말. 평소 화면은 목록만 보여준다.
+const HELP_KEYS: [(&str, &str); 15] = [
+    ("i / a", "입력 모드 (뒤에 @0715 @내일 로 마감)"),
+    ("Esc", "명령 모드"),
+    ("j / k, ↑ ↓", "위아래 이동"),
+    ("h / l", "하위 목표 접기 / 펼치기"),
+    ("Space", "완료 전환"),
+    ("s", "하위 목표 추가"),
+    ("e", "제목 편집"),
+    ("t", "마감 지정"),
+    ("c", "카테고리 지정"),
+    ("Tab / Shift+Tab", "카테고리 탭 전환"),
+    ("Shift+↑ ↓", "순서 옮기기"),
+    ("Shift+← →", "하위로 넣기 / 빼기"),
+    ("d", "삭제"),
+    ("u", "되돌리기"),
+    ("r / q", "새로고침 / 종료"),
 ];
-const HELP_GAP: &str = "  ";
 
-fn help_lines(width: usize) -> Vec<String> {
-    let gap = UnicodeWidthStr::width(HELP_GAP);
-    let mut lines: Vec<String> = Vec::new();
-    let mut current = String::new();
-    let mut used = 0;
-    for item in HELP_ITEMS {
-        let item_width = UnicodeWidthStr::width(item);
-        let extra = if current.is_empty() { item_width } else { gap + item_width };
-        if !current.is_empty() && used + extra > width {
-            lines.push(std::mem::take(&mut current));
-            used = 0;
-        }
-        if !current.is_empty() {
-            current.push_str(HELP_GAP);
-            used += gap;
-        }
-        current.push_str(item);
-        used += item_width;
+fn help_overlay(frame: &mut Frame, area: ratatui::layout::Rect) {
+    let key_width = HELP_KEYS
+        .iter()
+        .map(|(key, _)| UnicodeWidthStr::width(*key))
+        .max()
+        .unwrap_or(0);
+    let lines: Vec<Line> = HELP_KEYS
+        .iter()
+        .map(|(key, description)| {
+            Line::from(vec![
+                Span::styled(pad(key, key_width), Style::new().fg(Color::Cyan)),
+                Span::raw("  "),
+                Span::styled((*description).to_string(), Style::new().fg(Color::Reset)),
+            ])
+        })
+        .collect();
+
+    let inner_width = (key_width + 40).min(area.width.saturating_sub(4) as usize) as u16;
+    let height = (lines.len() as u16 + 2).min(area.height);
+    let x = area.x + (area.width.saturating_sub(inner_width + 2)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    let popup = ratatui::layout::Rect {
+        x,
+        y,
+        width: (inner_width + 2).min(area.width),
+        height,
+    };
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    let block = Block::bordered().title(" 단축키 · 아무 키나 눌러 닫기 ");
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// 제목줄 요약: 남은 일과 지난 마감만. 나머지는 필요할 때 눌러서 본다.
+fn summary(app: &App) -> String {
+    let open = app
+        .todos
+        .iter()
+        .filter(|todo| !todo.done && todo.parent_id.is_none())
+        .count();
+    let overdue = app
+        .todos
+        .iter()
+        .filter(|todo| {
+            !todo.done && todo.due_date.as_deref().map(|due| days_from_today(due) < 0).unwrap_or(false)
+        })
+        .count();
+    if overdue > 0 {
+        format!(" To-Do  남은 일 {open}  ·  지난 마감 {overdue} ")
+    } else {
+        format!(" To-Do  남은 일 {open} ")
     }
-    if !current.is_empty() {
-        lines.push(current);
-    }
-    lines
 }
 
 pub fn render(frame: &mut Frame, app: &App) {
-    let help = help_lines(frame.area().width as usize);
-    let [list_area, input_area, help_area] = Layout::vertical([
-        Constraint::Min(3),
-        Constraint::Length(3),
-        Constraint::Length(help.len() as u16),
-    ])
-    .areas(frame.area());
+    let [list_area, input_area] =
+        Layout::vertical([Constraint::Min(3), Constraint::Length(3)]).areas(frame.area());
 
-    let root_count = app.todos.iter().filter(|todo| todo.parent_id.is_none()).count();
     let mode_label = match (&app.prompt, &app.mode) {
         (Some(prompt), _) => prompt.label.clone(),
         (None, Mode::Insert) => "-- INSERT --".to_string(),
         (None, Mode::Normal) => "-- NORMAL --".to_string(),
     };
-    let block = Block::bordered().title(format!(" To-Do ({root_count}개)  {mode_label} "));
+    let block = Block::bordered().title(format!("{} {mode_label} ", summary(app)));
     let inner = block.inner(list_area);
     frame.render_widget(block, list_area);
 
@@ -273,8 +320,8 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     let input_title = match (&app.prompt, &app.mode) {
         (Some(prompt), _) => format!(" {} · Enter 저장 · Esc 취소 ", prompt.label),
-        (None, Mode::Insert) => " 새 할 일 · 뒤에 @0715 @내일 로 마감 · Enter 추가 · Esc 명령모드 ".to_string(),
-        (None, Mode::Normal) => " 명령 ".to_string(),
+        (None, Mode::Insert) => " 새 할 일 · @0715 로 마감 · Enter 추가 · Esc 명령모드 ".to_string(),
+        (None, Mode::Normal) => " 명령 · ? 단축키 ".to_string(),
     };
     let input_block = Block::bordered().title(input_title);
     let input_inner = input_block.inner(input_area);
@@ -295,7 +342,12 @@ pub fn render(frame: &mut Frame, app: &App) {
             });
         }
         None => {
-            let mut spans = vec![Span::styled(app.message.clone(), Style::new().fg(Color::DarkGray))];
+            let hint = if app.message.is_empty() {
+                "i 입력   Space 완료   ? 단축키   q 종료".to_string()
+            } else {
+                app.message.clone()
+            };
+            let mut spans = vec![Span::styled(hint, Style::new().fg(Color::DarkGray))];
             if app.sync.in_flight > 0 {
                 spans.push(Span::styled(
                     format!("  ⟳ 저장 중 {}", app.sync.in_flight),
@@ -306,11 +358,9 @@ pub fn render(frame: &mut Frame, app: &App) {
         }
     }
 
-    let help_text = help
-        .into_iter()
-        .map(|line| Line::from(Span::styled(line, Style::new().fg(Color::DarkGray))))
-        .collect::<Vec<_>>();
-    frame.render_widget(Paragraph::new(help_text), help_area);
+    if app.help_open {
+        help_overlay(frame, frame.area());
+    }
 }
 
 fn editor_viewport(editor: &Editor, width: usize) -> (String, usize) {

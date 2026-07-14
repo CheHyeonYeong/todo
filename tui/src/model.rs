@@ -68,6 +68,9 @@ pub struct Todo {
     pub note: Option<String>,
     #[serde(default)]
     pub parent_id: Option<String>,
+    /// 루틴이 만든 할 일이면 그 루틴의 id (목록에서 ↻ 로 표시)
+    #[serde(default)]
+    pub routine_id: Option<String>,
     #[serde(default)]
     pub sort_order: Option<f64>,
 }
