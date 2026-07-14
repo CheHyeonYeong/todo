@@ -12,6 +12,17 @@
 - 실수는 `todo undo`로 한 단계 되돌릴 수 있다.
 - 로그인 필요 오류가 나면 사용자에게 `todo login`을 직접 실행하도록 안내한다.
 
+## 스킬
+
+스킬 원본은 `skills/` 하나뿐이다(`todo-cli`, `verify`). 도구별 디렉터리는 링크로 만든다:
+
+```bash
+npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링크 (클론 후 1회)
+```
+
+`.claude/skills` 등은 .gitignore 대상이므로 **스킬을 고칠 때는 `skills/` 원본을 고친다**. 링크라서 바로 반영된다.
+다른 저장소/사용자는 `npx skills add CheHyeonYeong/todo` 로 설치할 수 있다.
+
 ## 개발 시 참고
 
 - 로컬 서버(파일 저장 모드, 인증 없음): `PORT=34567 DATA_FILE=/tmp/store.json node server/server.js`

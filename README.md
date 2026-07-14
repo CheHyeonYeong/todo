@@ -80,7 +80,18 @@ todo log --week        # 이번 주 작업별 시간 합계
 로그인 세션은 `~/.config/todo/session.json`에 저장되고, 웹앱과 같은 서버를 보므로 데이터가 그대로 연동된다.
 다른 서버를 쓰려면 `TODO_API_BASE=http://localhost:3000`.
 
-AI 에이전트(Claude Code, Codex CLI, `npx skills`)용 사용법은 `skills/todo-cli/SKILL.md`에 있다.
+### AI 에이전트에 붙이기
+
+에이전트가 이 CLI로 할 일을 읽고 고치게 하려면 `todo-cli` 스킬을 깐다. Claude Code, Codex CLI 등 SKILL.md를 읽는
+에이전트면 모두 동작한다.
+
+```bash
+npx skills add CheHyeonYeong/todo -s todo-cli    # 이 저장소 밖에서 (설치할 에이전트는 자동 감지)
+npm run skills                                   # 이 저장소를 클론해 개발 중이라면
+```
+
+스킬 원본은 `skills/`에 있고(`todo-cli`, `verify`), `npm run skills`가 `.claude/skills`·`.codex/skills`·`.agents/skills`로
+링크를 건다. 스킬을 고칠 때는 `skills/` 원본을 고친다.
 
 ### 릴리스
 

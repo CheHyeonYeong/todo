@@ -11,6 +11,7 @@
     "start": "node server/server.js",
     "build": "echo static app: no build step required",
     "preview": "node server/server.js",
+    "skills": "bash scripts/link-skills.sh",
     "postinstall": "node scripts/fetch-cli-binary.js"
   },
   "dependencies": {
