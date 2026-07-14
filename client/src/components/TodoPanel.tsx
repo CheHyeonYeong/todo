@@ -50,16 +50,28 @@ function CategoryChip({
   );
 }
 
+/* 최상위 행끼리의 드래그 순서 변경. 하위 목표 행에는 붙이지 않는다. */
+interface RowDnd {
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onDragOverRow: (id: string | null) => void;
+  onDropRow: (id: string) => void;
+  dropBeforeId: string | null;
+  draggingId: string | null;
+}
+
 function TodoRow({
   todo,
   draggable = false,
   depth = 0,
   children = [],
+  dnd,
 }: {
   todo: Todo;
   draggable?: boolean;
   depth?: number;
   children?: Todo[];
+  dnd?: RowDnd;
 }) {
   const { toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
   const [editing, setEditing] = useState(false);
@@ -93,11 +105,32 @@ function TodoRow({
 
   return (
     <div
-      className={cn("group py-1", depth === 1 && "ml-7 border-l-2 border-border/70 pl-3")}
+      className={cn(
+        "group py-1",
+        depth === 1 && "ml-7 border-l-2 border-border/70 pl-3",
+        dnd?.dropBeforeId === todo.id && "border-t-2 border-emerald-500",
+      )}
       draggable={draggable && !editing && !noteOpen}
       onDragStart={(event) => {
         event.dataTransfer.setData("text/todo-id", todo.id);
         event.dataTransfer.effectAllowed = "move";
+        dnd?.onDragStart(todo.id);
+      }}
+      onDragEnd={() => dnd?.onDragEnd()}
+      onDragOver={(event) => {
+        if (!dnd || !event.dataTransfer.types.includes("text/todo-id") || dnd.draggingId === todo.id) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        dnd.onDragOverRow(todo.id);
+      }}
+      onDragLeave={() => {
+        if (dnd?.dropBeforeId === todo.id) dnd.onDragOverRow(null);
+      }}
+      onDrop={(event) => {
+        if (!dnd || !event.dataTransfer.types.includes("text/todo-id")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dnd.onDropRow(todo.id);
       }}
     >
       <div className="flex items-start gap-2">
@@ -438,10 +471,55 @@ function CalendarView() {
 }
 
 export function TodoPanel() {
-  const { data, updateTodo } = useAppData();
+  const { data, reorderTodos } = useAppData();
   const [view, setView] = useState("list");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [dropScope, setDropScope] = useState<Scope | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropBeforeId, setDropBeforeId] = useState<string | null>(null);
+
+  /* beforeId 앞에 끼워넣는다. beforeId가 없으면 해당 칸 맨 뒤로 보낸다.
+     하위 목표는 부모를 따라가야 하므로 스코프를 함께 맞춘다. */
+  const moveTodo = (id: string, scope: Scope, beforeId: string | null) => {
+    const dragged = data.todos.find((todo) => todo.id === id);
+    if (!dragged || dragged.parentId || id === beforeId) return;
+    const childrenOf = (parentId: string) => sortTodos(data.todos.filter((todo) => todo.parentId === parentId));
+    const others = sortTodos(
+      data.todos.filter((todo) => todo.scope === scope && !todo.parentId && todo.id !== id),
+    );
+    const index = beforeId ? others.findIndex((todo) => todo.id === beforeId) : -1;
+    const at = index < 0 ? others.length : index;
+    const ordered = [...others.slice(0, at), dragged, ...others.slice(at)];
+
+    const items = ordered.flatMap((top, position) => [
+      { id: top.id, parentId: null, scope, sortOrder: position },
+      ...childrenOf(top.id).map((child, childPosition) => ({
+        id: child.id,
+        parentId: top.id,
+        scope,
+        sortOrder: childPosition,
+      })),
+    ]);
+    void reorderTodos(items);
+  };
+
+  const dnd: RowDnd = {
+    onDragStart: setDraggingId,
+    onDragEnd: () => {
+      setDraggingId(null);
+      setDropBeforeId(null);
+    },
+    onDragOverRow: setDropBeforeId,
+    onDropRow: (beforeId) => {
+      const target = data.todos.find((todo) => todo.id === beforeId);
+      if (draggingId && target) moveTodo(draggingId, target.scope, beforeId);
+      setDraggingId(null);
+      setDropBeforeId(null);
+      setDropScope(null);
+    },
+    dropBeforeId,
+    draggingId,
+  };
 
   const categories = useMemo(
     () =>
@@ -521,9 +599,11 @@ export function TodoPanel() {
                   onDrop={(event) => {
                     event.preventDefault();
                     setDropScope(null);
+                    setDropBeforeId(null);
+                    setDraggingId(null);
+                    // 행이 아닌 빈 곳에 떨어뜨리면 이 칸의 맨 뒤로 보낸다.
                     const id = event.dataTransfer.getData("text/todo-id");
-                    const todo = data.todos.find((item) => item.id === id);
-                    if (todo && todo.scope !== scope) updateTodo(id, { scope });
+                    if (id) moveTodo(id, scope, null);
                   }}
                 >
                   <h3 className="mb-2 text-sm font-bold text-muted-foreground">{scopeLabels[scope]}</h3>
@@ -534,6 +614,7 @@ export function TodoPanel() {
                         todo={todo}
                         children={sortTodos(scopeTodos.filter((child) => child.parentId === todo.id))}
                         draggable
+                        dnd={dnd}
                       />
                     ))
                   ) : (

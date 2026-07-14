@@ -22,6 +22,14 @@ export interface SyncStatus {
   tone: "neutral" | "ok" | "warn";
 }
 
+/* PUT /api/todos/order 가 받는 항목. 보낸 할 일만 갱신되고 나머지는 그대로 둔다. */
+export interface TodoOrderItem {
+  id: string;
+  parentId: string | null;
+  scope: Scope;
+  sortOrder: number;
+}
+
 function starterData(): AppData {
   return { todos: [], memos: [], sessions: [] };
 }
@@ -64,6 +72,7 @@ interface AppDataValue {
   toggleTodo: (id: string) => void;
   deleteTodo: (id: string) => void;
   updateTodo: (id: string, patch: TodoPatch) => void;
+  reorderTodos: (items: TodoOrderItem[]) => Promise<boolean>;
   addMemo: (input: { title?: string; body: string }) => void;
   updateMemo: (id: string, patch: MemoPatch) => void;
   deleteMemo: (id: string) => void;
@@ -242,6 +251,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       });
     },
     [persist, sendMutation],
+  );
+
+  /* 드래그로 바뀐 순서/스코프를 저장한다. 서버 저장에 실패하면 이전 상태로 되돌리고 false를 반환한다. */
+  const reorderTodos = useCallback(
+    async (items: TodoOrderItem[]) => {
+      const prevTodos = dataRef.current.todos;
+      const changes = new Map(items.map((item) => [item.id, item]));
+      persist((prev) => ({
+        ...prev,
+        todos: prev.todos.map((todo) => {
+          const change = changes.get(todo.id);
+          return change
+            ? { ...todo, parentId: change.parentId, scope: change.scope, sortOrder: change.sortOrder }
+            : todo;
+        }),
+      }));
+
+      if (!serverBacked.current || authRef.current !== "ready") return true;
+      setSync({ label: "syncing", tone: "neutral" });
+      try {
+        const response = await apiFetch("/api/todos/order", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items }),
+        });
+        if (!response.ok) throw new Error(`Reorder failed: ${response.status}`);
+        setSync({ label: "synced", tone: "ok" });
+        return true;
+      } catch {
+        persist((prev) => ({ ...prev, todos: prevTodos }));
+        setSync({ label: "offline", tone: "warn" });
+        return false;
+      }
+    },
+    [persist],
   );
 
   const deleteTodo = useCallback(
@@ -425,6 +469,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       toggleTodo,
       deleteTodo,
       updateTodo,
+      reorderTodos,
       addMemo,
       updateMemo,
       deleteMemo,
@@ -447,6 +492,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       toggleTodo,
       deleteTodo,
       updateTodo,
+      reorderTodos,
       addMemo,
       updateMemo,
       deleteMemo,
