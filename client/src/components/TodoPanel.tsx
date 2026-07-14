@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/hooks/useAppData";
-import { dateKey, formatDate, labelHue, scopeLabels, todayKey } from "@/lib/helpers";
+import { dateKey, daysFromToday, formatDate, labelHue, scopeLabels, todayKey } from "@/lib/helpers";
 import type { Scope, Todo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -21,15 +21,26 @@ function sortTodos(todos: Todo[]) {
   );
 }
 
-function CategoryChip({ category, onClick, active }: { category: string; onClick?: () => void; active?: boolean }) {
+function CategoryChip({
+  category,
+  onClick,
+  onPointerDown,
+  active,
+}: {
+  category: string;
+  onClick?: () => void;
+  onPointerDown?: (event: React.PointerEvent) => void;
+  active?: boolean;
+}) {
   const hue = labelHue(category);
   return (
     <button
       type="button"
       onClick={onClick}
+      onPointerDown={onPointerDown}
       className={cn(
         "inline-flex max-w-32 shrink-0 items-center truncate rounded-full px-2 py-px text-[11px] font-bold",
-        onClick && "cursor-pointer",
+        (onClick || onPointerDown) && "cursor-pointer",
         active && "ring-2 ring-offset-1",
       )}
       style={{ background: `hsl(${hue} 65% 88%)`, color: `hsl(${hue} 60% 28%)` }}
@@ -56,6 +67,9 @@ function TodoRow({
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState(todo.note || "");
   const [collapsed, setCollapsed] = useState(false);
+
+  const overdueDays = todo.dueDate && !todo.done ? -daysFromToday(todo.dueDate) : 0;
+  const overdue = overdueDays > 0;
 
   useEffect(() => {
     pauseSyncRef.current = editing || noteOpen;
@@ -141,7 +155,15 @@ function TodoRow({
               </span>
             )}
             {todo.dueDate && (
-              <span className="ml-1.5 text-xs font-semibold text-muted-foreground">~{todo.dueDate}</span>
+              <span
+                className={cn(
+                  "ml-1.5 text-xs font-semibold whitespace-nowrap",
+                  overdue ? "font-bold text-red-600" : "text-muted-foreground",
+                )}
+              >
+                ~{todo.dueDate}
+                {overdue && ` (${overdueDays}일 지남)`}
+              </span>
             )}
           </span>
         )}
@@ -214,6 +236,10 @@ function TodoForm({ categories }: { categories: string[] }) {
   const [category, setCategory] = useState("");
   const [scope, setScope] = useState<Scope>("day");
   const [dueDate, setDueDate] = useState(todayKey());
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const typed = category.trim().toLowerCase();
+  const suggestions = categories.filter((item) => item.toLowerCase().includes(typed));
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -225,18 +251,38 @@ function TodoForm({ categories }: { categories: string[] }) {
 
   return (
     <form onSubmit={submit} className="flex shrink-0 flex-wrap items-center gap-2">
-      <Input
-        list="todo-categories"
-        value={category}
-        onChange={(event) => setCategory(event.target.value)}
-        placeholder="카테고리 (선택)"
-        className="w-30 max-sm:flex-1"
-      />
-      <datalist id="todo-categories">
-        {categories.map((item) => (
-          <option key={item} value={item} />
-        ))}
-      </datalist>
+      <div className="relative w-30 max-sm:flex-1">
+        <Input
+          value={category}
+          onChange={(event) => {
+            setCategory(event.target.value);
+            setPickerOpen(true);
+          }}
+          onFocus={() => setPickerOpen(true)}
+          onBlur={() => setPickerOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setPickerOpen(false);
+          }}
+          placeholder="카테고리 (선택)"
+          className="w-full"
+        />
+        {pickerOpen && suggestions.length > 0 && (
+          <div className="absolute top-full left-0 z-20 mt-1 flex max-h-40 w-max min-w-full max-w-64 flex-wrap gap-1.5 overflow-y-auto rounded-lg border bg-popover p-2 shadow-md">
+            {suggestions.map((item) => (
+              <CategoryChip
+                key={item}
+                category={item}
+                // 입력창이 blur되면서 클릭이 취소되지 않도록 기본 동작을 막는다.
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  setCategory(item);
+                  setPickerOpen(false);
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
       <Input
         value={title}
         onChange={(event) => setTitle(event.target.value)}
@@ -410,7 +456,7 @@ export function TodoPanel() {
   }, [categories, categoryFilter]);
 
   return (
-    <Card className="flex min-h-0 flex-1 flex-col gap-0 p-4.5">
+    <Card className="@container flex min-h-0 flex-1 flex-col gap-0 p-4.5">
       <div className="mb-3 flex shrink-0 items-center justify-between gap-4">
         <div>
           <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">todo</p>
@@ -447,7 +493,8 @@ export function TodoPanel() {
               ))}
             </div>
           )}
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* 패널이 좁은 자리로 옮겨질 수 있으므로 뷰포트가 아니라 패널 폭 기준으로 접는다. */}
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto @2xl:grid-cols-3 @2xl:overflow-visible">
             {(Object.keys(scopeLabels) as Scope[]).map((scope) => {
               const scopeTodos = data.todos.filter((todo) => todo.scope === scope);
               const items = sortTodos(scopeTodos.filter((todo) => !todo.parentId)).filter((todo) => {

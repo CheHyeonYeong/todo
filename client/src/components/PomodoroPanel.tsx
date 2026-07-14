@@ -11,8 +11,16 @@ import { cn } from "@/lib/utils";
 const TIMER_KEY = "free-adhd-memo:timer-minutes";
 const COLLAPSE_KEY = "free-adhd-memo:collapse:pomodoro";
 const defaultModeMinutes = { focus: 25, short: 5, long: 15 };
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 180;
 type TimerMode = keyof typeof defaultModeMinutes;
 const modeNames: Record<TimerMode, string> = { focus: "집중", short: "짧은 휴식", long: "긴 휴식" };
+
+function parseMinutes(draft: string) {
+  const value = Number(draft);
+  if (!draft.trim() || !Number.isInteger(value)) return null;
+  return value >= MIN_MINUTES && value <= MAX_MINUTES ? value : null;
+}
 
 function loadTimerMinutes() {
   try {
@@ -50,6 +58,8 @@ export function PomodoroPanel() {
   const { activeSession, recordSession } = useAppData();
   const [minutes, setMinutes] = useState(loadTimerMinutes);
   const [mode, setMode] = useState<TimerMode>("focus");
+  // 입력 중에는 원본 문자열을 들고 있어야 "25"를 지우고 "30"을 칠 수 있다.
+  const [minutesDraft, setMinutesDraft] = useState(() => String(minutes.focus));
   const [secondsLeft, setSecondsLeft] = useState(minutes.focus * 60);
   const [running, setRunning] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
@@ -128,8 +138,11 @@ export function PomodoroPanel() {
   const selectMode = (next: TimerMode) => {
     pause();
     setMode(next);
+    setMinutesDraft(String(minutes[next]));
     setSecondsLeft(minutes[next] * 60);
   };
+
+  const draftMinutes = parseMinutes(minutesDraft);
 
   return (
     <Card className="shrink-0 gap-0 p-4.5">
@@ -169,24 +182,37 @@ export function PomodoroPanel() {
           <Input
             id="timerMinutes"
             type="number"
-            min={1}
-            max={180}
-            className="h-8 w-16 text-center"
-            value={minutes[mode]}
+            min={MIN_MINUTES}
+            max={MAX_MINUTES}
+            className={cn("h-8 w-16 text-center", !draftMinutes && "border-destructive text-destructive")}
+            value={minutesDraft}
             onChange={(event) => {
-              const value = Math.max(1, Math.min(180, Math.round(Number(event.target.value)) || defaultModeMinutes[mode]));
+              const draft = event.target.value;
+              setMinutesDraft(draft);
+              const value = parseMinutes(draft);
+              if (value == null) return;
               const next = { ...minutes, [mode]: value };
               setMinutes(next);
               localStorage.setItem(TIMER_KEY, JSON.stringify(next));
               if (!running) setSecondsLeft(value * 60);
             }}
+            onBlur={() => {
+              // 빈 칸이나 범위 밖인 채로 벗어나면 마지막 유효값으로 되돌린다.
+              if (!draftMinutes) setMinutesDraft(String(minutes[mode]));
+            }}
           />
         </div>
         <p className="mt-2 text-center text-xs font-medium text-muted-foreground">
-          집중 1분 이상이면 타임테이블에 자동 기록
+          {draftMinutes
+            ? "집중 1분 이상이면 타임테이블에 자동 기록"
+            : `${MIN_MINUTES}~${MAX_MINUTES} 사이의 분을 입력하세요`}
         </p>
         <div className="mt-3 flex gap-2">
-          <Button className="flex-1 font-bold" onClick={() => (running ? pause() : start())}>
+          <Button
+            className="flex-1 font-bold"
+            disabled={!running && !draftMinutes}
+            onClick={() => (running ? pause() : start())}
+          >
             {running ? <Square className="size-4" /> : <Play className="size-4" />}
             {running ? "정지" : "시작"}
           </Button>

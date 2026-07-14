@@ -55,6 +55,12 @@ export function todayKey() {
   return dateKey(new Date());
 }
 
+export function daysFromToday(key: string) {
+  const target = new Date(`${key}T00:00:00`).getTime();
+  const today = new Date(`${todayKey()}T00:00:00`).getTime();
+  return Math.round((target - today) / 86400000);
+}
+
 export function shiftDateKey(key: string, delta: number) {
   const date = new Date(`${key}T00:00:00`);
   date.setDate(date.getDate() + delta);
