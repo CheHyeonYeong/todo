@@ -1,4 +1,4 @@
-import { Download, LayoutGrid, LogOut, PenLine } from "lucide-react";
+import { Download, LayoutGrid, LogOut, PenLine, Repeat } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/hooks/useAppData";
@@ -7,10 +7,12 @@ import { cn } from "@/lib/utils";
 export function Topbar({
   onOpenMemo,
   onOpenInstall,
+  onOpenRoutines,
   onResetLayout,
 }: {
   onOpenMemo: () => void;
   onOpenInstall: () => void;
+  onOpenRoutines: () => void;
   onResetLayout?: () => void;
 }) {
   const { email, logout, sync } = useAppData();
@@ -22,6 +24,10 @@ export function Topbar({
         <Button variant="outline" size="sm" className="lg:hidden" onClick={onOpenMemo}>
           <PenLine className="size-4" />
           메모
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onOpenRoutines} title="요일별 반복 할 일">
+          <Repeat className="size-4" />
+          <span className="hidden sm:inline">루틴</span>
         </Button>
         <Button variant="ghost" size="sm" onClick={onOpenInstall} title="앱·터미널 설치 안내">
           <Download className="size-4" />

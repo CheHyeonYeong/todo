@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, StickyNote, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Repeat, StickyNote, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -183,6 +183,9 @@ function TodoRow({
           >
             {todo.category && <CategoryChip category={todo.category} />}
             {todo.category && " "}
+            {todo.routineId && (
+              <Repeat className="mr-1 inline size-3 align-[-1px] text-muted-foreground" aria-label="루틴" />
+            )}
             {todo.title}
             {children.length > 0 && (
               <span className="ml-1.5 text-xs font-bold text-muted-foreground">

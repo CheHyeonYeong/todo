@@ -11,7 +11,18 @@ import {
 } from "react";
 import { apiFetch, refreshAuthToken, setAuthToken, supabase } from "@/lib/api";
 import { extractTags, extractTodos, nowIso, todayKey, uid } from "@/lib/helpers";
-import type { ActiveSession, AppData, Memo, MemoPatch, Scope, Session, Todo, TodoPatch } from "@/lib/types";
+import type {
+  ActiveSession,
+  AppData,
+  Memo,
+  MemoPatch,
+  Routine,
+  RoutinePatch,
+  Scope,
+  Session,
+  Todo,
+  TodoPatch,
+} from "@/lib/types";
 
 const STORAGE_KEY = "free-adhd-memo:v1";
 const ACTIVE_SESSION_KEY = "free-adhd-memo:active-session";
@@ -31,7 +42,7 @@ export interface TodoOrderItem {
 }
 
 function starterData(): AppData {
-  return { todos: [], memos: [], sessions: [] };
+  return { todos: [], memos: [], sessions: [], routines: [] };
 }
 
 function loadLocalData(): AppData {
@@ -42,6 +53,7 @@ function loadLocalData(): AppData {
       todos: Array.isArray(parsed.todos) ? parsed.todos : [],
       memos: Array.isArray(parsed.memos) ? parsed.memos : [],
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      routines: Array.isArray(parsed.routines) ? parsed.routines : [],
     };
   } catch {
     return starterData();
@@ -73,6 +85,9 @@ interface AppDataValue {
   deleteTodo: (id: string) => void;
   updateTodo: (id: string, patch: TodoPatch) => void;
   reorderTodos: (items: TodoOrderItem[]) => Promise<boolean>;
+  addRoutine: (input: { title: string; weekdays: number[]; category?: string | null }) => Promise<void>;
+  updateRoutine: (id: string, patch: RoutinePatch) => Promise<void>;
+  deleteRoutine: (id: string) => Promise<void>;
   addMemo: (input: { title?: string; body: string }) => void;
   updateMemo: (id: string, patch: MemoPatch) => void;
   deleteMemo: (id: string) => void;
@@ -141,6 +156,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         todos: serverData.todos,
         memos: serverData.memos,
         sessions: Array.isArray(serverData.sessions) ? serverData.sessions : prev.sessions,
+        routines: Array.isArray(serverData.routines) ? serverData.routines : prev.routines,
       }));
       serverBacked.current = true;
       setSync({ label: "synced", tone: "ok" });
@@ -342,6 +358,52 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [persist, sendMutation],
   );
 
+  /* 루틴은 서버가 오늘 할 일로 펼쳐주므로, 바꾼 뒤 서버 데이터를 다시 읽어 목록에 반영한다. */
+  const addRoutine = useCallback(
+    async (input: { title: string; weekdays: number[]; category?: string | null }) => {
+      const routine: Routine = {
+        id: uid(),
+        title: input.title,
+        weekdays: input.weekdays,
+        category: input.category || null,
+        active: true,
+        createdAt: nowIso(),
+      };
+      persist((prev) => ({ ...prev, routines: [...prev.routines, routine] }));
+      await sendMutation("/api/routines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(routine),
+      });
+      await loadServerData();
+    },
+    [persist, sendMutation, loadServerData],
+  );
+
+  const updateRoutine = useCallback(
+    async (id: string, patch: RoutinePatch) => {
+      persist((prev) => ({
+        ...prev,
+        routines: prev.routines.map((routine) => (routine.id === id ? { ...routine, ...patch } : routine)),
+      }));
+      await sendMutation(`/api/routines/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      await loadServerData();
+    },
+    [persist, sendMutation, loadServerData],
+  );
+
+  const deleteRoutine = useCallback(
+    async (id: string) => {
+      persist((prev) => ({ ...prev, routines: prev.routines.filter((routine) => routine.id !== id) }));
+      await sendMutation(`/api/routines/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
+    [persist, sendMutation],
+  );
+
   const addMemo = useCallback(
     ({ title = "", body }: { title?: string; body: string }) => {
       const createdAt = nowIso();
@@ -489,6 +551,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteTodo,
       updateTodo,
       reorderTodos,
+      addRoutine,
+      updateRoutine,
+      deleteRoutine,
       addMemo,
       updateMemo,
       deleteMemo,
@@ -512,6 +577,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteTodo,
       updateTodo,
       reorderTodos,
+      addRoutine,
+      updateRoutine,
+      deleteRoutine,
       addMemo,
       updateMemo,
       deleteMemo,

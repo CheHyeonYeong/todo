@@ -6,6 +6,7 @@ import { InstallSheet } from "@/components/InstallSheet";
 import { LoginScreen } from "@/components/LoginScreen";
 import { MemoSheet, MemoWorkspace } from "@/components/MemoWorkspace";
 import { PomodoroPanel } from "@/components/PomodoroPanel";
+import { RoutineSheet } from "@/components/RoutineSheet";
 import { TimetablePanel } from "@/components/TimetablePanel";
 import { TodoPanel } from "@/components/TodoPanel";
 import { Topbar } from "@/components/Topbar";
@@ -232,6 +233,7 @@ function Shell() {
   const panelLayout = usePanelLayout();
   const [memoOpen, setMemoOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
+  const [routinesOpen, setRoutinesOpen] = useState(false);
   const [leftWidth, saveLeftWidth] = useStoredPx(DASHBOARD_WIDTH_KEY);
   const [dockHeight, saveDockHeight] = useStoredPx(MEMO_DOCK_HEIGHT_KEY);
   const leftRef = useRef<HTMLDivElement>(null);
@@ -249,6 +251,7 @@ function Shell() {
         <Topbar
           onOpenMemo={() => setMemoOpen(true)}
           onOpenInstall={() => setInstallOpen(true)}
+          onOpenRoutines={() => setRoutinesOpen(true)}
           onResetLayout={isDesktop && panelLayout.customized ? panelLayout.reset : undefined}
         />
         <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
@@ -310,6 +313,7 @@ function Shell() {
       </div>
       {!isDesktop && <MemoSheet open={memoOpen} onOpenChange={setMemoOpen} />}
       <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
+      <RoutineSheet open={routinesOpen} onOpenChange={setRoutinesOpen} />
     </>
   );
 }

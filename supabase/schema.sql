@@ -25,6 +25,17 @@ create table if not exists public.todos (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.routines (
+  id text primary key,
+  user_id text not null default 'default',
+  title text not null,
+  weekdays smallint[] not null default '{}',
+  category text,
+  active boolean not null default true,
+  created_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.sessions (
   id text primary key,
   user_id text not null default 'default',
@@ -37,6 +48,9 @@ create table if not exists public.sessions (
 alter table public.memos enable row level security;
 alter table public.todos enable row level security;
 alter table public.sessions enable row level security;
+alter table public.routines enable row level security;
+
+alter table public.todos add column if not exists routine_id text references public.routines(id) on delete set null;
 
 alter table public.memos add column if not exists user_id text not null default 'default';
 alter table public.todos add column if not exists user_id text not null default 'default';

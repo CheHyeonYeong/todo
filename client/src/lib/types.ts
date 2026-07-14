@@ -12,8 +12,21 @@ export interface Todo {
   category?: string | null;
   note?: string | null;
   parentId?: string | null;
+  routineId?: string | null;
   sortOrder?: number;
 }
+
+/** 요일별 반복 할 일. weekdays는 0=일 ~ 6=토. */
+export interface Routine {
+  id: string;
+  title: string;
+  weekdays: number[];
+  category?: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+export type RoutinePatch = Partial<Pick<Routine, "title" | "weekdays" | "category" | "active">>;
 
 export type TodoPatch = Partial<Pick<Todo, "title" | "scope" | "dueDate" | "category" | "note">>;
 
@@ -40,6 +53,7 @@ export interface AppData {
   todos: Todo[];
   memos: Memo[];
   sessions: Session[];
+  routines: Routine[];
 }
 
 export interface ActiveSession {

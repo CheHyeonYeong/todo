@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
@@ -17,6 +18,9 @@ const databaseUrl = process.env.DATABASE_URL || "";
 const todosTable = process.env.TODOS_TABLE || "todos";
 const memosTable = process.env.MEMOS_TABLE || "memos";
 const sessionsTable = process.env.SESSIONS_TABLE || "sessions";
+const routinesTable = process.env.ROUTINES_TABLE || "routines";
+// 루틴의 "오늘"은 서버 시간대가 아니라 사용자 시간대 기준이어야 한다.
+const appTimeZone = process.env.APP_TIMEZONE || "Asia/Seoul";
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -96,7 +100,66 @@ function emptyData() {
     todos: [],
     memos: [],
     sessions: [],
+    routines: [],
   };
+}
+
+/** 사용자 시간대의 오늘 날짜(YYYY-MM-DD)와 요일(0=일 ~ 6=토) */
+function todayInAppZone() {
+  const now = new Date();
+  const key = new Intl.DateTimeFormat("en-CA", {
+    timeZone: appTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const weekdayName = new Intl.DateTimeFormat("en-US", { timeZone: appTimeZone, weekday: "short" }).format(now);
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
+  return { key, weekday };
+}
+
+function cleanRoutine(routine) {
+  const weekdays = Array.isArray(routine?.weekdays)
+    ? [...new Set(routine.weekdays.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort()
+    : [];
+  return {
+    id: String(routine?.id || ""),
+    title: String(routine?.title || "").trim(),
+    weekdays,
+    category:
+      typeof routine?.category === "string" && routine.category.trim() ? routine.category.trim() : null,
+    active: routine?.active === undefined ? true : Boolean(routine.active),
+    createdAt: routine?.createdAt || new Date().toISOString(),
+  };
+}
+
+/** 오늘 요일에 해당하는 루틴을 오늘 할 일로 만든다. 이미 만든 건 건너뛴다. */
+function materializeRoutines(data) {
+  const { key: today, weekday } = todayInAppZone();
+  const created = [];
+  for (const routine of data.routines || []) {
+    if (!routine.active || !routine.weekdays.includes(weekday)) continue;
+    const exists = data.todos.some((todo) => todo.routineId === routine.id && todo.dueDate === today);
+    if (exists) continue;
+    const siblings = data.todos.filter((todo) => todo.scope === "day" && !todo.parentId);
+    created.push({
+      id: randomUUID(),
+      title: routine.title,
+      scope: "day",
+      done: false,
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      sourceMemoId: null,
+      dueDate: today,
+      category: routine.category,
+      note: null,
+      parentId: null,
+      routineId: routine.id,
+      sortOrder: Math.max(-1, ...siblings.map((todo) => Number(todo.sortOrder) || 0)) + 1 + created.length,
+    });
+  }
+  data.todos.push(...created);
+  return created;
 }
 
 function cleanTodo(todo) {
@@ -112,6 +175,7 @@ function cleanTodo(todo) {
     category: typeof todo?.category === "string" && todo.category.trim() ? todo.category.trim() : null,
     note: typeof todo?.note === "string" && todo.note.trim() ? todo.note.trim() : null,
     parentId: typeof todo?.parentId === "string" && todo.parentId ? todo.parentId : null,
+    routineId: typeof todo?.routineId === "string" && todo.routineId ? todo.routineId : null,
     sortOrder:
       todo?.sortOrder !== null && todo?.sortOrder !== undefined && Number.isFinite(Number(todo.sortOrder))
         ? Number(todo.sortOrder)
@@ -162,6 +226,9 @@ function cleanData(value) {
     todos,
     memos: Array.isArray(value?.memos) ? value.memos : [],
     sessions: Array.isArray(value?.sessions) ? value.sessions : [],
+    routines: Array.isArray(value?.routines)
+      ? value.routines.map(cleanRoutine).filter((routine) => routine.id && routine.title)
+      : [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -176,6 +243,18 @@ async function readData(userId) {
     if (error.code === "ENOENT") return emptyData();
     throw error;
   }
+}
+
+/** 목록을 내려주기 전에 오늘 몫의 루틴 할 일을 만들어 저장한다. */
+async function readDataWithRoutines(userId) {
+  const data = await readData(userId);
+  const created = materializeRoutines(data);
+  if (created.length === 0) return data;
+  if (pool) {
+    await insertTodos(created, userId);
+    return data;
+  }
+  return writeData(data, userId);
 }
 
 async function writeData(value, userId) {
@@ -231,6 +310,20 @@ async function ensureSchema() {
       updated_at timestamptz not null default now()
     )
   `);
+  await pool.query(`
+    create table if not exists ${quoteIdentifier(routinesTable)} (
+      id text primary key,
+      user_id text not null default 'default',
+      title text not null,
+      weekdays smallint[] not null default '{}',
+      category text,
+      active boolean not null default true,
+      created_at timestamptz not null,
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists routine_id text references ${quoteIdentifier(routinesTable)}(id) on delete set null`);
+  await pool.query(`create index if not exists ${quoteIdentifier(`${todosTable}_routine_idx`)} on ${quoteIdentifier(todosTable)} (user_id, routine_id, due_date)`);
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(todosTable)} add column if not exists user_id text not null default 'default'`);
   await pool.query(`alter table ${quoteIdentifier(memosTable)} add column if not exists starred boolean not null default false`);
@@ -274,10 +367,19 @@ async function readPostgresData(userId) {
   );
   const todos = await pool.query(
     `
-      select id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, sort_order
+      select id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, routine_id, sort_order
       from ${quoteIdentifier(todosTable)}
       where user_id = $1
       order by scope, parent_id nulls first, sort_order asc nulls last, created_at asc
+    `,
+    [userId],
+  );
+  const routines = await pool.query(
+    `
+      select id, title, weekdays, category, active, created_at
+      from ${quoteIdentifier(routinesTable)}
+      where user_id = $1
+      order by created_at asc
     `,
     [userId],
   );
@@ -312,6 +414,7 @@ async function readPostgresData(userId) {
       category: todo.category || undefined,
       note: todo.note || undefined,
       parentId: todo.parent_id || undefined,
+      routineId: todo.routine_id || undefined,
       sortOrder: todo.sort_order === null ? undefined : Number(todo.sort_order),
     })),
     sessions: sessions.rows.map((session) => ({
@@ -320,7 +423,31 @@ async function readPostgresData(userId) {
       startedAt: session.started_at.toISOString(),
       endedAt: session.ended_at.toISOString(),
     })),
+    routines: routines.rows.map((routine) => ({
+      id: routine.id,
+      title: routine.title,
+      weekdays: (routine.weekdays || []).map(Number),
+      category: routine.category || null,
+      active: routine.active,
+      createdAt: routine.created_at.toISOString(),
+    })),
   };
+}
+
+/** 루틴이 만든 할 일만 따로 넣는다(전체 재작성 없이). */
+async function insertTodos(todos, userId) {
+  if (!pool || todos.length === 0) return;
+  for (const todo of todos.map(cleanTodo).filter((todo) => todo.id && todo.title)) {
+    await pool.query(
+      `
+        insert into ${quoteIdentifier(todosTable)}
+          (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, routine_id, sort_order, updated_at)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
+        on conflict (id) do nothing
+      `,
+      [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note, todo.parentId, todo.routineId, todo.sortOrder],
+    );
+  }
 }
 
 async function writePostgresData(value, userId) {
@@ -332,6 +459,16 @@ async function writePostgresData(value, userId) {
     await client.query(`delete from ${quoteIdentifier(todosTable)} where user_id = $1`, [userId]);
     await client.query(`delete from ${quoteIdentifier(memosTable)} where user_id = $1`, [userId]);
     await client.query(`delete from ${quoteIdentifier(sessionsTable)} where user_id = $1`, [userId]);
+    await client.query(`delete from ${quoteIdentifier(routinesTable)} where user_id = $1`, [userId]);
+    for (const routine of data.routines.map(cleanRoutine).filter((routine) => routine.id && routine.title)) {
+      await client.query(
+        `
+          insert into ${quoteIdentifier(routinesTable)} (id, user_id, title, weekdays, category, active, created_at, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, now())
+        `,
+        [routine.id, userId, routine.title, routine.weekdays, routine.category, routine.active, routine.createdAt],
+      );
+    }
     for (const memo of data.memos.map(cleanMemo).filter((memo) => memo.id && (memo.body || memo.title))) {
       await client.query(
         `
@@ -345,10 +482,10 @@ async function writePostgresData(value, userId) {
       await client.query(
         `
           insert into ${quoteIdentifier(todosTable)}
-            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, sort_order, updated_at)
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
+            (id, user_id, title, scope, done, created_at, completed_at, source_memo_id, due_date, category, note, parent_id, routine_id, sort_order, updated_at)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now())
         `,
-        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note, todo.parentId, todo.sortOrder],
+        [todo.id, userId, todo.title, todo.scope, todo.done, todo.createdAt, todo.completedAt, todo.sourceMemoId, todo.dueDate, todo.category, todo.note, todo.parentId, todo.routineId, todo.sortOrder],
       );
     }
     for (const session of data.sessions.map(cleanSession).filter((session) => session.id)) {
@@ -914,6 +1051,85 @@ async function deleteMemoById(id, userId) {
   await pool.query(`delete from ${quoteIdentifier(memosTable)} where id = $1 and user_id = $2`, [id, userId]);
 }
 
+async function createRoutine(value, userId) {
+  const routine = cleanRoutine({ ...value, id: value?.id || randomUUID(), createdAt: new Date().toISOString() });
+  if (!routine.title) throw new Error("Routine title is required");
+
+  if (pool) {
+    await ensureSchema();
+    await pool.query(
+      `
+        insert into ${quoteIdentifier(routinesTable)} (id, user_id, title, weekdays, category, active, created_at, updated_at)
+        values ($1, $2, $3, $4, $5, $6, $7, now())
+      `,
+      [routine.id, userId, routine.title, routine.weekdays, routine.category, routine.active, routine.createdAt],
+    );
+    return routine;
+  }
+
+  const data = await readData(userId);
+  data.routines.push(routine);
+  await writeData(data, userId);
+  return routine;
+}
+
+async function updateRoutine(id, patch, userId) {
+  const fields = {};
+  if (typeof patch?.title === "string" && patch.title.trim()) fields.title = patch.title.trim();
+  if (Array.isArray(patch?.weekdays)) fields.weekdays = cleanRoutine(patch).weekdays;
+  if (patch?.category !== undefined) {
+    fields.category = typeof patch.category === "string" && patch.category.trim() ? patch.category.trim() : null;
+  }
+  if (patch?.active !== undefined) fields.active = Boolean(patch.active);
+
+  if (pool) {
+    await ensureSchema();
+    const existing = await pool.query(
+      `select id, title, weekdays, category, active, created_at from ${quoteIdentifier(routinesTable)} where id = $1 and user_id = $2`,
+      [id, userId],
+    );
+    if (existing.rowCount === 0) return null;
+    const current = existing.rows[0];
+    const next = cleanRoutine({
+      id,
+      title: fields.title ?? current.title,
+      weekdays: fields.weekdays ?? (current.weekdays || []).map(Number),
+      category: fields.category !== undefined ? fields.category : current.category,
+      active: fields.active !== undefined ? fields.active : current.active,
+      createdAt: current.created_at.toISOString(),
+    });
+    await pool.query(
+      `
+        update ${quoteIdentifier(routinesTable)}
+        set title = $3, weekdays = $4, category = $5, active = $6, updated_at = now()
+        where id = $1 and user_id = $2
+      `,
+      [id, userId, next.title, next.weekdays, next.category, next.active],
+    );
+    return next;
+  }
+
+  const data = await readData(userId);
+  const index = data.routines.findIndex((routine) => routine.id === id);
+  if (index < 0) return null;
+  data.routines[index] = cleanRoutine({ ...data.routines[index], ...fields });
+  await writeData(data, userId);
+  return data.routines[index];
+}
+
+/** 루틴을 지워도 이미 만들어진 할 일은 남긴다(지난 기록이므로). */
+async function deleteRoutineById(id, userId) {
+  if (pool) {
+    await ensureSchema();
+    await pool.query(`delete from ${quoteIdentifier(routinesTable)} where id = $1 and user_id = $2`, [id, userId]);
+    return;
+  }
+  const data = await readData(userId);
+  data.routines = data.routines.filter((routine) => routine.id !== id);
+  data.todos = data.todos.map((todo) => (todo.routineId === id ? { ...todo, routineId: null } : todo));
+  await writeData(data, userId);
+}
+
 async function readRequestBody(request) {
   let body = "";
   for await (const chunk of request) {
@@ -1042,13 +1258,37 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (pathname === "/api/routines" && request.method === "POST") {
+    const body = await readRequestBody(request);
+    json(response, 201, await createRoutine(JSON.parse(body || "{}"), userId));
+    return;
+  }
+
+  const routineMatch = pathname.match(/^\/api\/routines\/([^/]+)$/);
+  if (routineMatch && request.method === "PATCH") {
+    const body = await readRequestBody(request);
+    const routine = await updateRoutine(decodeURIComponent(routineMatch[1]), JSON.parse(body || "{}"), userId);
+    if (!routine) {
+      json(response, 404, { error: "Routine not found" });
+      return;
+    }
+    json(response, 200, routine);
+    return;
+  }
+
+  if (routineMatch && request.method === "DELETE") {
+    await deleteRoutineById(decodeURIComponent(routineMatch[1]), userId);
+    json(response, 200, { ok: true });
+    return;
+  }
+
   if (pathname !== "/api/data") {
     json(response, 404, { error: "Not found" });
     return;
   }
 
   if (request.method === "GET") {
-    json(response, 200, await readData(userId));
+    json(response, 200, await readDataWithRoutines(userId));
     return;
   }
 
