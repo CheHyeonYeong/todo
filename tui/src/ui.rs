@@ -1,6 +1,6 @@
 use crate::app::{App, Editor, Mode};
 use crate::model::{scope_label, Row};
-use crate::util::{local_timestamp, today_key};
+use crate::util::{days_from_today, local_timestamp};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
@@ -57,9 +57,26 @@ fn row_line<'a>(row: &Row, selected: bool, width: usize, filtered: bool) -> Line
         _ => String::new(),
     };
     let created = local_timestamp(&todo.created_at, width >= 46);
+    let overdue_days = match &todo.due_date {
+        Some(due) if !todo.done => -days_from_today(due),
+        _ => 0,
+    };
+    // 마감은 폭에 상관없이 보여준다. 좁으면 "7/15", 넓으면 "⏳마감 2026-07-15 (3일 지남)".
     let due = match &todo.due_date {
-        Some(due) if width >= 58 => format!("  ⏳마감 {due}"),
-        _ => String::new(),
+        Some(due) => {
+            let overdue_tag = if overdue_days > 0 && width >= 58 {
+                format!(" ({overdue_days}일 지남)")
+            } else {
+                String::new()
+            };
+            if width >= 58 {
+                format!("  ⏳마감 {due}{overdue_tag}")
+            } else {
+                let short = due.get(5..).unwrap_or(due).replace('-', "/");
+                format!("  {}", short.trim_start_matches('0'))
+            }
+        }
+        None => String::new(),
     };
     let metadata_width = UnicodeWidthStr::width(created.as_str()) + UnicodeWidthStr::width(due.as_str());
     let left_width = width.saturating_sub(metadata_width + 1).max(4);
@@ -67,12 +84,7 @@ fn row_line<'a>(row: &Row, selected: bool, width: usize, filtered: bool) -> Line
         &format!("{tree}{mark} {category_tag}{}{progress}", todo.title),
         left_width,
     );
-    let overdue = !todo.done
-        && todo
-            .due_date
-            .as_deref()
-            .map(|due| due < today_key().as_str())
-            .unwrap_or(false);
+    let overdue = overdue_days > 0;
     let text_color = if todo.done {
         Color::DarkGray
     } else if row.depth > 0 {
@@ -261,7 +273,7 @@ pub fn render(frame: &mut Frame, app: &App) {
 
     let input_title = match (&app.prompt, &app.mode) {
         (Some(prompt), _) => format!(" {} · Enter 저장 · Esc 취소 ", prompt.label),
-        (None, Mode::Insert) => " 새 할 일 · Enter 추가 · Esc 명령모드 ".to_string(),
+        (None, Mode::Insert) => " 새 할 일 · 뒤에 @0715 @내일 로 마감 · Enter 추가 · Esc 명령모드 ".to_string(),
         (None, Mode::Normal) => " 명령 ".to_string(),
     };
     let input_block = Block::bordered().title(input_title);

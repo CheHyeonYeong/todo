@@ -5,7 +5,7 @@ use crate::model::{
 };
 use crate::sync::{Event as SyncEvent, Job, Sync};
 use crate::ui;
-use crate::util::{new_uuid, now_iso};
+use crate::util::{new_uuid, now_iso, split_due_suffix, today_key};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -269,24 +269,34 @@ impl App {
         self.rows().into_iter().nth(self.selected)
     }
 
-    fn create_todo(&mut self, title: &str, parent_id: Option<String>) {
+    fn create_todo(&mut self, input: &str, parent_id: Option<String>) {
+        // "제목 @0715"처럼 마감을 뒤에 붙일 수 있다. 안 붙이면 웹과 같이 오늘이 마감.
+        let (title, due) = split_due_suffix(input);
+        if title.is_empty() {
+            return;
+        }
         let parent = parent_id
             .as_deref()
             .and_then(|id| self.todos.iter().find(|todo| todo.id == id));
         let scope = parent.map(|todo| todo.scope.clone()).unwrap_or_else(|| "day".to_string());
         let category = if parent_id.is_some() { None } else { self.category.clone() };
+        let due_date = if parent_id.is_some() {
+            due
+        } else {
+            due.or_else(|| Some(today_key()))
+        };
         if let Some(parent) = &parent_id {
             self.collapsed.remove(parent);
         }
         let todo = Todo {
             id: new_uuid(),
-            title: title.to_string(),
+            title: title.clone(),
             scope: scope.clone(),
             done: false,
             created_at: now_iso(),
             completed_at: None,
             source_memo_id: None,
-            due_date: None,
+            due_date,
             category,
             note: None,
             sort_order: Some(local::next_sort_order(&self.todos, &scope, parent_id.as_deref())),

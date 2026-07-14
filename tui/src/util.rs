@@ -65,6 +65,49 @@ pub fn today_key() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
 
+/// 오늘부터 며칠 뒤/전인지. 음수면 지난 날짜.
+pub fn days_from_today(key: &str) -> i64 {
+    let Ok(date) = chrono::NaiveDate::parse_from_str(key, "%Y-%m-%d") else {
+        return 0;
+    };
+    (date - Local::now().date_naive()).num_days()
+}
+
+/// 새 할 일 입력줄의 마감 접미사를 떼어낸다: "보고서 @0715" -> ("보고서", Some("2026-07-15"))
+/// @오늘 @내일 @모레 @MMDD @YYYY-MM-DD 를 받는다. 해석 못 하면 접미사를 제목에 그대로 남긴다.
+pub fn split_due_suffix(input: &str) -> (String, Option<String>) {
+    let trimmed = input.trim();
+    let Some((title, token)) = trimmed.rsplit_once('@') else {
+        return (trimmed.to_string(), None);
+    };
+    let token = token.trim();
+    let Some(due) = parse_due_token(token) else {
+        return (trimmed.to_string(), None);
+    };
+    (title.trim().to_string(), Some(due))
+}
+
+fn parse_due_token(token: &str) -> Option<String> {
+    let today = Local::now().date_naive();
+    let shift = |days: i64| Some((today + chrono::Duration::days(days)).format("%Y-%m-%d").to_string());
+    match token {
+        "오늘" | "today" => return shift(0),
+        "내일" | "tomorrow" => return shift(1),
+        "모레" => return shift(2),
+        _ => {}
+    }
+    if token.len() == 4 && token.chars().all(|ch| ch.is_ascii_digit()) {
+        let month: u32 = token[0..2].parse().ok()?;
+        let day: u32 = token[2..4].parse().ok()?;
+        use chrono::Datelike;
+        return chrono::NaiveDate::from_ymd_opt(today.year(), month, day)
+            .map(|date| date.format("%Y-%m-%d").to_string());
+    }
+    chrono::NaiveDate::parse_from_str(token, "%Y-%m-%d")
+        .ok()
+        .map(|date| date.format("%Y-%m-%d").to_string())
+}
+
 /// 이번 주 월요일의 날짜 키
 pub fn monday_key() -> String {
     use chrono::Datelike;
