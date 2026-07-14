@@ -1,12 +1,15 @@
 use crate::api::Client;
+use crate::local;
 use crate::model::{
     category_list, normalized_items, ordered_siblings, valid_date, visible_tree, OrderItem, Row, Todo,
 };
+use crate::sync::{Event as SyncEvent, Job, Sync};
 use crate::ui;
 use crate::util::{new_uuid, now_iso};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
@@ -95,20 +98,23 @@ pub struct Prompt {
     pub todo_id: String,
 }
 
-pub enum UndoOp {
-    DeleteCreated(String),
+/// 하나의 변경. 로컬에 즉시 반영하고 같은 내용을 백그라운드로 서버에 보낸다.
+/// perform()이 역연산을 돌려주므로 undo 스택에는 그것만 쌓으면 된다.
+pub enum Op {
+    Create(Todo),
     Patch(String, Value),
+    Delete(String),
     Restore(Vec<Todo>),
     Reorder(Vec<OrderItem>),
 }
 
 pub struct UndoEntry {
     pub label: String,
-    pub op: UndoOp,
+    pub op: Op,
 }
 
 pub struct App {
-    pub client: Client,
+    pub sync: Sync,
     pub todos: Vec<Todo>,
     pub mode: Mode,
     pub input: Editor,
@@ -120,13 +126,19 @@ pub struct App {
     pub undo_stack: Vec<UndoEntry>,
     pub message: String,
     pub quit: bool,
+    /// 순서 이동은 연타되기 쉬워서 이 시각까지 모았다가 한 번만 보낸다.
+    reorder_due: Option<Instant>,
+    /// 새로고침 요청이 이미 워커에 가 있는지 (중복 요청 방지)
+    refresh_pending: bool,
 }
 
+const REORDER_DEBOUNCE: Duration = Duration::from_millis(300);
+
 impl App {
-    fn new(client: Client) -> Self {
-        App {
-            client,
-            todos: Vec::new(),
+    fn new(sync: Sync, todos: Vec<Todo>) -> Self {
+        let mut app = App {
+            sync,
+            todos,
             mode: Mode::Insert,
             input: Editor::new(""),
             prompt: None,
@@ -137,7 +149,11 @@ impl App {
             undo_stack: Vec::new(),
             message: String::new(),
             quit: false,
-        }
+            reorder_due: None,
+            refresh_pending: false,
+        };
+        app.sync_selection(None);
+        app
     }
 
     pub fn rows(&self) -> Vec<Row> {
@@ -163,19 +179,87 @@ impl App {
         self.selected_id = Some(rows[index].todo.id.clone());
     }
 
-    fn refresh(&mut self, preferred: Option<String>) -> Result<(), String> {
-        self.todos = self.client.fetch_todos()?;
+    /// 서버 상태로 다시 맞춘다 (수동 새로고침, 쓰기 실패 후 복구).
+    fn adopt(&mut self, todos: Vec<Todo>) {
+        self.todos = todos;
         if let Some(active) = &self.category {
             if !self.categories().contains(active) {
                 self.category = None;
             }
         }
-        self.sync_selection(preferred);
-        Ok(())
+        self.sync_selection(None);
     }
 
-    fn push_undo(&mut self, label: impl Into<String>, op: UndoOp) {
-        self.undo_stack.push(UndoEntry { label: label.into(), op });
+    /// 변경을 로컬에 즉시 반영하고 서버에는 백그라운드로 보낸다. 역연산을 돌려준다.
+    fn perform(&mut self, op: Op) -> Op {
+        match op {
+            Op::Create(todo) => {
+                let id = todo.id.clone();
+                local::create(&mut self.todos, todo.clone());
+                self.sync.send(Job::Create(todo));
+                Op::Delete(id)
+            }
+            Op::Patch(id, patch) => {
+                let inverse = self.inverse_patch(&id, &patch);
+                local::patch(&mut self.todos, &id, &patch);
+                self.sync.send(Job::Patch(id.clone(), patch));
+                Op::Patch(id, inverse)
+            }
+            Op::Delete(id) => {
+                let removed = local::delete(&mut self.todos, &id);
+                self.sync.send(Job::Delete(id));
+                Op::Restore(removed)
+            }
+            Op::Restore(todos) => {
+                let id = todos.first().map(|todo| todo.id.clone()).unwrap_or_default();
+                local::restore(&mut self.todos, &todos);
+                self.sync.send(Job::Restore(todos));
+                Op::Delete(id)
+            }
+            Op::Reorder(items) => {
+                let before = normalized_items(&self.todos);
+                local::reorder(&mut self.todos, &items);
+                // 연타를 모아서 한 번만 보낸다. 보낼 내용은 flush 시점의 트리 전체다.
+                self.reorder_due = Some(Instant::now() + REORDER_DEBOUNCE);
+                Op::Reorder(before)
+            }
+        }
+    }
+
+    /// patch에 들어있는 필드들의 현재 값 (undo용)
+    fn inverse_patch(&self, id: &str, patch: &Value) -> Value {
+        let Some(todo) = self.todos.iter().find(|todo| todo.id == id) else {
+            return json!({});
+        };
+        let mut inverse = serde_json::Map::new();
+        if patch.get("title").is_some() {
+            inverse.insert("title".into(), json!(todo.title));
+        }
+        if patch.get("dueDate").is_some() {
+            inverse.insert("dueDate".into(), json!(todo.due_date));
+        }
+        if patch.get("category").is_some() {
+            inverse.insert("category".into(), json!(todo.category.clone().unwrap_or_default()));
+        }
+        if patch.get("note").is_some() {
+            inverse.insert("note".into(), json!(todo.note.clone().unwrap_or_default()));
+        }
+        if patch.get("scope").is_some() {
+            inverse.insert("scope".into(), json!(todo.scope));
+        }
+        if patch.get("done").is_some() {
+            inverse.insert("done".into(), json!(todo.done));
+            inverse.insert("completedAt".into(), json!(todo.completed_at));
+        }
+        Value::Object(inverse)
+    }
+
+    fn mutate(&mut self, label: impl Into<String>, op: Op) {
+        let inverse = self.perform(op);
+        self.undo_stack.push(UndoEntry {
+            label: label.into(),
+            op: inverse,
+        });
         if self.undo_stack.len() > 50 {
             self.undo_stack.remove(0);
         }
@@ -185,113 +269,121 @@ impl App {
         self.rows().into_iter().nth(self.selected)
     }
 
-    fn create_todo(&mut self, title: &str, parent_id: Option<String>) -> Result<(), String> {
-        let parent_scope = parent_id
+    fn create_todo(&mut self, title: &str, parent_id: Option<String>) {
+        let parent = parent_id
             .as_deref()
-            .and_then(|id| self.todos.iter().find(|todo| todo.id == id))
-            .map(|todo| todo.scope.clone());
-        let id = new_uuid();
-        let mut body = json!({
-            "id": id,
-            "title": title,
-            "scope": parent_scope.unwrap_or_else(|| "day".to_string()),
-            "done": false,
-            "createdAt": now_iso(),
-        });
+            .and_then(|id| self.todos.iter().find(|todo| todo.id == id));
+        let scope = parent.map(|todo| todo.scope.clone()).unwrap_or_else(|| "day".to_string());
+        let category = if parent_id.is_some() { None } else { self.category.clone() };
         if let Some(parent) = &parent_id {
-            body["parentId"] = json!(parent);
             self.collapsed.remove(parent);
-        } else if let Some(category) = &self.category {
-            body["category"] = json!(category);
         }
-        self.client.create_todo(&body)?;
-        self.push_undo(format!("추가: {title}"), UndoOp::DeleteCreated(id.clone()));
-        self.refresh(Some(id))
+        let todo = Todo {
+            id: new_uuid(),
+            title: title.to_string(),
+            scope: scope.clone(),
+            done: false,
+            created_at: now_iso(),
+            completed_at: None,
+            source_memo_id: None,
+            due_date: None,
+            category,
+            note: None,
+            sort_order: Some(local::next_sort_order(&self.todos, &scope, parent_id.as_deref())),
+            parent_id,
+        };
+        let id = todo.id.clone();
+        self.mutate(format!("추가: {title}"), Op::Create(todo));
+        self.sync_selection(Some(id));
     }
 
-    fn patch_with_undo(&mut self, id: &str, patch: Value, undo_label: String, undo_patch: Value) -> Result<(), String> {
-        self.client.patch_todo(id, &patch)?;
-        self.push_undo(undo_label, UndoOp::Patch(id.to_string(), undo_patch));
-        self.refresh(Some(id.to_string()))
-    }
-
-    fn save_tree(&mut self, next: &[Todo], preferred: Option<String>) -> Result<(), String> {
-        let before = normalized_items(&self.todos);
-        self.client.reorder(&normalized_items(next))?;
-        self.push_undo("이동", UndoOp::Reorder(before));
-        self.refresh(preferred)
-    }
-
-    fn apply_undo(&mut self) -> Result<(), String> {
+    fn apply_undo(&mut self) {
         let Some(entry) = self.undo_stack.pop() else {
             self.message = "되돌릴 작업 없음".to_string();
-            return Ok(());
+            return;
         };
-        match &entry.op {
-            UndoOp::DeleteCreated(id) => self.client.delete_todo(id)?,
-            UndoOp::Patch(id, patch) => self.client.patch_todo(id, patch)?,
-            UndoOp::Restore(todos) => {
-                for todo in todos {
-                    self.client.restore_todo(todo)?;
-                }
-            }
-            UndoOp::Reorder(items) => self.client.reorder(items)?,
-        }
-        self.refresh(None)?;
+        self.perform(entry.op);
+        self.sync_selection(None);
         self.message = format!("되돌림: {}", entry.label);
-        Ok(())
     }
 
-    fn submit_prompt(&mut self) -> Result<(), String> {
-        let Some(prompt) = self.prompt.take() else { return Ok(()) };
+    /// debounce가 끝났으면 순서 저장을 실제로 보낸다.
+    fn flush_reorder(&mut self, force: bool) {
+        let Some(due) = self.reorder_due else { return };
+        if !force && Instant::now() < due {
+            return;
+        }
+        self.reorder_due = None;
+        let items = normalized_items(&self.todos);
+        self.sync.send(Job::Reorder(items));
+    }
+
+    fn drain_sync(&mut self) {
+        while let Ok(event) = self.sync.events.try_recv() {
+            match event {
+                SyncEvent::Done => self.sync.settle(),
+                SyncEvent::Failed(error) => {
+                    self.sync.settle();
+                    self.message = format!("저장 실패: {error}");
+                    // 로컬이 서버와 어긋났으니 서버 상태를 다시 받아 맞춘다.
+                    // 여러 쓰기가 한꺼번에 실패해도 새로고침은 한 번만 건다.
+                    if !self.refresh_pending {
+                        self.refresh_pending = true;
+                        self.sync.send(Job::Refresh);
+                    }
+                }
+                SyncEvent::Todos(todos) => {
+                    self.refresh_pending = false;
+                    self.adopt(todos);
+                }
+                SyncEvent::RefreshFailed(error) => {
+                    // 여기서 다시 새로고침을 걸면 서버가 죽어 있을 때 무한 재시도가 된다.
+                    // 로컬 상태는 그대로 두고, 복구는 사용자가 r 로 다시 시도한다.
+                    self.refresh_pending = false;
+                    self.message = format!("새로고침 실패: {error} (r 로 재시도)");
+                }
+            }
+        }
+    }
+
+    fn submit_prompt(&mut self) {
+        let Some(prompt) = self.prompt.take() else { return };
         let value = prompt.editor.value().trim().to_string();
         let before = self.todos.iter().find(|todo| todo.id == prompt.todo_id).cloned();
         match prompt.kind {
             PromptKind::Child => {
                 if !value.is_empty() {
-                    self.create_todo(&value, Some(prompt.todo_id))?;
+                    self.create_todo(&value, Some(prompt.todo_id));
                 }
             }
             PromptKind::Edit => {
                 if let (false, Some(before)) = (value.is_empty(), before) {
-                    self.patch_with_undo(
-                        &prompt.todo_id,
-                        json!({ "title": value }),
+                    self.mutate(
                         format!("편집: {}", before.title),
-                        json!({ "title": before.title }),
-                    )?;
+                        Op::Patch(prompt.todo_id, json!({ "title": value })),
+                    );
                 }
             }
             PromptKind::Due => {
                 if !value.is_empty() && !valid_date(&value) {
                     self.message = "마감일 형식: YYYY-MM-DD".to_string();
                     self.prompt = Some(prompt);
-                    return Ok(());
+                    return;
                 }
                 let due = if value.is_empty() { Value::Null } else { json!(value) };
-                let previous = before.and_then(|todo| todo.due_date).map(Value::from).unwrap_or(Value::Null);
-                self.patch_with_undo(
-                    &prompt.todo_id,
-                    json!({ "dueDate": due }),
-                    "마감일 변경".to_string(),
-                    json!({ "dueDate": previous }),
-                )?;
+                self.mutate("마감일 변경", Op::Patch(prompt.todo_id, json!({ "dueDate": due })));
             }
             PromptKind::Category => {
-                let previous = before.and_then(|todo| todo.category).unwrap_or_default();
-                self.patch_with_undo(
-                    &prompt.todo_id,
-                    json!({ "category": value }),
-                    "카테고리 변경".to_string(),
-                    json!({ "category": previous }),
-                )?;
+                self.mutate(
+                    "카테고리 변경",
+                    Op::Patch(prompt.todo_id.clone(), json!({ "category": value })),
+                );
                 if self.category.is_some() && self.category.as_deref() != Some(value.as_str()) {
                     self.category = None;
-                    self.sync_selection(Some(prompt.todo_id));
                 }
+                self.sync_selection(Some(prompt.todo_id));
             }
         }
-        Ok(())
     }
 
     fn cycle_category(&mut self, forward: bool) {
@@ -323,52 +415,62 @@ impl App {
         self.selected_id = Some(rows[next].todo.id.clone());
     }
 
-    fn reorder_selected(&mut self, down: bool) -> Result<(), String> {
-        let Some(row) = self.selected_row() else { return Ok(()) };
+    /// 옮긴 뒤의 트리를 Op::Reorder 항목으로 만든다.
+    fn reorder_items(&self, changed: &[Todo]) -> Vec<OrderItem> {
+        let mut next = self.todos.clone();
+        for todo in changed {
+            if let Some(slot) = next.iter_mut().find(|item| item.id == todo.id) {
+                *slot = todo.clone();
+            }
+        }
+        normalized_items(&next)
+    }
+
+    fn reorder_selected(&mut self, down: bool) {
+        let Some(row) = self.selected_row() else { return };
         let scope = row.todo.scope.clone();
         let parent = row.todo.parent_id.clone();
-        let sibling_ids: Vec<String> = ordered_siblings(&self.todos, &scope, parent.as_deref())
+        let siblings: Vec<Todo> = ordered_siblings(&self.todos, &scope, parent.as_deref())
             .into_iter()
-            .map(|todo| todo.id.clone())
+            .cloned()
             .collect();
+        // 카테고리 탭을 보고 있으면 그 탭 안의 이웃끼리만 자리를 바꾼다.
         let visible_ids: Vec<String> = if parent.is_some() || self.category.is_none() {
-            sibling_ids.clone()
+            siblings.iter().map(|todo| todo.id.clone()).collect()
         } else {
-            let filter = self.category.clone();
-            ordered_siblings(&self.todos, &scope, None)
-                .into_iter()
-                .filter(|todo| todo.category == filter)
+            siblings
+                .iter()
+                .filter(|todo| todo.category == self.category)
                 .map(|todo| todo.id.clone())
                 .collect()
         };
         let Some(visible_index) = visible_ids.iter().position(|id| *id == row.todo.id) else {
-            return Ok(());
+            return;
         };
         let other_visible = if down { visible_index + 1 } else { visible_index.wrapping_sub(1) };
-        let Some(other_id) = visible_ids.get(other_visible) else { return Ok(()) };
-        let mut ids = sibling_ids;
-        let index = ids.iter().position(|id| *id == row.todo.id).unwrap();
-        let other_index = ids.iter().position(|id| id == other_id).unwrap();
+        let Some(other_id) = visible_ids.get(other_visible) else { return };
+
+        let mut ids: Vec<String> = siblings.iter().map(|todo| todo.id.clone()).collect();
+        let index = ids.iter().position(|id| *id == row.todo.id).expect("선택 항목은 형제 목록에 있다");
+        let other_index = ids.iter().position(|id| id == other_id).expect("이웃도 형제 목록에 있다");
         ids.swap(index, other_index);
         let order: HashMap<&String, usize> = ids.iter().enumerate().map(|(position, id)| (id, position)).collect();
-        let next: Vec<Todo> = self
-            .todos
-            .iter()
-            .cloned()
+        let changed: Vec<Todo> = siblings
+            .into_iter()
             .map(|mut todo| {
-                if let Some(position) = order.get(&todo.id) {
-                    todo.sort_order = Some(*position as f64);
-                }
+                todo.sort_order = order.get(&todo.id).map(|position| *position as f64);
                 todo
             })
             .collect();
-        self.save_tree(&next, Some(row.todo.id.clone()))
+        let items = self.reorder_items(&changed);
+        self.mutate("이동", Op::Reorder(items));
+        self.sync_selection(Some(row.todo.id));
     }
 
-    fn nest_selected(&mut self) -> Result<(), String> {
-        let Some(row) = self.selected_row() else { return Ok(()) };
+    fn nest_selected(&mut self) {
+        let Some(row) = self.selected_row() else { return };
         if row.depth != 0 {
-            return Ok(());
+            return;
         }
         let filter = self.category.clone();
         let roots: Vec<&Todo> = ordered_siblings(&self.todos, &row.todo.scope, None)
@@ -376,33 +478,26 @@ impl App {
             .filter(|todo| filter.is_none() || todo.category == filter)
             .collect();
         let Some(index) = roots.iter().position(|todo| todo.id == row.todo.id) else {
-            return Ok(());
+            return;
         };
         if index == 0 {
-            return Ok(());
+            return;
         }
         let parent_id = roots[index - 1].id.clone();
         let child_count = ordered_siblings(&self.todos, &row.todo.scope, Some(&parent_id)).len();
-        let next: Vec<Todo> = self
-            .todos
-            .iter()
-            .cloned()
-            .map(|mut todo| {
-                if todo.id == row.todo.id {
-                    todo.parent_id = Some(parent_id.clone());
-                    todo.sort_order = Some(child_count as f64);
-                }
-                todo
-            })
-            .collect();
+        let mut moved = row.todo.clone();
+        moved.parent_id = Some(parent_id.clone());
+        moved.sort_order = Some(child_count as f64);
+        let items = self.reorder_items(&[moved]);
         self.collapsed.remove(&parent_id);
-        self.save_tree(&next, Some(row.todo.id.clone()))
+        self.mutate("이동", Op::Reorder(items));
+        self.sync_selection(Some(row.todo.id));
     }
 
-    fn unnest_selected(&mut self) -> Result<(), String> {
-        let Some(row) = self.selected_row() else { return Ok(()) };
+    fn unnest_selected(&mut self) {
+        let Some(row) = self.selected_row() else { return };
         if row.depth != 1 {
-            return Ok(());
+            return;
         }
         let Some(parent) = self
             .todos
@@ -410,56 +505,31 @@ impl App {
             .find(|todo| Some(&todo.id) == row.todo.parent_id.as_ref())
             .cloned()
         else {
-            return Ok(());
+            return;
         };
-        let parent_order = parent.sort_order.unwrap_or(f64::MAX - 1.0);
-        let next: Vec<Todo> = self
-            .todos
-            .iter()
-            .cloned()
-            .map(|mut todo| {
-                if todo.id == row.todo.id {
-                    todo.parent_id = None;
-                    todo.sort_order = Some(parent_order + 0.5);
-                }
-                todo
-            })
-            .collect();
-        self.save_tree(&next, Some(row.todo.id.clone()))
+        let mut moved = row.todo.clone();
+        moved.parent_id = None;
+        // 부모 바로 다음 자리로 올린다. normalized_items가 정수 순번으로 다시 매긴다.
+        moved.sort_order = Some(parent.sort_order.unwrap_or(0.0) + 0.5);
+        let items = self.reorder_items(&[moved]);
+        self.mutate("이동", Op::Reorder(items));
+        self.sync_selection(Some(row.todo.id));
     }
 
-    fn toggle_selected(&mut self) -> Result<(), String> {
-        let Some(row) = self.selected_row() else { return Ok(()) };
-        let was_done = row.todo.done;
+    fn toggle_selected(&mut self) {
+        let Some(row) = self.selected_row() else { return };
+        let done = !row.todo.done;
         let patch = json!({
-            "done": !was_done,
-            "completedAt": if !was_done { json!(now_iso()) } else { Value::Null },
+            "done": done,
+            "completedAt": if done { json!(now_iso()) } else { Value::Null },
         });
-        let undo_completed = if was_done {
-            json!(row.todo.completed_at.clone().unwrap_or_else(now_iso))
-        } else {
-            Value::Null
-        };
-        self.patch_with_undo(
-            &row.todo.id,
-            patch,
-            format!("완료 토글: {}", row.todo.title),
-            json!({ "done": was_done, "completedAt": undo_completed }),
-        )
+        self.mutate(format!("완료 토글: {}", row.todo.title), Op::Patch(row.todo.id, patch));
     }
 
-    fn delete_selected(&mut self) -> Result<(), String> {
-        let Some(row) = self.selected_row() else { return Ok(()) };
-        let mut removed = vec![row.todo.clone()];
-        removed.extend(
-            self.todos
-                .iter()
-                .filter(|todo| todo.parent_id.as_deref() == Some(&row.todo.id))
-                .cloned(),
-        );
-        self.client.delete_todo(&row.todo.id)?;
-        self.push_undo(format!("삭제: {}", row.todo.title), UndoOp::Restore(removed));
-        self.refresh(None)
+    fn delete_selected(&mut self) {
+        let Some(row) = self.selected_row() else { return };
+        self.mutate(format!("삭제: {}", row.todo.title), Op::Delete(row.todo.id));
+        self.sync_selection(None);
     }
 
     fn open_prompt(&mut self, kind: PromptKind) {
@@ -526,11 +596,7 @@ impl App {
         if self.prompt.is_some() {
             match key.code {
                 KeyCode::Esc => self.prompt = None,
-                KeyCode::Enter => {
-                    if let Err(error) = self.submit_prompt() {
-                        self.message = error;
-                    }
-                }
+                KeyCode::Enter => self.submit_prompt(),
                 _ => {
                     if let Some(prompt) = &mut self.prompt {
                         prompt.editor.handle(&key);
@@ -547,51 +613,33 @@ impl App {
         }
 
         let editing_input = self.mode == Mode::Insert && !self.input.chars.is_empty();
-        let result: Result<(), String> = match key.code {
+        match key.code {
             KeyCode::Up if shift => self.reorder_selected(false),
             KeyCode::Down if shift => self.reorder_selected(true),
             KeyCode::Left if shift && !editing_input => self.nest_selected(),
             KeyCode::Right if shift && !editing_input => self.unnest_selected(),
-            KeyCode::Up => {
-                self.move_selection(false);
-                Ok(())
-            }
-            KeyCode::Down => {
-                self.move_selection(true);
-                Ok(())
-            }
-            KeyCode::Left | KeyCode::Right if !editing_input => {
-                self.fold_selected(key.code == KeyCode::Left);
-                Ok(())
-            }
+            KeyCode::Up => self.move_selection(false),
+            KeyCode::Down => self.move_selection(true),
+            KeyCode::Left | KeyCode::Right if !editing_input => self.fold_selected(key.code == KeyCode::Left),
             _ => {
                 if self.mode == Mode::Insert {
                     match key.code {
-                        KeyCode::Esc => {
-                            self.mode = Mode::Normal;
-                            Ok(())
-                        }
+                        KeyCode::Esc => self.mode = Mode::Normal,
                         KeyCode::Enter => {
                             let title = self.input.value().trim().to_string();
-                            if title.is_empty() {
-                                Ok(())
-                            } else {
+                            if !title.is_empty() {
                                 self.input = Editor::new("");
-                                self.create_todo(&title, None)
+                                self.create_todo(&title, None);
                             }
                         }
                         _ => {
                             self.input.handle(&key);
-                            Ok(())
                         }
                     }
                 } else {
-                    self.handle_normal_key(&key)
+                    self.handle_normal_key(&key);
                 }
             }
-        };
-        if let Err(error) = result {
-            self.message = error;
         }
     }
 
@@ -607,73 +655,82 @@ impl App {
         }
     }
 
-    fn handle_normal_key(&mut self, key: &KeyEvent) -> Result<(), String> {
+    fn handle_normal_key(&mut self, key: &KeyEvent) {
         match key.code {
-            KeyCode::Char('i') | KeyCode::Char('a') | KeyCode::Esc => {
-                self.mode = Mode::Insert;
-                Ok(())
-            }
-            KeyCode::Char('q') => {
-                self.quit = true;
-                Ok(())
-            }
-            KeyCode::Char('j') => {
-                self.move_selection(true);
-                Ok(())
-            }
-            KeyCode::Char('k') => {
-                self.move_selection(false);
-                Ok(())
-            }
-            KeyCode::Char('h') => {
-                self.fold_selected(true);
-                Ok(())
-            }
-            KeyCode::Char('l') => {
-                self.fold_selected(false);
-                Ok(())
-            }
-            KeyCode::Char('s') => {
-                self.open_prompt(PromptKind::Child);
-                Ok(())
-            }
-            KeyCode::Char('e') => {
-                self.open_prompt(PromptKind::Edit);
-                Ok(())
-            }
-            KeyCode::Char('t') => {
-                self.open_prompt(PromptKind::Due);
-                Ok(())
-            }
-            KeyCode::Char('c') => {
-                self.open_prompt(PromptKind::Category);
-                Ok(())
-            }
+            KeyCode::Char('i') | KeyCode::Char('a') | KeyCode::Esc => self.mode = Mode::Insert,
+            KeyCode::Char('q') => self.quit = true,
+            KeyCode::Char('j') => self.move_selection(true),
+            KeyCode::Char('k') => self.move_selection(false),
+            KeyCode::Char('h') => self.fold_selected(true),
+            KeyCode::Char('l') => self.fold_selected(false),
+            KeyCode::Char('s') => self.open_prompt(PromptKind::Child),
+            KeyCode::Char('e') => self.open_prompt(PromptKind::Edit),
+            KeyCode::Char('t') => self.open_prompt(PromptKind::Due),
+            KeyCode::Char('c') => self.open_prompt(PromptKind::Category),
             KeyCode::Char(' ') => self.toggle_selected(),
             KeyCode::Char('d') => self.delete_selected(),
             KeyCode::Char('u') => self.apply_undo(),
-            _ => Ok(()),
+            KeyCode::Char('r') => {
+                if !self.refresh_pending {
+                    self.refresh_pending = true;
+                    self.sync.send(Job::Refresh);
+                }
+                self.message = "새로고침…".to_string();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// 종료 직전, 아직 안 나간 쓰기를 보내고 서버 응답까지 기다린다.
+fn drain_on_quit(app: &mut App) {
+    app.flush_reorder(true);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.sync.in_flight > 0 && Instant::now() < deadline {
+        match app.sync.events.recv_timeout(Duration::from_millis(200)) {
+            Ok(SyncEvent::Done) | Ok(SyncEvent::Failed(_)) => app.sync.settle(),
+            Ok(SyncEvent::Todos(_)) | Ok(SyncEvent::RefreshFailed(_)) => {}
+            Err(_) => {}
         }
     }
 }
 
 pub fn run(client: Client) -> Result<(), String> {
-    let mut app = App::new(client);
-    app.refresh(None)?;
+    let todos = {
+        // 첫 데이터만 동기로 받고, 이후 네트워크는 전부 워커 스레드가 맡는다.
+        let mut client = client;
+        client.fetch_todos()?
+    };
+    let sync = Sync::spawn(Client::new());
+    let mut app = App::new(sync, todos);
+
     let mut terminal = ratatui::init();
     loop {
         if terminal.draw(|frame| ui::render(frame, &app)).is_err() {
             break;
         }
-        match event::read() {
-            Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => app.handle_key(key),
-            Ok(_) => {}
+        // 키를 기다리되, debounce 만료와 워커 응답 처리를 위해 최대 100ms만 블록한다.
+        let timeout = app
+            .reorder_due
+            .map(|due| due.saturating_duration_since(Instant::now()))
+            .unwrap_or(Duration::from_millis(100))
+            .min(Duration::from_millis(100));
+        match event::poll(timeout) {
+            Ok(true) => match event::read() {
+                Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => app.handle_key(key),
+                Ok(_) => {}
+                Err(_) => break,
+            },
+            Ok(false) => {}
             Err(_) => break,
         }
+        app.drain_sync();
+        app.flush_reorder(false);
         if app.quit {
             break;
         }
     }
+    drain_on_quit(&mut app);
     ratatui::restore();
     Ok(())
 }

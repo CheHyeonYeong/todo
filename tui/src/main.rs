@@ -1,8 +1,10 @@
 mod api;
 mod app;
 mod cli;
+mod local;
 mod login;
 mod model;
+mod sync;
 mod ui;
 mod util;
 

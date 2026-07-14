@@ -233,14 +233,18 @@ pub fn render(frame: &mut Frame, app: &App) {
         }
         None => {
             let help = if app.message.is_empty() {
-                "i 입력  s 하위  e 편집  t 마감  c 분류  Space 완료  d 삭제  u 되돌림  Tab 탭  q 종료"
+                "i 입력  s 하위  e 편집  t 마감  c 분류  Space 완료  d 삭제  u 되돌림  r 새로고침  q 종료"
             } else {
                 app.message.as_str()
             };
-            frame.render_widget(
-                Paragraph::new(Span::styled(help.to_string(), Style::new().fg(Color::DarkGray))),
-                input_inner,
-            );
+            let mut spans = vec![Span::styled(help.to_string(), Style::new().fg(Color::DarkGray))];
+            if app.sync.in_flight > 0 {
+                spans.push(Span::styled(
+                    format!("  ⟳ 저장 중 {}", app.sync.in_flight),
+                    Style::new().fg(Color::Yellow),
+                ));
+            }
+            frame.render_widget(Paragraph::new(Line::from(spans)), input_inner);
         }
     }
 }
