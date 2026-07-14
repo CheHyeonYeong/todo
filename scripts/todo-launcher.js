@@ -20,4 +20,4 @@ if (!existsSync(binary)) {
 }
 
 const result = spawnSync(binary, process.argv.slice(2), { stdio: "inherit" });
-process.exit(result.status ?? 1);
+process.exit(result.status === null ? 1 : result.status);
