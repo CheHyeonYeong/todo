@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiFetch, setAuthToken, supabase } from "@/lib/api";
+import { apiFetch, refreshAuthToken, setAuthToken, supabase } from "@/lib/api";
 import { extractTags, extractTodos, nowIso, todayKey, uid } from "@/lib/helpers";
 import type { ActiveSession, AppData, Memo, MemoPatch, Scope, Session, Todo, TodoPatch } from "@/lib/types";
 
@@ -124,7 +124,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const loadServerData = useCallback(async () => {
     if (authRef.current !== "ready" || pauseSyncRef.current) return;
     try {
-      const response = await apiFetch("/api/data");
+      let response = await apiFetch("/api/data");
+      // 토큰이 만료됐을 뿐일 수 있으니 갱신해서 한 번 더 시도하고, 그래도 안 되면 로그아웃.
+      if (response.status === 401 && (await refreshAuthToken())) {
+        response = await apiFetch("/api/data");
+      }
       if (response.status === 401) {
         setAuthToken(null);
         setAuth("login");
@@ -172,7 +176,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     checkSession();
     const id = setInterval(loadServerData, 20000);
-    return () => clearInterval(id);
+    // Supabase가 토큰을 갱신하거나 다른 탭에서 로그인/로그아웃하면 저장된 토큰도 맞춰준다.
+    const listener = supabase?.auth.onAuthStateChange((_event, session) => {
+      setAuthToken(session?.access_token ?? null);
+      setEmail(session?.user?.email || "");
+    });
+    return () => {
+      clearInterval(id);
+      listener?.data.subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
