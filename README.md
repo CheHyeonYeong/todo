@@ -1,219 +1,53 @@
 # Todo
 
-todo + timestamp memo + pomodoro 앱입니다.
+todo + timestamp memo + pomodoro 앱.
 
-## 1차 배포 방향
-
-- 추천: 가벼운 Node 서버 + Supabase Postgres
-  - 구조는 Vercel 정적 FE -> OCI Node API -> Supabase DB입니다.
-  - 클라이언트 코드는 `client/`, API 서버 코드는 `server/`에 분리되어 있습니다.
-  - Oracle 1GB VPS에도 충분합니다.
-  - 인증은 Supabase Google Auth 하나만 씁니다. `SUPABASE_URL`/`SUPABASE_ANON_KEY`를 설정하지 않으면 API가 완전히 무인증 상태로 열립니다.
-  - 분리 배포에서는 로그인 후 `Authorization: Bearer` 토큰으로 API를 호출합니다.
-  - 앱 런타임 DB 연결은 Supabase shared transaction-mode pooler `:6543`을 씁니다.
-- Docker 배포
-  - `docker build -t todo .`
-  - `docker run -p 3000:3000 --env-file .env todo`
+- 웹: React + Vite + Tailwind + shadcn/ui (`client/`), PWA라 폰 홈 화면에 설치 가능
+- API: 의존성 없는 Node 서버 (`server/`), 저장소는 Postgres 또는 로컬 JSON 파일
+- 터미널: JS CLI/TUI (`cli/`), Rust TUI (`tui/`)
+- 인증: Google 로그인 하나만. 데이터는 사용자별로 분리된다.
 
 ## 기능
 
-- 월간/주간/하루 todo 분리
-- 모든 메모에 자동 timestamp 기록
-- `#태그` 자동 추출
-- `- [ ] 할 일` 또는 `todo: 할 일` 형태 메모에서 todo 자동 생성
-- 오늘 로그, 검색, 태그 필터
+- 월간/주간/하루 todo 분리, 2뎁스 하위 목표, 카테고리, 마감일
+- 모든 메모에 자동 timestamp, `#태그` 자동 추출
+- `- [ ] 할 일` / `todo: 할 일` 형태의 메모 줄에서 todo 자동 생성
 - 뽀모도로 타이머 (완료 시 알림음 + 브라우저 알림)
-- 타임 트래커와 타임테이블 (몇 시부터 몇 시까지 뭘 했는지 기록. 집중 뽀모도로는 완료하거나 중간에 멈춰도 1분 이상이면 자동 기록, 화면이 꺼져 있어도 시간이 정확함)
-- 타임테이블은 스터디 플래너처럼 시간축 그리드에 작업별 색깔 블록으로 표시 (일간), 주간은 7일 미니 그리드 + 작업별 합계
-- 집중 큐에서 ▶ 버튼으로 바로 타임 트래킹 시작
-- todo 제목 인라인 수정 (✎ 버튼)
-- 오늘의 집중 큐
-- PWA: 폰 홈 화면에 설치 가능, 오프라인에서도 열림 (`client/manifest.webmanifest`, `client/sw.js`, 아이콘은 `node scripts/generate-icons.mjs`로 재생성)
-- 폰/PC 간 서버 동기화
-- memo/todo 항목 단위 저장으로 폰과 PC의 동시 사용 충돌 완화
-- Google 로그인 사용자별 memo/todo 분리
+- 타임 트래커와 타임테이블 — 스터디 플래너처럼 시간축 그리드에 작업별 색 블록 (일간), 주간은 7일 미니 그리드 + 작업별 합계
+- 집중 큐에서 ▶ 로 바로 타임 트래킹 시작
+- 오늘 로그, 검색, 태그 필터
+- 폰/PC 동기화. memo/todo를 항목 단위로 저장해서 동시 사용 충돌을 줄였다.
 
-## 개발
-
-Supabase SQL Editor에서 먼저 실행합니다.
-
-```sql
-create table if not exists public.memos (
-  id text primary key,
-  user_id text not null default 'default',
-  body text not null,
-  tags text[] not null default '{}',
-  created_at timestamptz not null,
-  starred boolean not null default false,
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.todos (
-  id text primary key,
-  user_id text not null default 'default',
-  title text not null,
-  scope text not null check (scope in ('day', 'week', 'month')),
-  done boolean not null default false,
-  created_at timestamptz not null,
-  completed_at timestamptz,
-  source_memo_id text references public.memos(id) on delete set null,
-  due_date text,
-  parent_id text references public.todos(id) on delete cascade,
-  sort_order double precision,
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.sessions (
-  id text primary key,
-  user_id text not null default 'default',
-  label text not null default '',
-  started_at timestamptz not null,
-  ended_at timestamptz not null,
-  updated_at timestamptz not null default now()
-);
-
-alter table public.memos enable row level security;
-alter table public.todos enable row level security;
-alter table public.sessions enable row level security;
-
-alter table public.memos add column if not exists user_id text not null default 'default';
-alter table public.todos add column if not exists user_id text not null default 'default';
-alter table public.memos add column if not exists starred boolean not null default false;
-alter table public.todos add column if not exists due_date text;
-alter table public.todos add column if not exists category text;
-alter table public.todos add column if not exists note text;
-alter table public.todos add column if not exists parent_id text references public.todos(id) on delete cascade;
-alter table public.todos add column if not exists sort_order double precision;
-
-create index if not exists memos_user_created_idx on public.memos (user_id, created_at desc);
-create index if not exists todos_user_created_idx on public.todos (user_id, created_at desc);
-create index if not exists todos_due_date_idx on public.todos (user_id, due_date);
-create index if not exists todos_tree_order_idx on public.todos (user_id, scope, parent_id, sort_order);
-create index if not exists sessions_user_started_idx on public.sessions (user_id, started_at desc);
-```
-
-서버가 시작할 때 `ensureSchema`로 같은 테이블을 자동 생성하므로, 기존 배포는 서버 업데이트만 해도 sessions 테이블이 만들어집니다.
-
-`.env.example`을 참고해 `.env`를 만들고 실행합니다.
+## 로컬 개발
 
 ```bash
 cp .env.example .env
-export $(grep -v '^#' .env | xargs)
 npm install
-npm run dev
+npm run dev          # http://localhost:3000
 ```
 
-브라우저에서 `http://localhost:3000`을 엽니다.
+`DATABASE_URL`이 없으면 로컬 JSON 파일 저장소로 동작하고, `SUPABASE_URL`/`SUPABASE_ANON_KEY`가 없으면 인증 없이 열린다.
+둘 다 없는 상태가 로컬 개발 기본값이다. 테이블은 서버가 시작할 때 `ensureSchema`로 자동 생성한다.
 
-`DATABASE_URL`이 없으면 로컬 JSON 파일 저장소로 fallback 됩니다.
+프론트엔드만 따로 띄우려면 `cd client && npm install && npm run dev`.
 
-## 환경변수
-
-```bash
-PORT=3000
-ALLOWED_ORIGINS=http://localhost:3000,https://your-vercel-app.vercel.app
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_ANON_KEY=your-public-anon-key
-DATABASE_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
-DIRECT_URL=postgresql://postgres.mkvgbffihswfjzgegwlx:YOUR-PASSWORD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
-```
-
-`DATABASE_URL`은 서버가 평소에 쓰는 연결입니다. Supabase가 보여준 shared transaction-mode pooler, 즉 `aws-1-ap-southeast-1.pooler.supabase.com:6543` 주소를 넣습니다.
-
-`DIRECT_URL`은 Prisma/Drizzle 같은 migration 도구를 붙일 때 쓰는 session-mode 연결입니다. 현재 앱 런타임에서는 읽지 않습니다.
-
-`ALLOWED_ORIGINS`는 OCI API를 호출할 수 있는 프론트엔드 origin 목록입니다. Vercel 배포 URL을 콤마로 추가합니다.
-
-`SUPABASE_URL`과 `SUPABASE_ANON_KEY`는 Google 로그인 JWT 검증에 씁니다. 이 둘을 설정해야 API에 인증이 걸립니다 (안 하면 무인증으로 열림). Google 계정만 있으면 누구나 로그인해서 쓸 수 있고, 각자 데이터는 Supabase Auth user id 기준으로 자동 분리됩니다.
-
-## Vercel FE 분리
-
-Vercel에서 Project Root를 `client`로 설정합니다. 프론트엔드는 React + Vite + Tailwind + shadcn/ui이고,
-`client/vercel.json`의 `buildCommand`/`outputDirectory` 설정으로 Vercel이 자동 빌드합니다.
-
-로컬 개발은 `cd client && npm install && npm run dev`.
-
-API/Supabase public 설정값은 `client/src/config.ts`에 있습니다.
-
-API 주소는 첫 접속 때 `api` query로도 지정할 수 있고, 브라우저에 저장됩니다.
-
-```text
-https://your-vercel-app.vercel.app/?api=https://api.your-domain.com
-```
-
-Vercel은 HTTPS라서 OCI API도 HTTPS여야 합니다. `http://158.179.193.175:3000` 같은 HTTP API는 mixed content로 브라우저에서 막힐 수 있습니다. 도메인과 HTTPS를 붙인 뒤 `ALLOWED_ORIGINS`에 Vercel URL을 넣습니다.
-
-## Google 로그인
-
-Supabase Dashboard -> Authentication -> Providers -> Google에서 Google provider를 켭니다.
-
-Google OAuth Authorized redirect URI:
-
-```text
-https://your-project-ref.supabase.co/auth/v1/callback
-```
-
-Authorized JavaScript origin:
-
-```text
-https://your-vercel-app.vercel.app
-```
-
-Google 로그인이 유일한 인증 수단입니다. Google provider를 켠 뒤 `client/src/config.js`와 서버 `.env`에 Supabase URL/anon key를 넣어야 실제로 인증이 걸립니다. 설정 전에는 API가 무인증으로 열려 있으니 프로덕션 배포 전에 꼭 켜야 합니다.
-
-## 서버 CD
-
-OCI 서버에서 최초 1회 systemd 서비스를 설치합니다.
-
-```bash
-cd ~/todo
-git pull
-npm ci --omit=dev
-bash scripts/install-systemd.sh
-```
-
-이후 GitHub Actions가 `main` push 때 서버에 SSH로 접속해 `git reset --hard origin/main`, `npm ci --omit=dev`, `systemctl restart free-adhd-memo`를 실행합니다.
-
-GitHub repo -> Settings -> Secrets and variables -> Actions에 아래 secrets를 추가합니다.
-
-```text
-OCI_HOST=158.179.193.175
-OCI_USER=opc
-OCI_SSH_KEY=서버에 접속 가능한 private key 전체 내용
-OCI_APP_DIR=/home/opc/todo
-```
-
-서비스 로그 확인:
-
-```bash
-sudo journalctl -u free-adhd-memo -f
-```
-
-수동 재시작:
-
-```bash
-sudo systemctl restart free-adhd-memo
-```
+환경변수는 `.env.example`을 참고한다. 프로덕션에서는 `SUPABASE_URL`/`SUPABASE_ANON_KEY`(Google 로그인 JWT 검증)와
+`ALLOWED_ORIGINS`(API를 호출할 프론트엔드 origin)를 반드시 채운다. 안 채우면 API가 무인증으로 열린다.
 
 ## 터미널 CLI
 
-웹앱과 같은 API를 쓰는 터미널 클라이언트가 `cli/todo.js`에 있다.
-
-설치 (Node.js 18+만 있으면 됨, 저장소 클론 불필요):
+웹앱과 같은 API를 쓰는 터미널 클라이언트가 `cli/todo.js`에 있다. Node.js 18+만 있으면 되고 저장소 클론은 필요 없다.
 
 ```bash
 npm install -g https://todo-cohe.vercel.app/cli.tgz
 ```
 
-업데이트도 같은 명령을 다시 실행하면 된다. 저장소를 클론해서 개발 중이라면 `npm link`가 더 편하다 (코드 수정이 바로 반영됨).
-
-처음 한 번 Supabase Dashboard -> Authentication -> URL Configuration -> Redirect URLs에
-`http://localhost:8787`을 추가해야 `todo login`(브라우저 Google 로그인)이 동작한다.
+업데이트도 같은 명령을 다시 실행하면 된다. 저장소를 클론해 개발 중이라면 `npm link`가 편하다.
 
 ```bash
 todo login             # 브라우저로 Google 로그인, 토큰은 ~/.config/todo/에 저장
-todo                   # 할 일 목록
-todo add "제목" -w     # 이번 주 할 일 추가 (-m 이번 달, -d 2026-07-20 마감일, -c 카테고리)
+todo                   # 전체화면 TUI
+todo add "제목" -w     # 이번 주 할 일 (-m 이번 달, -d 2026-07-20 마감일, -c 카테고리)
 todo done 3            # 3번 완료 토글 (todo toggle 3 도 동일)
 todo rm 3              # 3번 삭제 (하위 포함)
 todo undo              # 마지막 add/done/rm 되돌리기
@@ -224,61 +58,51 @@ todo stop              # 기록 종료 -> 타임테이블에 저장
 todo log --week        # 이번 주 작업별 시간 합계
 ```
 
-`todo`를 인자 없이 실행하면 전체화면 TUI가 열리고 바로 Insert 모드로 시작한다. 입력 후 Enter로 오늘 할 일을 맨 아래에 추가한다.
+`todo`를 인자 없이 실행하면 전체화면 TUI가 열리고 바로 Insert 모드로 시작한다. 입력 후 Enter로 오늘 할 일이 추가된다.
 
 - Insert: `↑/↓` 선택, `←/→` 접기/펼치기, `Shift+←/→` 하위로/최상위로, `Shift+↑/↓` 순서 이동, `Esc` Normal 모드
 - 입력 중: `←/→`, `Home/End`, `Delete/Backspace`, `Ctrl+←/→`, `Ctrl+W/U/K/A/E`로 커서 이동과 편집
-- Normal: `i`/`a`/`Esc` Insert 모드, `s` 하위 목표, `e` 편집, `t` 마감일, `c` 카테고리, `Space` 완료, `d` 삭제, `u` 되돌리기, `hjkl` 이동·접기, `q` 종료
-- `Tab`/`Shift+Tab`: 카테고리 탭 전환. 카테고리가 하나라도 있으면 상단에 탭 바가 보이고, 탭을 고른 상태에서 추가하면 그 카테고리로 만들어진다. 탭 안에서의 `Shift+↑/↓` 순서 이동은 같은 카테고리끼리만 움직인다.
-- `u`(되돌리기)는 세션 내 최대 50단계. 추가/완료/삭제/편집/마감일/카테고리/이동 전부 되돌린다. 삭제 복구는 하위 목표까지 복원.
-- 하위 목표는 2뎁스까지만 지원한다. 부모 완료는 자식 전체에 전파되고, 자식이 모두 완료되면 부모도 자동 완료된다.
-- 생성 시각은 우측 정렬된 로컬 시간 `YYYY-MM-DD HH:MM`이다. `⏳마감 YYYY-MM-DD`는 마감일이며, 지난 마감은 빨간색으로 표시된다.
-- 색은 기본 ANSI 16색만 써서 터미널 테마(팔레트)를 그대로 따라간다. 글꼴은 원래 터미널 설정을 따른다 (TUI는 자체 폰트가 없다).
-- 기존 명령형 목록은 `todo list`로 확인한다.
+- Normal: `i`/`a`/`Esc` Insert, `s` 하위 목표, `e` 편집, `t` 마감일, `c` 카테고리, `Space` 완료, `d` 삭제, `u` 되돌리기, `hjkl` 이동·접기, `q` 종료
+- `Tab`/`Shift+Tab`으로 카테고리 탭 전환. 탭을 고른 상태에서 추가하면 그 카테고리로 만들어지고, `Shift+↑/↓` 순서 이동은 같은 카테고리 안에서만 움직인다.
+- `u`는 세션 내 최대 50단계. 추가/완료/삭제/편집/마감일/카테고리/이동을 되돌린다. 삭제 복구는 하위 목표까지 복원한다.
+- 하위 목표는 2뎁스까지. 부모 완료는 자식에 전파되고, 자식이 모두 완료되면 부모도 자동 완료된다.
+- 지난 마감일은 빨간색. 색은 ANSI 16색만 써서 터미널 테마를 그대로 따라간다.
 
-다른 서버를 쓰려면 `TODO_API_BASE=http://localhost:3000` 환경변수로 바꾼다.
+다른 서버를 쓰려면 `TODO_API_BASE=http://localhost:3000`.
 
-AI 에이전트(Claude Code, Codex CLI, `npx skills`)가 이 CLI를 쓰는 방법은 `skills/todo-cli/SKILL.md`에 있다.
-Claude Code는 `.claude/skills/todo-cli/`로 자동 인식하고, Codex CLI는 `AGENTS.md`를 통해 안내받는다.
+AI 에이전트(Claude Code, Codex CLI, `npx skills`)용 사용법은 `skills/todo-cli/SKILL.md`에 있다.
 
 ## Rust TUI
 
-같은 TUI의 Rust 구현이 `tui/`에 있다 ([ratatui](https://ratatui.rs) 기반, [fru1tworld/todo-tui](https://github.com/fru1tworld/todo-tui) 스타일).
-로컬 SQLite 대신 위 CLI와 같은 API 서버에 붙어서 웹/JS CLI와 데이터가 그대로 연동되고,
-`~/.config/todo/session.json`의 로그인 세션도 재사용한다 (먼저 `todo login` 필요).
+같은 TUI의 [ratatui](https://ratatui.rs) 구현이 `tui/`에 있다. 위 CLI와 같은 API 서버·로그인 세션(`~/.config/todo/session.json`)을
+공유하므로 웹/JS CLI와 데이터가 그대로 연동된다 (먼저 `todo login` 필요).
 
 ```bash
 cd tui
-cargo build --release          # Rust 1.75+ 권장
-./target/release/todo-tui      # TODO_API_BASE로 서버 변경 가능
+cargo build --release
+./target/release/todo-tui
 ```
 
-키바인딩은 JS TUI와 동일하다 (Insert/Normal 모드, `s` 하위, `e` 편집, `t` 마감, `c` 카테고리,
-`Space` 완료, `d` 삭제, `u` 되돌리기, `Tab` 카테고리 탭, `Shift+화살표` 이동/중첩, `q` 종료).
+키바인딩은 JS TUI와 같다.
+
+## 배포
+
+- 프론트엔드: Vercel. Project Root를 `client`로 두면 `client/vercel.json` 설정으로 자동 빌드된다.
+  API 주소는 `client/src/config.ts`에 있고, 첫 접속 때 `?api=` 쿼리로도 지정할 수 있다.
+- API 서버: Docker (`docker build -t todo . && docker run -p 3000:3000 --env-file .env todo`) 또는
+  systemd (`scripts/install-systemd.sh`). `main` push 시 GitHub Actions가 서버에 배포한다 —
+  호스트·계정·경로는 저장소 Actions secrets로 관리한다.
+- Vercel이 HTTPS라서 API도 HTTPS여야 한다 (아니면 mixed content로 막힌다).
+- DB: Postgres. 앱 런타임은 transaction-mode pooler 연결(`DATABASE_URL`)을 쓴다.
+
+## Google 로그인 설정
+
+Supabase Dashboard -> Authentication -> Providers -> Google을 켜고, Google OAuth에 redirect URI와
+JavaScript origin을 등록한다. CLI의 `todo login`을 쓰려면 Authentication -> URL Configuration -> Redirect URLs에
+`http://localhost:8787`도 추가한다.
 
 ## 앱스토어 배포 (TWA)
 
-이 앱은 PWA라서 Google Play에는 TWA(Trusted Web Activity)로 그대로 올릴 수 있다.
-
-1. https://play.google.com/console 에서 개발자 계정 등록 ($25, 1회)
-2. https://www.pwabuilder.com 에 `https://todo-cohe.vercel.app` 입력 -> Package for stores -> Android
-   - package id는 `client/.well-known/assetlinks.json`의 `package_name`과 맞춘다
-   - 생성된 `.aab`를 Play Console에 업로드 (signing key도 함께 생성해 주니 잘 보관)
-3. Play Console -> Test and release -> App integrity -> App signing key certificate에서
-   SHA-256 fingerprint를 복사해 `client/.well-known/assetlinks.json`에 넣고 배포
-   - 이 파일이 맞아야 앱에서 브라우저 주소창이 사라진다
-4. 스토어 등록정보(스크린샷, 설명, 개인정보처리방침 URL) 채우고 심사 제출
-
-iOS App Store는 웹 래퍼 앱 심사 거절 위험이 크고 연 $99가 든다.
-아이폰 사용자는 Safari -> 공유 -> 홈 화면에 추가로 안내하는 것을 권장.
-
-## 빌드
-
-```bash
-npm run build
-npm run preview
-```
-
-## 감사
-
-- **타르트님** — QA와 기능 제안을 맡아 주시는 분. 이 앱의 여러 기능이 타르트님의 아이디어에서 나왔다.
+PWA라서 Google Play에는 TWA로 올릴 수 있다. https://www.pwabuilder.com 에 배포 URL을 넣어 Android 패키지를 만들고,
+Play Console에서 받은 signing key SHA-256 fingerprint를 `client/.well-known/assetlinks.json`에 넣어 배포하면
+앱에서 브라우저 주소창이 사라진다. iOS는 웹 래퍼 심사 거절 위험이 커서 Safari -> 공유 -> 홈 화면에 추가를 안내하는 편이 낫다.
