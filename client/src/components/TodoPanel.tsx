@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 function sortTodos(todos: Todo[]) {
   return [...todos].sort(
     (a, b) =>
+      // 완료한 일은 목록 아래로 내린다.
+      Number(a.done) - Number(b.done) ||
       (Number.isFinite(a.sortOrder) ? a.sortOrder! : Number.MAX_SAFE_INTEGER) -
         (Number.isFinite(b.sortOrder) ? b.sortOrder! : Number.MAX_SAFE_INTEGER) ||
       a.createdAt.localeCompare(b.createdAt),
@@ -263,13 +265,18 @@ function TodoRow({
   );
 }
 
-function TodoForm({ categories }: { categories: string[] }) {
+function TodoForm({ categories, activeCategory }: { categories: string[]; activeCategory: string | null }) {
   const { addTodo } = useAppData();
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(activeCategory || "");
   const [scope, setScope] = useState<Scope>("day");
   const [dueDate, setDueDate] = useState(todayKey());
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // 카테고리 탭을 고르면 그 카테고리로 바로 추가할 수 있게 입력칸을 채워둔다(TUI와 동일).
+  useEffect(() => {
+    setCategory(activeCategory || "");
+  }, [activeCategory]);
 
   const typed = category.trim().toLowerCase();
   const suggestions = categories.filter((item) => item.toLowerCase().includes(typed));
@@ -550,7 +557,7 @@ export function TodoPanel() {
       {view === "list" ? (
         <>
           <div className="mb-2.5">
-            <TodoForm categories={categories} />
+            <TodoForm categories={categories} activeCategory={categoryFilter} />
           </div>
           {categories.length > 0 && (
             <div className="mb-2.5 flex shrink-0 flex-wrap items-center gap-1.5">

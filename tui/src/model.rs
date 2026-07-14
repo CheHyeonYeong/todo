@@ -94,9 +94,14 @@ pub fn ordered_siblings<'a>(todos: &'a [Todo], scope: &str, parent: Option<&str>
         .filter(|todo| todo.scope == scope && todo.parent_id.as_deref() == parent)
         .collect();
     siblings.sort_by(|a, b| {
-        a.order_value()
-            .partial_cmp(&b.order_value())
-            .unwrap_or(std::cmp::Ordering::Equal)
+        // 완료한 일은 목록 아래로 내린다.
+        a.done
+            .cmp(&b.done)
+            .then_with(|| {
+                a.order_value()
+                    .partial_cmp(&b.order_value())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .then_with(|| a.created_at.cmp(&b.created_at))
     });
     siblings
