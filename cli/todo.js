@@ -204,9 +204,54 @@ function sortedTodos(todos) {
   });
 }
 
-async function listTodos() {
+function recordUndo(action) {
+  const session = loadSession();
+  session.lastAction = { ...action, at: new Date().toISOString() };
+  saveSession(session);
+}
+
+function clearUndo() {
+  const session = loadSession();
+  delete session.lastAction;
+  saveSession(session);
+}
+
+async function undoLast() {
+  const action = loadSession().lastAction;
+  if (!action) fail("되돌릴 작업이 없습니다. (add/done/rm 직후에만 가능)");
+  if (action.kind === "create") {
+    await api(`/api/todos/${encodeURIComponent(action.id)}`, { method: "DELETE" });
+    console.log(yellow(`추가 취소: ${action.title}`));
+  } else if (action.kind === "toggle") {
+    await api(`/api/todos/${encodeURIComponent(action.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: action.done, completedAt: action.done ? action.completedAt || new Date().toISOString() : null }),
+    });
+    console.log(yellow(`완료 상태 되돌림: ${action.title}`));
+  } else if (action.kind === "delete") {
+    for (const todo of action.todos) {
+      await api("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(todo),
+      });
+    }
+    const extra = action.todos.length > 1 ? dim(` (+하위 ${action.todos.length - 1}개)`) : "";
+    console.log(green(`복구됨: ${action.todos[0].title}`) + extra);
+  } else {
+    fail("알 수 없는 작업이라 되돌릴 수 없습니다.");
+  }
+  clearUndo();
+}
+
+async function listTodos(args = []) {
   const data = await api("/api/data");
   const flat = sortedTodos(data.todos);
+  if (args.includes("--json")) {
+    console.log(JSON.stringify(flat.map((todo, index) => ({ number: index + 1, ...todo })), null, 2));
+    return;
+  }
   if (!flat.length) {
     console.log(dim("할 일이 없습니다. `todo add \"제목\"`으로 추가하세요."));
     return;
@@ -256,11 +301,12 @@ async function addTodo(args) {
     .trim();
   if (!title) fail('사용법: todo add "제목" [-w 이번주 | -m 이번달] [-d 2026-07-20] [-c 카테고리]');
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) fail("마감일은 YYYY-MM-DD 형식으로 넣으세요.");
+  const id = randomUUID();
   await api("/api/todos", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      id: randomUUID(),
+      id,
       title,
       scope,
       done: false,
@@ -269,6 +315,7 @@ async function addTodo(args) {
       category,
     }),
   });
+  recordUndo({ kind: "create", id, title });
   console.log(green(`추가됨 (${scopeLabels[scope]}): ${title}`) + (category ? dim(` [${category}]`) : ""));
 }
 
@@ -280,13 +327,20 @@ async function toggleTodo(number) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ done, completedAt: done ? new Date().toISOString() : undefined }),
   });
+  recordUndo({ kind: "toggle", id: todo.id, title: todo.title, done: todo.done, completedAt: todo.completedAt || null });
   console.log(done ? green(`완료: ${todo.title}`) : yellow(`다시 미완료로: ${todo.title}`));
 }
 
 async function removeTodo(number) {
-  const todo = await todoByNumber(number);
+  const data = await api("/api/data");
+  const flat = sortedTodos(data.todos);
+  const todo = flat[number - 1];
+  if (!todo) fail(`${number}번 할 일이 없습니다. \`todo\`로 번호를 확인하세요.`);
+  const removed = [todo, ...data.todos.filter((item) => item.parentId === todo.id)];
   await api(`/api/todos/${encodeURIComponent(todo.id)}`, { method: "DELETE" });
-  console.log(yellow(`삭제됨: ${todo.title}`));
+  recordUndo({ kind: "delete", todos: removed });
+  const extra = removed.length > 1 ? dim(` (하위 ${removed.length - 1}개 포함, \`todo undo\`로 복구)`) : dim(" (`todo undo`로 복구)");
+  console.log(yellow(`삭제됨: ${todo.title}`) + extra);
 }
 
 async function addMemo(body) {
@@ -410,15 +464,16 @@ function status() {
   }
 }
 
+// 기본 ANSI 16색만 사용해서 사용자의 터미널 테마(색상 팔레트)를 그대로 따라간다.
 const tuiColors = {
   reset: "\x1b[0m",
-  coral: "\x1b[38;5;209m",
-  mint: "\x1b[38;5;79m",
-  blue: "\x1b[38;5;117m",
-  cream: "\x1b[38;5;230m",
-  muted: "\x1b[38;5;245m",
-  danger: "\x1b[38;5;203m",
-  selected: "\x1b[48;5;236m",
+  coral: "\x1b[33m",
+  mint: "\x1b[32m",
+  blue: "\x1b[36m",
+  cream: "\x1b[39m",
+  muted: "\x1b[90m",
+  danger: "\x1b[31m",
+  selected: "\x1b[100m",
 };
 
 function terminalWidth(text) {
@@ -464,10 +519,17 @@ function orderedSiblings(todos, scope, parentId = null) {
     .sort((a, b) => todoOrderValue(a) - todoOrderValue(b) || a.createdAt.localeCompare(b.createdAt));
 }
 
-function visibleTree(todos, collapsed) {
+function categoryList(todos) {
+  const names = todos.filter((todo) => !todo.parentId && todo.category).map((todo) => todo.category);
+  return [...new Set(names)].sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+function visibleTree(todos, collapsed, category = null) {
   const rows = [];
   for (const scope of ["day", "week", "month"]) {
-    const roots = orderedSiblings(todos, scope);
+    const roots = orderedSiblings(todos, scope).filter(
+      (root) => !category || (root.category || null) === category,
+    );
     for (const root of roots) {
       const children = orderedSiblings(todos, scope, root.id);
       rows.push({ todo: root, depth: 0, children, last: false });
@@ -503,6 +565,7 @@ function splitTerminalKeys(input) {
     "\x1b[1;2D",
     "\x1b[1;5C",
     "\x1b[1;5D",
+    "\x1b[Z",
     "\x1b[3~",
     "\x1b[H",
     "\x1b[F",
@@ -622,6 +685,8 @@ async function runTui() {
     selected: 0,
     selectedId: null,
     collapsed: new Set(),
+    category: null,
+    undoStack: [],
     prompt: null,
     message: "",
     busy: false,
@@ -652,7 +717,12 @@ async function runTui() {
   });
 
   function rows() {
-    return visibleTree(state.todos, state.collapsed);
+    return visibleTree(state.todos, state.collapsed, state.category);
+  }
+
+  function pushUndo(label, run) {
+    state.undoStack.push({ label, run });
+    if (state.undoStack.length > 50) state.undoStack.shift();
   }
 
   function syncSelection(preferredId = state.selectedId) {
@@ -670,6 +740,7 @@ async function runTui() {
   async function refresh(preferredId) {
     const data = await api("/api/data");
     state.todos = Array.isArray(data.todos) ? data.todos : [];
+    if (state.category && !categoryList(state.todos).includes(state.category)) state.category = null;
     syncSelection(preferredId);
   }
 
@@ -689,10 +760,11 @@ async function runTui() {
     const progress = children.length ? ` (${children.filter((child) => child.done).length}/${children.length})` : "";
     const created = contentWidth >= 46 ? localTimestamp(todo.createdAt) : localTimestamp(todo.createdAt).slice(11);
     const due = todo.dueDate && contentWidth >= 58 ? `  ⏳마감 ${todo.dueDate}` : "";
+    const categoryTag = !row.depth && todo.category && !state.category ? `[${todo.category}] ` : "";
     const prefix = `${tree}${mark} `;
     const metadataWidth = terminalWidth(created) + terminalWidth(due);
     const leftWidth = Math.max(4, contentWidth - metadataWidth - 2);
-    const left = padTerminal(`${prefix}${todo.title}${progress}`, leftWidth);
+    const left = padTerminal(`${prefix}${categoryTag}${todo.title}${progress}`, leftWidth);
     const gap = " ".repeat(Math.max(1, contentWidth - terminalWidth(left) - metadataWidth));
     const overdue = todo.dueDate && todo.dueDate < dateKey(new Date()) && !todo.done;
     const color = todo.done ? tuiColors.muted : row.depth ? tuiColors.cream : tuiColors.blue;
@@ -711,11 +783,31 @@ async function runTui() {
     const modeLabel = state.prompt ? state.prompt.label : state.mode === "insert" ? "-- INSERT --" : "-- NORMAL --";
     const title = truncateTerminal(` To-Do (${rootCount}개)  ${modeLabel} `, width - 2);
     const top = `┌${title}${"─".repeat(Math.max(0, width - terminalWidth(title) - 2))}┐`;
+    const categories = categoryList(state.todos);
+    const showTabs = categories.length > 0;
+    let tabsRow = "";
+    if (showTabs) {
+      let tabText = "";
+      let tabWidth = 0;
+      for (const category of [null, ...categories]) {
+        const label = ` ${category || "전체"} `;
+        const labelWidth = terminalWidth(label) + 1;
+        if (tabWidth + labelWidth > inner) break;
+        const active = category === state.category;
+        tabText += (active ? `${tuiColors.selected}${label}${tuiColors.reset}` : `${tuiColors.muted}${label}${tuiColors.reset}`) + " ";
+        tabWidth += labelWidth;
+      }
+      const hint = "Tab 전환";
+      const hintWidth = terminalWidth(hint);
+      const gap = inner - tabWidth;
+      const tail = gap >= hintWidth ? `${" ".repeat(gap - hintWidth)}${tuiColors.muted}${hint}${tuiColors.reset}` : " ".repeat(Math.max(0, gap));
+      tabsRow = `│ ${tabText}${tail} │`;
+    }
     const headingLeft = width >= 32 ? " 목록  [ ] 내용 " : " 목록 ";
     const headingRight = width >= 58 ? " 생성시각 / 마감 " : width >= 24 ? " 시각 " : "";
     const dividerFill = "─".repeat(Math.max(0, width - terminalWidth(headingLeft) - terminalWidth(headingRight) - 2));
     const divider = `├${headingLeft}${dividerFill}${headingRight}┤`;
-    const listHeight = Math.max(1, height - 7);
+    const listHeight = Math.max(1, height - 7 - (showTabs ? 1 : 0));
     let start = Math.max(0, state.selected - Math.floor(listHeight / 2));
     start = Math.min(start, Math.max(0, currentRows.length - listHeight));
     const body = [];
@@ -744,15 +836,16 @@ async function runTui() {
     const statusWidth = status ? terminalWidth(status) + 2 : 0;
     const editorWidth = Math.max(1, inner - statusWidth);
     const viewport = editor ? editorViewport(editor, editorWidth) : null;
-    const normalHelp = "i 입력  s 하위  e 편집  t 마감  Space 완료  d 삭제  ↑↓/jk 이동  q 종료";
+    const normalHelp = "i 입력  s 하위  e 편집  t 마감  c 분류  Space 완료  d 삭제  u 되돌림  Tab 탭  q 종료";
     const promptContent = editor
       ? `${padTerminal(viewport.text, editorWidth)}${status ? `  ${status}` : ""}`
-      : padTerminal(normalHelp, inner);
+      : padTerminal(state.message || normalHelp, inner);
     const promptLine = `│ ${promptContent} │`;
     const bottom = `└${"─".repeat(width - 2)}┘`;
     const cursorColumn = Math.min(width - 2, 3 + (viewport?.cursorWidth || 0));
-    const cursorPosition = editor ? `\x1b[${listHeight + 4};${cursorColumn}H\x1b[5 q\x1b[?25h` : "\x1b[?25l";
-    const screen = `${top}\n${divider}\n${body.join("\n")}\n${promptDivider}\n${promptLine}\n${bottom}\x1b[J`;
+    const cursorRow = listHeight + 4 + (showTabs ? 1 : 0);
+    const cursorPosition = editor ? `\x1b[${cursorRow};${cursorColumn}H\x1b[5 q\x1b[?25h` : "\x1b[?25l";
+    const screen = `${top}\n${showTabs ? `${tabsRow}\n` : ""}${divider}\n${body.join("\n")}\n${promptDivider}\n${promptLine}\n${bottom}\x1b[J`;
     const renderKey = `${width}x${height}\n${screen}\n${cursorPosition}`;
     if (renderKey === state.lastRender) return;
     state.lastRender = renderKey;
@@ -788,36 +881,57 @@ async function runTui() {
         parentId,
         done: false,
         createdAt: new Date().toISOString(),
+        category: parentId ? undefined : state.category || undefined,
       }),
     });
     if (parentId) state.collapsed.delete(parentId);
+    pushUndo(`추가: ${title}`, async () => {
+      await api(`/api/todos/${encodeURIComponent(created.id)}`, { method: "DELETE" });
+      await refresh();
+    });
     await refresh(created.id);
   }
 
   async function saveTree(todos, preferredId) {
+    const before = normalizedTreeItems(state.todos);
     await api("/api/todos/order", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: normalizedTreeItems(todos) }),
     });
+    pushUndo("이동", async () => {
+      await api("/api/todos/order", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: before }),
+      });
+      await refresh(preferredId);
+    });
     await refresh(preferredId);
+  }
+
+  async function patchTodo(todoId, patch) {
+    await api(`/api/todos/${encodeURIComponent(todoId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    await refresh(todoId);
   }
 
   async function submitPrompt() {
     const prompt = state.prompt;
     if (!prompt) return;
     const value = prompt.value.trim();
+    const before = state.todos.find((todo) => todo.id === prompt.todoId);
     state.prompt = null;
     if (prompt.kind === "child" && value) {
       await mutate(() => createTodoFromInput(value, prompt.todoId));
-    } else if (prompt.kind === "edit" && value) {
+    } else if (prompt.kind === "edit" && value && before) {
+      const previousTitle = before.title;
       await mutate(async () => {
-        await api(`/api/todos/${encodeURIComponent(prompt.todoId)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: value }),
-        });
-        await refresh(prompt.todoId);
+        await patchTodo(prompt.todoId, { title: value });
+        pushUndo(`편집: ${previousTitle}`, () => patchTodo(prompt.todoId, { title: previousTitle }));
       });
     } else if (prompt.kind === "due") {
       if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -826,14 +940,18 @@ async function runTui() {
         render();
         return;
       }
+      const previousDue = before?.dueDate || null;
       await mutate(async () => {
-        await api(`/api/todos/${encodeURIComponent(prompt.todoId)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dueDate: value || null }),
-        });
-        await refresh(prompt.todoId);
+        await patchTodo(prompt.todoId, { dueDate: value || null });
+        pushUndo("마감일 변경", () => patchTodo(prompt.todoId, { dueDate: previousDue }));
       });
+    } else if (prompt.kind === "category") {
+      const previousCategory = before?.category || "";
+      await mutate(async () => {
+        await patchTodo(prompt.todoId, { category: value });
+        pushUndo("카테고리 변경", () => patchTodo(prompt.todoId, { category: previousCategory }));
+      });
+      if (state.category && value !== state.category) state.category = null;
     }
   }
 
@@ -849,6 +967,17 @@ async function runTui() {
       } else if (key === "\r" || key === "\n") {
         await submitPrompt();
       } else editTerminalInput(state.prompt, key);
+      render();
+      return;
+    }
+
+    if (key === "\t" || key === "\x1b[Z") {
+      const tabs = [null, ...categoryList(state.todos)];
+      const index = tabs.indexOf(state.category);
+      state.category = tabs[(index + (key === "\t" ? 1 : tabs.length - 1)) % tabs.length];
+      state.selected = 0;
+      state.selectedId = null;
+      syncSelection();
       render();
       return;
     }
@@ -882,9 +1011,15 @@ async function runTui() {
       const row = selectedRow();
       if (row) {
         const siblings = orderedSiblings(state.todos, row.todo.scope, row.todo.parentId || null);
-        const index = siblings.findIndex((todo) => todo.id === row.todo.id);
-        const otherIndex = index + (shiftDown ? 1 : -1);
-        if (index >= 0 && otherIndex >= 0 && otherIndex < siblings.length) {
+        const visible =
+          row.todo.parentId || !state.category
+            ? siblings
+            : siblings.filter((todo) => (todo.category || null) === state.category);
+        const visibleIndex = visible.findIndex((todo) => todo.id === row.todo.id);
+        const other = visible[visibleIndex + (shiftDown ? 1 : -1)];
+        if (visibleIndex >= 0 && other) {
+          const index = siblings.findIndex((todo) => todo.id === row.todo.id);
+          const otherIndex = siblings.findIndex((todo) => todo.id === other.id);
           [siblings[index], siblings[otherIndex]] = [siblings[otherIndex], siblings[index]];
           const orderById = new Map(siblings.map((todo, siblingIndex) => [todo.id, siblingIndex]));
           const next = state.todos.map((todo) =>
@@ -896,7 +1031,9 @@ async function runTui() {
     } else if (shiftLeft) {
       const row = selectedRow();
       if (row?.depth === 0) {
-        const roots = orderedSiblings(state.todos, row.todo.scope);
+        const roots = orderedSiblings(state.todos, row.todo.scope).filter(
+          (todo) => !state.category || (todo.category || null) === state.category,
+        );
         const index = roots.findIndex((todo) => todo.id === row.todo.id);
         const parent = roots[index - 1];
         if (parent) {
@@ -948,20 +1085,47 @@ async function runTui() {
           ...createEditor(row.todo.dueDate || ""),
           todoId: row.todo.id,
         };
+      } else if (row && key === "c") {
+        const target = row.depth === 0 ? row.todo : state.todos.find((todo) => todo.id === row.todo.parentId);
+        state.prompt = {
+          kind: "category",
+          label: "카테고리 (비우면 해제)",
+          ...createEditor(target.category || ""),
+          todoId: target.id,
+        };
       } else if (row && key === " ") {
+        const wasDone = row.todo.done;
+        const previousCompletedAt = row.todo.completedAt || null;
         await mutate(async () => {
-          await api(`/api/todos/${encodeURIComponent(row.todo.id)}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ done: !row.todo.done, completedAt: !row.todo.done ? new Date().toISOString() : null }),
-          });
-          await refresh(row.todo.id);
+          await patchTodo(row.todo.id, { done: !wasDone, completedAt: !wasDone ? new Date().toISOString() : null });
+          pushUndo(`완료 토글: ${row.todo.title}`, () =>
+            patchTodo(row.todo.id, { done: wasDone, completedAt: wasDone ? previousCompletedAt || new Date().toISOString() : null }),
+          );
         });
       } else if (row && key === "d") {
+        const removed = [row.todo, ...state.todos.filter((todo) => todo.parentId === row.todo.id)];
         await mutate(async () => {
           await api(`/api/todos/${encodeURIComponent(row.todo.id)}`, { method: "DELETE" });
+          pushUndo(`삭제: ${row.todo.title}`, async () => {
+            for (const todo of removed) {
+              await api("/api/todos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(todo),
+              });
+            }
+            await refresh(removed[0].id);
+          });
           await refresh();
         });
+      } else if (key === "u") {
+        const entry = state.undoStack.pop();
+        if (!entry) {
+          state.message = "되돌릴 작업 없음";
+        } else {
+          await mutate(entry.run);
+          state.message = `되돌림: ${entry.label}`;
+        }
       }
     }
     render();
@@ -991,10 +1155,11 @@ function help() {
   console.log(`${bold("todo")} — Todo 터미널 클라이언트
 
   todo                     Vim 스타일 대화형 TUI (비대화형 터미널에서는 목록)
-  todo list                할 일 목록 (번호 포함)
+  todo list [--json]       할 일 목록 (번호 포함, --json은 스크립트/AI용 JSON 출력)
   todo add "제목" [옵션]    할 일 추가  (-w 이번주, -m 이번달, -d 2026-07-20 마감일, -c 카테고리)
-  todo done <번호>          완료 토글
-  todo rm <번호>            삭제
+  todo done <번호>          완료 토글 (toggle 도 같음)
+  todo rm <번호>            삭제 (하위 포함)
+  todo undo                마지막 add/done/rm 되돌리기
   todo memo "내용 #태그"    메모 기록 (- [ ] 줄은 할 일로 자동 추출)
   todo memos [개수]         최근 메모 (기본 10개)
   todo log [--week]        오늘 타임테이블 / 이번 주 작업별 합계
@@ -1010,16 +1175,20 @@ switch (command) {
     await runTui();
     break;
   case "list":
-    await listTodos();
+    await listTodos(args);
     break;
   case "add":
     await addTodo(args);
     break;
   case "done":
-    await toggleTodo(Number(args[0]) || fail("사용법: todo done <번호>"));
+  case "toggle":
+    await toggleTodo(Number(args[0]) || fail(`사용법: todo ${command} <번호>`));
     break;
   case "rm":
     await removeTodo(Number(args[0]) || fail("사용법: todo rm <번호>"));
+    break;
+  case "undo":
+    await undoLast();
     break;
   case "memo":
     await addMemo(args.join(" "));

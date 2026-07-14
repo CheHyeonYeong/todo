@@ -213,8 +213,11 @@ npm install -g https://todo-cohe.vercel.app/cli.tgz
 ```bash
 todo login             # 브라우저로 Google 로그인, 토큰은 ~/.config/todo/에 저장
 todo                   # 할 일 목록
-todo add "제목" -w     # 이번 주 할 일 추가 (-m 이번 달, -d 2026-07-20 마감일)
-todo done 3            # 3번 완료 토글
+todo add "제목" -w     # 이번 주 할 일 추가 (-m 이번 달, -d 2026-07-20 마감일, -c 카테고리)
+todo done 3            # 3번 완료 토글 (todo toggle 3 도 동일)
+todo rm 3              # 3번 삭제 (하위 포함)
+todo undo              # 마지막 add/done/rm 되돌리기
+todo list --json       # 스크립트/AI용 JSON 출력
 todo memo "생각 #태그" # 메모 (- [ ] 줄은 할 일로 자동 추출)
 todo track "코딩"      # 시간 기록 시작
 todo stop              # 기록 종료 -> 타임테이블에 저장
@@ -225,12 +228,18 @@ todo log --week        # 이번 주 작업별 시간 합계
 
 - Insert: `↑/↓` 선택, `←/→` 접기/펼치기, `Shift+←/→` 하위로/최상위로, `Shift+↑/↓` 순서 이동, `Esc` Normal 모드
 - 입력 중: `←/→`, `Home/End`, `Delete/Backspace`, `Ctrl+←/→`, `Ctrl+W/U/K/A/E`로 커서 이동과 편집
-- Normal: `i`/`a`/`Esc` Insert 모드, `s` 하위 목표, `e` 편집, `t` 마감일, `Space` 완료, `d` 삭제, `hjkl` 이동·접기, `q` 종료
+- Normal: `i`/`a`/`Esc` Insert 모드, `s` 하위 목표, `e` 편집, `t` 마감일, `c` 카테고리, `Space` 완료, `d` 삭제, `u` 되돌리기, `hjkl` 이동·접기, `q` 종료
+- `Tab`/`Shift+Tab`: 카테고리 탭 전환. 카테고리가 하나라도 있으면 상단에 탭 바가 보이고, 탭을 고른 상태에서 추가하면 그 카테고리로 만들어진다. 탭 안에서의 `Shift+↑/↓` 순서 이동은 같은 카테고리끼리만 움직인다.
+- `u`(되돌리기)는 세션 내 최대 50단계. 추가/완료/삭제/편집/마감일/카테고리/이동 전부 되돌린다. 삭제 복구는 하위 목표까지 복원.
 - 하위 목표는 2뎁스까지만 지원한다. 부모 완료는 자식 전체에 전파되고, 자식이 모두 완료되면 부모도 자동 완료된다.
 - 생성 시각은 우측 정렬된 로컬 시간 `YYYY-MM-DD HH:MM`이다. `⏳마감 YYYY-MM-DD`는 마감일이며, 지난 마감은 빨간색으로 표시된다.
+- 색은 기본 ANSI 16색만 써서 터미널 테마(팔레트)를 그대로 따라간다. 글꼴은 원래 터미널 설정을 따른다 (TUI는 자체 폰트가 없다).
 - 기존 명령형 목록은 `todo list`로 확인한다.
 
 다른 서버를 쓰려면 `TODO_API_BASE=http://localhost:3000` 환경변수로 바꾼다.
+
+AI 에이전트(Claude Code, Codex CLI, `npx skills`)가 이 CLI를 쓰는 방법은 `skills/todo-cli/SKILL.md`에 있다.
+Claude Code는 `.claude/skills/todo-cli/`로 자동 인식하고, Codex CLI는 `AGENTS.md`를 통해 안내받는다.
 
 ## 앱스토어 배포 (TWA)
 
