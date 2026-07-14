@@ -14,6 +14,29 @@ pub struct Data {
     pub memos: Vec<Memo>,
     #[serde(default)]
     pub sessions: Vec<Session>,
+    #[serde(default)]
+    pub routines: Vec<Routine>,
+}
+
+/// 요일별 반복 할 일. weekdays는 0=일 ~ 6=토. 서버가 해당 요일에 오늘 할 일로 펼친다.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Routine {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub weekdays: Vec<u8>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default = "default_true")]
+    pub active: bool,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

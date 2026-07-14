@@ -108,6 +108,46 @@ fn parse_due_token(token: &str) -> Option<String> {
         .map(|date| date.format("%Y-%m-%d").to_string())
 }
 
+/// 루틴 입력의 요일 접미사를 떼어낸다: "필라테스 월수금" -> ("필라테스", [1,3,5])
+/// "매일"/"평일"도 받는다. 요일을 안 적으면 매일로 본다. (0=일 ~ 6=토)
+pub fn split_weekdays(input: &str) -> (String, Vec<u8>) {
+    const EVERYDAY: [u8; 7] = [0, 1, 2, 3, 4, 5, 6];
+    let trimmed = input.trim();
+    let Some((title, token)) = trimmed.rsplit_once(' ') else {
+        return (trimmed.to_string(), EVERYDAY.to_vec());
+    };
+    let token = token.trim();
+    let weekdays = match token {
+        "매일" => EVERYDAY.to_vec(),
+        "평일" => vec![1, 2, 3, 4, 5],
+        "주말" => vec![0, 6],
+        _ => {
+            let parsed: Vec<u8> = token
+                .chars()
+                .filter_map(|ch| match ch {
+                    '일' => Some(0),
+                    '월' => Some(1),
+                    '화' => Some(2),
+                    '수' => Some(3),
+                    '목' => Some(4),
+                    '금' => Some(5),
+                    '토' => Some(6),
+                    _ => None,
+                })
+                .collect();
+            // 요일 글자만으로 이루어진 토큰일 때만 요일로 인정한다("보고서 쓰기"의 '쓰기'는 아님).
+            if parsed.len() != token.chars().count() || parsed.is_empty() {
+                return (trimmed.to_string(), EVERYDAY.to_vec());
+            }
+            parsed
+        }
+    };
+    let mut weekdays = weekdays;
+    weekdays.sort_unstable();
+    weekdays.dedup();
+    (title.trim().to_string(), weekdays)
+}
+
 /// 이번 주 월요일의 날짜 키
 pub fn monday_key() -> String {
     use chrono::Datelike;

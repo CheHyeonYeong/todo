@@ -204,6 +204,20 @@ impl Client {
     pub fn create_session(&mut self, session: &Value) -> Result<(), String> {
         self.request("POST", "/api/sessions", Some(session)).map(|_| ())
     }
+
+    pub fn create_routine(&mut self, routine: &Value) -> Result<(), String> {
+        self.request("POST", "/api/routines", Some(routine)).map(|_| ())
+    }
+
+    pub fn patch_routine(&mut self, id: &str, patch: &Value) -> Result<(), String> {
+        self.request("PATCH", &format!("/api/routines/{}", urlencode(id)), Some(patch))
+            .map(|_| ())
+    }
+
+    pub fn delete_routine(&mut self, id: &str) -> Result<(), String> {
+        self.request("DELETE", &format!("/api/routines/{}", urlencode(id)), None)
+            .map(|_| ())
+    }
 }
 
 fn read_json(path: &PathBuf) -> Option<Value> {

@@ -1,6 +1,6 @@
 //! 네트워크 쓰기를 별도 스레드로 보낸다. UI 스레드는 절대 API를 기다리지 않는다.
 use crate::api::Client;
-use crate::model::{OrderItem, Todo};
+use crate::model::{Data, OrderItem, Todo};
 use serde_json::Value;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
@@ -12,6 +12,11 @@ pub enum Job {
     Delete(String),
     Restore(Vec<Todo>),
     Reorder(Vec<OrderItem>),
+    CreateSession(Value),
+    CreateMemo(Value),
+    CreateRoutine(Value),
+    PatchRoutine(String, Value),
+    DeleteRoutine(String),
     Refresh,
 }
 
@@ -21,8 +26,8 @@ pub enum Event {
     Done,
     /// 쓰기 실패. UI는 메시지를 띄우고 서버 상태로 다시 맞춘다.
     Failed(String),
-    /// 새로고침 결과
-    Todos(Vec<Todo>),
+    /// 새로고침 결과 (할 일 + 시간 기록 + 루틴)
+    Data(Box<Data>),
     /// 새로고침 실패. 여기서 또 새로고침을 걸면 서버가 죽었을 때 무한 재시도가 된다.
     RefreshFailed(String),
 }
@@ -48,9 +53,14 @@ impl Sync {
                     Job::Delete(id) => client.delete_todo(id),
                     Job::Restore(todos) => todos.iter().try_for_each(|todo| client.restore_todo(todo)),
                     Job::Reorder(items) => client.reorder(items),
+                    Job::CreateSession(session) => client.create_session(session),
+                    Job::CreateMemo(memo) => client.create_memo(memo, &Value::Array(vec![])),
+                    Job::CreateRoutine(routine) => client.create_routine(routine),
+                    Job::PatchRoutine(id, patch) => client.patch_routine(id, patch),
+                    Job::DeleteRoutine(id) => client.delete_routine(id),
                     Job::Refresh => {
-                        let _ = event_tx.send(match client.fetch_todos() {
-                            Ok(todos) => Event::Todos(todos),
+                        let _ = event_tx.send(match client.fetch_data() {
+                            Ok(data) => Event::Data(Box::new(data)),
                             Err(error) => Event::RefreshFailed(error),
                         });
                         continue;

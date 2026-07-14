@@ -1,6 +1,6 @@
-use crate::app::{App, Editor, Mode};
-use crate::model::{scope_label, Row};
-use crate::util::days_from_today;
+use crate::app::{App, Editor, Mode, Overlay};
+use crate::model::{scope_label, Row, Session};
+use crate::util::{date_key, days_from_today, format_duration, local_timestamp, today_key};
 use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
@@ -169,7 +169,7 @@ fn tab_line<'a>(app: &App, width: usize) -> Line<'a> {
 }
 
 /// ? 를 눌렀을 때만 뜨는 도움말. 평소 화면은 목록만 보여준다.
-const HELP_KEYS: [(&str, &str); 15] = [
+const HELP_KEYS: [(&str, &str); 19] = [
     ("i / a", "입력 모드 (뒤에 @0715 @내일 로 마감)"),
     ("Esc", "명령 모드"),
     ("j / k, ↑ ↓", "위아래 이동"),
@@ -184,8 +184,146 @@ const HELP_KEYS: [(&str, &str); 15] = [
     ("Shift+← →", "하위로 넣기 / 빼기"),
     ("d", "삭제"),
     ("u", "되돌리기"),
+    ("p", "뽀모도로 타이머"),
+    ("T", "오늘 타임테이블"),
+    ("R", "루틴 (요일별 반복)"),
+    ("m", "빠른 메모"),
     ("r / q", "새로고침 / 종료"),
 ];
+
+/// 화면 가운데에 팝업 영역을 잡고 테두리를 그린다.
+fn popup(frame: &mut Frame, area: ratatui::layout::Rect, title: &str, width: u16, height: u16) -> ratatui::layout::Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let rect = ratatui::layout::Rect {
+        x: area.x + (area.width.saturating_sub(width)) / 2,
+        y: area.y + (area.height.saturating_sub(height)) / 2,
+        width,
+        height,
+    };
+    frame.render_widget(ratatui::widgets::Clear, rect);
+    let block = Block::bordered().title(format!(" {title} "));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+    inner
+}
+
+fn pomodoro_overlay(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+    let running = app.timer.end_at.is_some();
+    let inner = popup(frame, area, "뽀모도로 · Esc 닫기", 40, 8);
+    let lines = vec![
+        Line::from(""),
+        Line::from(Span::styled(
+            format!("        {}", app.timer.label()),
+            Style::new()
+                .fg(if running { Color::Green } else { Color::Reset })
+                .bold(),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(
+            if running {
+                "  Enter/Space 정지".to_string()
+            } else {
+                format!("  Enter/Space 시작   +/- {}분", app.timer.minutes)
+            },
+            Style::new().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            "  1분 이상이면 타임테이블에 기록",
+            Style::new().fg(Color::DarkGray),
+        )),
+    ];
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn timetable_overlay(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+    let today = today_key();
+    let today_sessions: Vec<&Session> = app
+        .sessions
+        .iter()
+        .filter(|session| date_key(&session.started_at) == today)
+        .collect();
+    let total: i64 = today_sessions
+        .iter()
+        .map(|session| crate::util::duration_ms(&session.started_at, &session.ended_at))
+        .sum();
+
+    let mut lines: Vec<Line> = Vec::new();
+    if today_sessions.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "오늘 기록이 없습니다. p 로 타이머를 돌려보세요.",
+            Style::new().fg(Color::DarkGray),
+        )));
+    } else {
+        for session in &today_sessions {
+            let span = format!(
+                "{} - {}",
+                local_timestamp(&session.started_at, false),
+                local_timestamp(&session.ended_at, false)
+            );
+            lines.push(Line::from(vec![
+                Span::styled(pad(&span, 14), Style::new().fg(Color::DarkGray)),
+                Span::raw("  "),
+                Span::raw(session.label.clone()),
+            ]));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("합계 {}", format_duration(total)),
+            Style::new().fg(Color::Green).bold(),
+        )));
+    }
+    let height = (lines.len() as u16 + 2).min(area.height);
+    let inner = popup(frame, area, "오늘 타임테이블 · 아무 키나 눌러 닫기", 56, height);
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn routines_overlay(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
+    const DAYS: [&str; 7] = ["일", "월", "화", "수", "목", "금", "토"];
+    let mut lines: Vec<Line> = Vec::new();
+    if app.routines.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "루틴이 없습니다. n 으로 추가하세요.",
+            Style::new().fg(Color::DarkGray),
+        )));
+    } else {
+        for (index, routine) in app.routines.iter().enumerate() {
+            let days: String = (0..7)
+                .map(|day| {
+                    if routine.weekdays.contains(&day) {
+                        DAYS[day as usize].to_string()
+                    } else {
+                        "·".to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("");
+            let title_color = if routine.active { Color::Reset } else { Color::DarkGray };
+            let line = Line::from(vec![
+                Span::styled(pad(&days, 14), Style::new().fg(Color::Cyan)),
+                Span::raw(" "),
+                Span::styled(pad(&routine.title, 20), Style::new().fg(title_color)),
+                Span::styled(
+                    if routine.active { "" } else { " (꺼짐)" },
+                    Style::new().fg(Color::DarkGray),
+                ),
+            ]);
+            lines.push(if index == app.routine_selected {
+                line.style(Style::new().bg(Color::DarkGray))
+            } else {
+                line
+            });
+        }
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "n 추가   1~7 요일(일~토)   Space 켜기/끄기   d 삭제   Esc 닫기",
+        Style::new().fg(Color::DarkGray),
+    )));
+    let height = (lines.len() as u16 + 2).min(area.height);
+    let inner = popup(frame, area, "루틴 · 정한 요일에 오늘 할 일로 들어갑니다", 64, height);
+    frame.render_widget(Paragraph::new(lines), inner);
+}
 
 fn help_overlay(frame: &mut Frame, area: ratatui::layout::Rect) {
     let key_width = HELP_KEYS
@@ -204,20 +342,9 @@ fn help_overlay(frame: &mut Frame, area: ratatui::layout::Rect) {
         })
         .collect();
 
-    let inner_width = (key_width + 40).min(area.width.saturating_sub(4) as usize) as u16;
+    let width = (key_width + 44).min(area.width as usize) as u16;
     let height = (lines.len() as u16 + 2).min(area.height);
-    let x = area.x + (area.width.saturating_sub(inner_width + 2)) / 2;
-    let y = area.y + (area.height.saturating_sub(height)) / 2;
-    let popup = ratatui::layout::Rect {
-        x,
-        y,
-        width: (inner_width + 2).min(area.width),
-        height,
-    };
-    frame.render_widget(ratatui::widgets::Clear, popup);
-    let block = Block::bordered().title(" 단축키 · 아무 키나 눌러 닫기 ");
-    let inner = block.inner(popup);
-    frame.render_widget(block, popup);
+    let inner = popup(frame, area, "단축키 · 아무 키나 눌러 닫기", width, height);
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
@@ -235,10 +362,14 @@ fn summary(app: &App) -> String {
             !todo.done && todo.due_date.as_deref().map(|due| days_from_today(due) < 0).unwrap_or(false)
         })
         .count();
+    let timer = match app.timer.end_at {
+        Some(_) => format!("  ·  ⏱ {}", app.timer.label()),
+        None => String::new(),
+    };
     if overdue > 0 {
-        format!(" To-Do  남은 일 {open}  ·  지난 마감 {overdue} ")
+        format!(" To-Do  남은 일 {open}  ·  지난 마감 {overdue}{timer} ")
     } else {
-        format!(" To-Do  남은 일 {open} ")
+        format!(" To-Do  남은 일 {open}{timer} ")
     }
 }
 
@@ -343,7 +474,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         }
         None => {
             let hint = if app.message.is_empty() {
-                "i 입력   Space 완료   ? 단축키   q 종료".to_string()
+                "i 입력   Space 완료   p 타이머   R 루틴   ? 단축키".to_string()
             } else {
                 app.message.clone()
             };
@@ -358,8 +489,12 @@ pub fn render(frame: &mut Frame, app: &App) {
         }
     }
 
-    if app.help_open {
-        help_overlay(frame, frame.area());
+    match app.overlay {
+        Overlay::None => {}
+        Overlay::Help => help_overlay(frame, frame.area()),
+        Overlay::Pomodoro => pomodoro_overlay(frame, app, frame.area()),
+        Overlay::Timetable => timetable_overlay(frame, app, frame.area()),
+        Overlay::Routines => routines_overlay(frame, app, frame.area()),
     }
 }
 

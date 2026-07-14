@@ -1,11 +1,12 @@
 use crate::api::Client;
 use crate::local;
 use crate::model::{
-    category_list, normalized_items, ordered_siblings, valid_date, visible_tree, OrderItem, Row, Todo,
+    category_list, extract_tags, normalized_items, ordered_siblings, valid_date, visible_tree, OrderItem,
+    Routine, Row, Session, Todo,
 };
 use crate::sync::{Event as SyncEvent, Job, Sync};
 use crate::ui;
-use crate::util::{new_uuid, now_iso, split_due_suffix, today_key};
+use crate::util::{new_uuid, now_iso, split_due_suffix, split_weekdays, today_key};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -23,6 +24,10 @@ pub enum PromptKind {
     Edit,
     Due,
     Category,
+    /// 빠른 메모 (m)
+    Memo,
+    /// 루틴 추가 (R 오버레이에서 n). "제목 월수금" 처럼 요일을 뒤에 붙인다.
+    Routine,
 }
 
 pub struct Editor {
@@ -113,9 +118,46 @@ pub struct UndoEntry {
     pub op: Op,
 }
 
+/// 평소에는 목록만 보이고, 이것들은 키를 눌렀을 때만 위에 뜬다.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Overlay {
+    None,
+    Help,
+    Pomodoro,
+    Timetable,
+    Routines,
+}
+
+/// 뽀모도로. 서버와 무관하게 로컬에서 돌고, 1분 이상 집중하면 타임테이블에 기록한다.
+pub struct Timer {
+    pub minutes: i64,
+    pub end_at: Option<Instant>,
+    pub started_at: Option<String>,
+}
+
+impl Timer {
+    pub fn remaining(&self) -> Option<Duration> {
+        self.end_at.map(|end| end.saturating_duration_since(Instant::now()))
+    }
+
+    pub fn label(&self) -> String {
+        let seconds = self
+            .remaining()
+            .map(|left| left.as_secs())
+            .unwrap_or((self.minutes * 60) as u64);
+        format!("{:02}:{:02}", seconds / 60, seconds % 60)
+    }
+}
+
 pub struct App {
     pub sync: Sync,
     pub todos: Vec<Todo>,
+    pub sessions: Vec<Session>,
+    pub routines: Vec<Routine>,
+    pub overlay: Overlay,
+    pub timer: Timer,
+    /// 루틴 오버레이의 선택 위치
+    pub routine_selected: usize,
     pub mode: Mode,
     pub input: Editor,
     pub prompt: Option<Prompt>,
@@ -126,8 +168,6 @@ pub struct App {
     pub undo_stack: Vec<UndoEntry>,
     pub message: String,
     pub quit: bool,
-    /// ? 를 눌렀을 때만 뜨는 단축키 오버레이
-    pub help_open: bool,
     /// 순서 이동은 연타되기 쉬워서 이 시각까지 모았다가 한 번만 보낸다.
     reorder_due: Option<Instant>,
     /// 새로고침 요청이 이미 워커에 가 있는지 (중복 요청 방지)
@@ -137,10 +177,15 @@ pub struct App {
 const REORDER_DEBOUNCE: Duration = Duration::from_millis(300);
 
 impl App {
-    fn new(sync: Sync, todos: Vec<Todo>) -> Self {
+    fn new(sync: Sync, data: crate::model::Data) -> Self {
         let mut app = App {
             sync,
-            todos,
+            todos: data.todos,
+            sessions: data.sessions,
+            routines: data.routines,
+            overlay: Overlay::None,
+            timer: Timer { minutes: 25, end_at: None, started_at: None },
+            routine_selected: 0,
             mode: Mode::Insert,
             input: Editor::new(""),
             prompt: None,
@@ -151,7 +196,6 @@ impl App {
             undo_stack: Vec::new(),
             message: String::new(),
             quit: false,
-            help_open: false,
             reorder_due: None,
             refresh_pending: false,
         };
@@ -183,8 +227,11 @@ impl App {
     }
 
     /// 서버 상태로 다시 맞춘다 (수동 새로고침, 쓰기 실패 후 복구).
-    fn adopt(&mut self, todos: Vec<Todo>) {
-        self.todos = todos;
+    fn adopt(&mut self, data: crate::model::Data) {
+        self.todos = data.todos;
+        self.sessions = data.sessions;
+        self.routines = data.routines;
+        self.routine_selected = self.routine_selected.min(self.routines.len().saturating_sub(1));
         if let Some(active) = &self.category {
             if !self.categories().contains(active) {
                 self.category = None;
@@ -332,6 +379,77 @@ impl App {
         self.sync.send(Job::Reorder(items));
     }
 
+    /// 타이머가 끝났으면 알리고, 1분 이상이면 타임테이블에 기록한다.
+    pub fn tick_timer(&mut self) {
+        let Some(end) = self.timer.end_at else { return };
+        if Instant::now() < end {
+            return;
+        }
+        self.timer.end_at = None;
+        let started_at = self.timer.started_at.take();
+        self.message = "집중 끝! 잠깐 쉬세요.".to_string();
+        print!("\x07"); // 터미널 벨
+        let Some(started_at) = started_at else { return };
+        if self.timer.minutes < 1 {
+            return;
+        }
+        let session = json!({
+            "id": new_uuid(),
+            "label": "뽀모도로 집중",
+            "startedAt": started_at,
+            "endedAt": now_iso(),
+        });
+        self.sessions.push(Session {
+            id: session["id"].as_str().unwrap_or_default().to_string(),
+            label: "뽀모도로 집중".to_string(),
+            started_at: session["startedAt"].as_str().unwrap_or_default().to_string(),
+            ended_at: session["endedAt"].as_str().unwrap_or_default().to_string(),
+        });
+        self.sync.send(Job::CreateSession(session));
+    }
+
+    fn toggle_timer(&mut self) {
+        if self.timer.end_at.is_some() {
+            self.timer.end_at = None;
+            self.timer.started_at = None;
+            self.message = "타이머 정지".to_string();
+            return;
+        }
+        self.timer.end_at = Some(Instant::now() + Duration::from_secs((self.timer.minutes * 60) as u64));
+        self.timer.started_at = Some(now_iso());
+        self.message = format!("{}분 집중 시작", self.timer.minutes);
+    }
+
+    fn quick_memo(&mut self, body: &str) {
+        let memo = json!({
+            "id": new_uuid(),
+            "title": "",
+            "body": body,
+            "tags": extract_tags(body),
+            "createdAt": now_iso(),
+        });
+        self.sync.send(Job::CreateMemo(memo));
+        self.message = "메모 저장".to_string();
+    }
+
+    fn toggle_routine_active(&mut self) {
+        let Some(routine) = self.routines.get_mut(self.routine_selected) else { return };
+        routine.active = !routine.active;
+        let (id, active) = (routine.id.clone(), routine.active);
+        self.sync.send(Job::PatchRoutine(id, json!({ "active": active })));
+        self.sync.send(Job::Refresh);
+    }
+
+    fn delete_routine(&mut self) {
+        if self.routine_selected >= self.routines.len() {
+            return;
+        }
+        let routine = self.routines.remove(self.routine_selected);
+        self.routine_selected = self.routine_selected.min(self.routines.len().saturating_sub(1));
+        self.message = format!("루틴 삭제: {}", routine.title);
+        self.sync.send(Job::DeleteRoutine(routine.id));
+    }
+
     fn drain_sync(&mut self) {
         while let Ok(event) = self.sync.events.try_recv() {
             match event {
@@ -346,9 +464,9 @@ impl App {
                         self.sync.send(Job::Refresh);
                     }
                 }
-                SyncEvent::Todos(todos) => {
+                SyncEvent::Data(data) => {
                     self.refresh_pending = false;
-                    self.adopt(todos);
+                    self.adopt(*data);
                 }
                 SyncEvent::RefreshFailed(error) => {
                     // 여기서 다시 새로고침을 걸면 서버가 죽어 있을 때 무한 재시도가 된다.
@@ -396,6 +514,31 @@ impl App {
                     self.category = None;
                 }
                 self.sync_selection(Some(prompt.todo_id));
+            }
+            PromptKind::Memo => {
+                if !value.is_empty() {
+                    self.quick_memo(&value);
+                }
+            }
+            PromptKind::Routine => {
+                if value.is_empty() {
+                    return;
+                }
+                let (title, weekdays) = split_weekdays(&value);
+                if title.is_empty() {
+                    self.message = "루틴 이름이 없습니다".to_string();
+                    return;
+                }
+                let routine = json!({
+                    "id": new_uuid(),
+                    "title": title,
+                    "weekdays": weekdays,
+                    "createdAt": now_iso(),
+                });
+                self.sync.send(Job::CreateRoutine(routine));
+                // 오늘 요일이면 서버가 오늘 할 일로 펼쳐주므로 목록을 다시 받는다.
+                self.sync.send(Job::Refresh);
+                self.message = format!("루틴 추가: {title}");
             }
         }
     }
@@ -549,6 +692,8 @@ impl App {
     fn open_prompt(&mut self, kind: PromptKind) {
         let Some(row) = self.selected_row() else { return };
         let (label, initial, target) = match kind {
+            // 이 둘은 선택된 할 일과 무관하므로 open_free_prompt로 연다.
+            PromptKind::Memo | PromptKind::Routine => return self.open_free_prompt(kind),
             PromptKind::Child => {
                 let parent = if row.depth == 0 {
                     row.todo.clone()
@@ -598,12 +743,91 @@ impl App {
         });
     }
 
+    /// 오버레이가 떠 있는 동안의 키. 처리했으면 true.
+    fn handle_overlay_key(&mut self, key: &KeyEvent) -> bool {
+        match self.overlay.clone() {
+            Overlay::None => false,
+            Overlay::Help | Overlay::Timetable => {
+                // 읽기만 하는 오버레이는 아무 키나 눌러 닫는다.
+                self.overlay = Overlay::None;
+                true
+            }
+            Overlay::Pomodoro => {
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('p') | KeyCode::Char('q') => self.overlay = Overlay::None,
+                    KeyCode::Enter | KeyCode::Char(' ') => self.toggle_timer(),
+                    KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Up | KeyCode::Char('k') => {
+                        if self.timer.end_at.is_none() {
+                            self.timer.minutes = (self.timer.minutes + 5).min(180);
+                        }
+                    }
+                    KeyCode::Char('-') | KeyCode::Down | KeyCode::Char('j') => {
+                        if self.timer.end_at.is_none() {
+                            self.timer.minutes = (self.timer.minutes - 5).max(1);
+                        }
+                    }
+                    _ => {}
+                }
+                true
+            }
+            Overlay::Routines => {
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('R') | KeyCode::Char('q') => self.overlay = Overlay::None,
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        self.routine_selected = (self.routine_selected + 1).min(self.routines.len().saturating_sub(1));
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        self.routine_selected = self.routine_selected.saturating_sub(1);
+                    }
+                    KeyCode::Char('n') => self.open_free_prompt(PromptKind::Routine),
+                    KeyCode::Char(' ') => self.toggle_routine_active(),
+                    KeyCode::Char('d') => self.delete_routine(),
+                    // 요일 1~7 = 일~토 토글
+                    KeyCode::Char(ch @ '1'..='7') => {
+                        let day = ch as u8 - b'1';
+                        if let Some(routine) = self.routines.get_mut(self.routine_selected) {
+                            if routine.weekdays.contains(&day) {
+                                routine.weekdays.retain(|item| *item != day);
+                            } else {
+                                routine.weekdays.push(day);
+                                routine.weekdays.sort_unstable();
+                            }
+                            let (id, weekdays) = (routine.id.clone(), routine.weekdays.clone());
+                            self.sync.send(Job::PatchRoutine(id, json!({ "weekdays": weekdays })));
+                            self.sync.send(Job::Refresh);
+                        }
+                    }
+                    _ => {}
+                }
+                true
+            }
+        }
+    }
+
+    /// 선택된 할 일과 무관한 프롬프트 (메모, 루틴 추가)
+    fn open_free_prompt(&mut self, kind: PromptKind) {
+        let label = match kind {
+            PromptKind::Memo => "메모 (#태그 가능)",
+            _ => "루틴 (예: 필라테스 월수금 / 약 먹기 매일)",
+        };
+        self.prompt = Some(Prompt {
+            kind,
+            label: label.to_string(),
+            editor: Editor::new(""),
+            todo_id: String::new(),
+        });
+    }
+
     fn handle_key(&mut self, key: KeyEvent) {
         self.message.clear();
         let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         if ctrl && key.code == KeyCode::Char('c') {
             self.quit = true;
+            return;
+        }
+
+        if self.prompt.is_none() && self.handle_overlay_key(&key) {
             return;
         }
 
@@ -670,13 +894,13 @@ impl App {
     }
 
     fn handle_normal_key(&mut self, key: &KeyEvent) {
-        // 도움말이 떠 있으면 아무 키나 눌러 닫는다.
-        if self.help_open {
-            self.help_open = false;
-            return;
-        }
         match key.code {
-            KeyCode::Char('?') => self.help_open = true,
+            KeyCode::Char('?') => self.overlay = Overlay::Help,
+            KeyCode::Char('p') => self.overlay = Overlay::Pomodoro,
+            KeyCode::Char('T') => self.overlay = Overlay::Timetable,
+            KeyCode::Char('R') => self.overlay = Overlay::Routines,
+            KeyCode::Char('m') => self.open_free_prompt(PromptKind::Memo),
+            KeyCode::Char('n') => self.open_free_prompt(PromptKind::Routine),
             KeyCode::Char('i') | KeyCode::Char('a') | KeyCode::Esc => self.mode = Mode::Insert,
             KeyCode::Char('q') => self.quit = true,
             KeyCode::Char('j') => self.move_selection(true),
@@ -709,20 +933,20 @@ fn drain_on_quit(app: &mut App) {
     while app.sync.in_flight > 0 && Instant::now() < deadline {
         match app.sync.events.recv_timeout(Duration::from_millis(200)) {
             Ok(SyncEvent::Done) | Ok(SyncEvent::Failed(_)) => app.sync.settle(),
-            Ok(SyncEvent::Todos(_)) | Ok(SyncEvent::RefreshFailed(_)) => {}
+            Ok(SyncEvent::Data(_)) | Ok(SyncEvent::RefreshFailed(_)) => {}
             Err(_) => {}
         }
     }
 }
 
 pub fn run(client: Client) -> Result<(), String> {
-    let todos = {
+    let data = {
         // 첫 데이터만 동기로 받고, 이후 네트워크는 전부 워커 스레드가 맡는다.
         let mut client = client;
-        client.fetch_todos()?
+        client.fetch_data()?
     };
     let sync = Sync::spawn(Client::new());
-    let mut app = App::new(sync, todos);
+    let mut app = App::new(sync, data);
 
     let mut terminal = ratatui::init();
     loop {
@@ -746,6 +970,7 @@ pub fn run(client: Client) -> Result<(), String> {
         }
         app.drain_sync();
         app.flush_reorder(false);
+        app.tick_timer();
         if app.quit {
             break;
         }
