@@ -131,9 +131,60 @@ fn tab_line<'a>(app: &App, width: usize) -> Line<'a> {
     Line::from(spans)
 }
 
+/// 단축키 안내. 한 줄에 다 넣으면 잘리므로 터미널 폭에 맞춰 여러 줄로 채운다.
+const HELP_ITEMS: [&str; 16] = [
+    "i 입력",
+    "Esc 명령모드",
+    "j/k 이동",
+    "h/l 접기",
+    "Space 완료",
+    "s 하위",
+    "e 편집",
+    "t 마감",
+    "c 분류",
+    "Tab 분류전환",
+    "Shift+↑↓ 순서",
+    "Shift+←→ 하위/상위",
+    "d 삭제",
+    "u 되돌림",
+    "r 새로고침",
+    "q 종료",
+];
+const HELP_GAP: &str = "  ";
+
+fn help_lines(width: usize) -> Vec<String> {
+    let gap = UnicodeWidthStr::width(HELP_GAP);
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut used = 0;
+    for item in HELP_ITEMS {
+        let item_width = UnicodeWidthStr::width(item);
+        let extra = if current.is_empty() { item_width } else { gap + item_width };
+        if !current.is_empty() && used + extra > width {
+            lines.push(std::mem::take(&mut current));
+            used = 0;
+        }
+        if !current.is_empty() {
+            current.push_str(HELP_GAP);
+            used += gap;
+        }
+        current.push_str(item);
+        used += item_width;
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
 pub fn render(frame: &mut Frame, app: &App) {
-    let [list_area, input_area] =
-        Layout::vertical([Constraint::Min(3), Constraint::Length(3)]).areas(frame.area());
+    let help = help_lines(frame.area().width as usize);
+    let [list_area, input_area, help_area] = Layout::vertical([
+        Constraint::Min(3),
+        Constraint::Length(3),
+        Constraint::Length(help.len() as u16),
+    ])
+    .areas(frame.area());
 
     let root_count = app.todos.iter().filter(|todo| todo.parent_id.is_none()).count();
     let mode_label = match (&app.prompt, &app.mode) {
@@ -232,12 +283,7 @@ pub fn render(frame: &mut Frame, app: &App) {
             });
         }
         None => {
-            let help = if app.message.is_empty() {
-                "i 입력  s 하위  e 편집  t 마감  c 분류  Space 완료  d 삭제  u 되돌림  r 새로고침  q 종료"
-            } else {
-                app.message.as_str()
-            };
-            let mut spans = vec![Span::styled(help.to_string(), Style::new().fg(Color::DarkGray))];
+            let mut spans = vec![Span::styled(app.message.clone(), Style::new().fg(Color::DarkGray))];
             if app.sync.in_flight > 0 {
                 spans.push(Span::styled(
                     format!("  ⟳ 저장 중 {}", app.sync.in_flight),
@@ -247,6 +293,12 @@ pub fn render(frame: &mut Frame, app: &App) {
             frame.render_widget(Paragraph::new(Line::from(spans)), input_inner);
         }
     }
+
+    let help_text = help
+        .into_iter()
+        .map(|line| Line::from(Span::styled(line, Style::new().fg(Color::DarkGray))))
+        .collect::<Vec<_>>();
+    frame.render_widget(Paragraph::new(help_text), help_area);
 }
 
 fn editor_viewport(editor: &Editor, width: usize) -> (String, usize) {
