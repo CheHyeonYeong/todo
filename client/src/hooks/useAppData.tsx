@@ -181,9 +181,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setAuthToken(session?.access_token ?? null);
       setEmail(session?.user?.email || "");
     });
+    /* 모바일에서 앱을 백그라운드로 두면 자동 갱신 타이머가 멈춘다. 다시 보일 때 갱신하고 동기화한다. */
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || authRef.current !== "ready") return;
+      refreshAuthToken().finally(loadServerData);
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(id);
       listener?.data.subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -212,9 +212,9 @@ function PanelSlot({
     >
       <button
         type="button"
-        title={`${panelTitles[panel]} 위치 옮기기`}
+        title={`${panelTitles[panel]} 위치 옮기기 (끌어서 다른 패널과 자리 교환)`}
         aria-label={`${panelTitles[panel]} 위치 옮기기`}
-        className="absolute top-1 left-1/2 z-10 grid h-5 w-10 -translate-x-1/2 cursor-grab place-items-center rounded-b-md text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/panel:opacity-100 active:cursor-grabbing"
+        className="absolute top-0 left-1/2 z-10 grid h-6 w-16 -translate-x-1/2 cursor-grab place-items-center rounded-b-lg border border-t-0 border-border bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing"
         onPointerDown={() => setArmed(true)}
         onPointerUp={() => setArmed(false)}
       >

@@ -4,7 +4,16 @@ import { API_BASE_URL, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/config";
 const AUTH_TOKEN_KEY = "free-adhd-memo:auth-token";
 
 export const supabase =
-  SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+  SUPABASE_URL && SUPABASE_ANON_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          // refresh token은 localStorage에 남아 탭을 닫아도 유지되고, access token은 알아서 갱신된다.
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      })
+    : null;
 
 export function setAuthToken(token: string | null) {
   if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
