@@ -14,9 +14,10 @@ const binDir = join(root, "bin");
 const isWindows = process.platform === "win32";
 const output = join(binDir, isWindows ? "todo.exe" : "todo");
 
+// Linux는 musl 정적 링크 빌드라 glibc 버전과 무관하게 실행된다.
 const targets = {
-  "linux-x64": "x86_64-unknown-linux-gnu",
-  "linux-arm64": "aarch64-unknown-linux-gnu",
+  "linux-x64": "x86_64-unknown-linux-musl",
+  "linux-arm64": "aarch64-unknown-linux-musl",
   "darwin-x64": "x86_64-apple-darwin",
   "darwin-arm64": "aarch64-apple-darwin",
   "win32-x64": "x86_64-pc-windows-msvc",

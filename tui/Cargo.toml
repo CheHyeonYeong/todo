@@ -1,6 +1,6 @@
 [package]
 name = "todo"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Todo 터미널 클라이언트 — 웹앱과 같은 API 서버에 연동되는 CLI + TUI"
 
