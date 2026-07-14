@@ -1,10 +1,18 @@
-import { LayoutGrid, LogOut, PenLine } from "lucide-react";
+import { Download, LayoutGrid, LogOut, PenLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/hooks/useAppData";
 import { cn } from "@/lib/utils";
 
-export function Topbar({ onOpenMemo, onResetLayout }: { onOpenMemo: () => void; onResetLayout?: () => void }) {
+export function Topbar({
+  onOpenMemo,
+  onOpenInstall,
+  onResetLayout,
+}: {
+  onOpenMemo: () => void;
+  onOpenInstall: () => void;
+  onResetLayout?: () => void;
+}) {
   const { email, logout, sync } = useAppData();
 
   return (
@@ -14,6 +22,10 @@ export function Topbar({ onOpenMemo, onResetLayout }: { onOpenMemo: () => void; 
         <Button variant="outline" size="sm" className="lg:hidden" onClick={onOpenMemo}>
           <PenLine className="size-4" />
           메모
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onOpenInstall} title="앱·터미널 설치 안내">
+          <Download className="size-4" />
+          <span className="hidden sm:inline">설치</span>
         </Button>
         {onResetLayout && (
           <Button variant="ghost" size="sm" onClick={onResetLayout} title="패널 배치를 기본값으로 되돌리기">

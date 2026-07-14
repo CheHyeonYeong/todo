@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { GripHorizontal } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { FocusPanel } from "@/components/FocusPanel";
+import { InstallSheet } from "@/components/InstallSheet";
 import { LoginScreen } from "@/components/LoginScreen";
 import { MemoSheet, MemoWorkspace } from "@/components/MemoWorkspace";
 import { PomodoroPanel } from "@/components/PomodoroPanel";
@@ -230,6 +231,7 @@ function Shell() {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const panelLayout = usePanelLayout();
   const [memoOpen, setMemoOpen] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
   const [leftWidth, saveLeftWidth] = useStoredPx(DASHBOARD_WIDTH_KEY);
   const [dockHeight, saveDockHeight] = useStoredPx(MEMO_DOCK_HEIGHT_KEY);
   const leftRef = useRef<HTMLDivElement>(null);
@@ -246,6 +248,7 @@ function Shell() {
       <div className="mx-auto flex h-dvh w-full max-w-[1480px] flex-col overflow-y-auto p-4 lg:overflow-hidden">
         <Topbar
           onOpenMemo={() => setMemoOpen(true)}
+          onOpenInstall={() => setInstallOpen(true)}
           onResetLayout={isDesktop && panelLayout.customized ? panelLayout.reset : undefined}
         />
         <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
@@ -306,6 +309,7 @@ function Shell() {
         </div>
       </div>
       {!isDesktop && <MemoSheet open={memoOpen} onOpenChange={setMemoOpen} />}
+      <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
     </>
   );
 }

@@ -19,6 +19,18 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// 알림을 누르면 이미 열린 탭으로 가고, 없으면 새로 연다.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const client = clients.find((item) => "focus" in item);
+      if (client) return client.focus();
+      return self.clients.openWindow("/");
+    }),
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;

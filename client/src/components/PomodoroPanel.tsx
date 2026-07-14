@@ -35,6 +35,33 @@ function loadTimerMinutes() {
   }
 }
 
+/* 모바일 크롬은 new Notification()을 막고 서비스워커의 showNotification만 허용한다.
+   창이 안 떠 있어도(백그라운드 탭/다른 앱) 뜨도록 서비스워커를 먼저 쓴다. */
+async function notify(body: string) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const options: NotificationOptions = {
+    body,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: "pomodoro",
+    requireInteraction: true,
+  };
+  try {
+    const registration = await navigator.serviceWorker?.ready;
+    if (registration) {
+      await registration.showNotification("Todo", options);
+      return;
+    }
+  } catch {
+    // 서비스워커가 없거나 실패하면 창 알림으로 넘어간다.
+  }
+  try {
+    new Notification("Todo", options);
+  } catch {
+    // 알림이 안 되는 환경이면 소리로만 알린다.
+  }
+}
+
 function playBeep() {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -63,6 +90,9 @@ export function PomodoroPanel() {
   const [secondsLeft, setSecondsLeft] = useState(minutes.focus * 60);
   const [running, setRunning] = useState(false);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
+  const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | "unsupported">(() =>
+    "Notification" in window ? Notification.permission : "unsupported",
+  );
   const activeSessionRef = useRef(activeSession);
   activeSessionRef.current = activeSession;
   const modeRef = useRef(mode);
@@ -104,9 +134,7 @@ export function PomodoroPanel() {
       setRunning(false);
       playBeep();
       const message = modeRef.current === "focus" ? "집중 끝! 잠깐 쉬세요." : "휴식 끝! 다시 시작해볼까요.";
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("Todo", { body: message, icon: "/icons/icon-192.png" });
-      }
+      void notify(message);
       recordFocusSegmentRef.current(endAt);
     };
     const id = setInterval(tick, 500);
@@ -126,7 +154,7 @@ export function PomodoroPanel() {
 
   const start = () => {
     if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+      Notification.requestPermission().then(setNotifyPermission);
     }
     const baseSeconds = secondsLeft > 0 ? secondsLeft : minutes[mode] * 60;
     setSecondsLeft(baseSeconds);
@@ -203,9 +231,11 @@ export function PomodoroPanel() {
           />
         </div>
         <p className="mt-2 text-center text-xs font-medium text-muted-foreground">
-          {draftMinutes
-            ? "집중 1분 이상이면 타임테이블에 자동 기록"
-            : `${MIN_MINUTES}~${MAX_MINUTES} 사이의 분을 입력하세요`}
+          {!draftMinutes
+            ? `${MIN_MINUTES}~${MAX_MINUTES} 사이의 분을 입력하세요`
+            : notifyPermission === "denied"
+              ? "알림이 차단돼 있어 소리로만 알려요 (브라우저 설정에서 허용)"
+              : "집중 1분 이상이면 타임테이블에 자동 기록"}
         </p>
         <div className="mt-3 flex gap-2">
           <Button
