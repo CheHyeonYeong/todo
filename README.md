@@ -241,6 +241,21 @@ todo log --week        # 이번 주 작업별 시간 합계
 AI 에이전트(Claude Code, Codex CLI, `npx skills`)가 이 CLI를 쓰는 방법은 `skills/todo-cli/SKILL.md`에 있다.
 Claude Code는 `.claude/skills/todo-cli/`로 자동 인식하고, Codex CLI는 `AGENTS.md`를 통해 안내받는다.
 
+## Rust TUI
+
+같은 TUI의 Rust 구현이 `tui/`에 있다 ([ratatui](https://ratatui.rs) 기반, [fru1tworld/todo-tui](https://github.com/fru1tworld/todo-tui) 스타일).
+로컬 SQLite 대신 위 CLI와 같은 API 서버에 붙어서 웹/JS CLI와 데이터가 그대로 연동되고,
+`~/.config/todo/session.json`의 로그인 세션도 재사용한다 (먼저 `todo login` 필요).
+
+```bash
+cd tui
+cargo build --release          # Rust 1.75+ 권장
+./target/release/todo-tui      # TODO_API_BASE로 서버 변경 가능
+```
+
+키바인딩은 JS TUI와 동일하다 (Insert/Normal 모드, `s` 하위, `e` 편집, `t` 마감, `c` 카테고리,
+`Space` 완료, `d` 삭제, `u` 되돌리기, `Tab` 카테고리 탭, `Shift+화살표` 이동/중첩, `q` 종료).
+
 ## 앱스토어 배포 (TWA)
 
 이 앱은 PWA라서 Google Play에는 TWA(Trusted Web Activity)로 그대로 올릴 수 있다.
@@ -263,3 +278,7 @@ iOS App Store는 웹 래퍼 앱 심사 거절 위험이 크고 연 $99가 든다
 npm run build
 npm run preview
 ```
+
+## 감사
+
+- **타르트님** — QA와 기능 제안을 맡아 주시는 분. 이 앱의 여러 기능이 타르트님의 아이디어에서 나왔다.

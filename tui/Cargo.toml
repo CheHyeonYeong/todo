@@ -1,0 +1,18 @@
+[package]
+name = "todo-tui"
+version = "0.1.0"
+edition = "2021"
+description = "Todo 터미널 TUI (Rust) — 웹앱과 같은 API 서버에 연동"
+
+[dependencies]
+ratatui = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", features = ["json"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+dirs = "5"
+unicode-width = "0.2"
+
+[profile.release]
+strip = true
+lto = true
