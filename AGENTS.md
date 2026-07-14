@@ -1,6 +1,7 @@
 # AI 에이전트 가이드
 
-이 저장소는 todo/메모/타임테이블 웹앱이다. 프론트엔드는 `client/`(React + Vite), API 서버는 `server/server.js`(Node, 무의존성), 터미널 클라이언트는 `cli/todo.js`.
+이 저장소는 todo/메모/타임테이블 웹앱이다. 프론트엔드는 `client/`(React + Vite), API 서버는 `server/server.js`(Node, 무의존성),
+터미널 클라이언트는 `tui/`(Rust CLI + TUI 단일 바이너리)다.
 
 ## todo CLI 사용법
 
@@ -14,5 +15,6 @@
 ## 개발 시 참고
 
 - 로컬 서버(파일 저장 모드, 인증 없음): `PORT=34567 DATA_FILE=/tmp/store.json node server/server.js`
-- CLI를 로컬 서버로 돌리기: `TODO_API_BASE=http://localhost:34567 node cli/todo.js list`
+- CLI 빌드: `cd tui && cargo build`
+- CLI를 로컬 서버로 돌리기: `TODO_API_BASE=http://localhost:34567 ./tui/target/debug/todo list`
 - 커밋 메시지에 Co-Authored-By: Claude 트레일러를 넣지 않는다.

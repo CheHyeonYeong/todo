@@ -5,7 +5,7 @@ description: Use the `todo` terminal CLI to read and manage the user's todos, me
 
 # todo CLI
 
-`todo`는 웹앱(https://todo-cohe.vercel.app)과 같은 API를 쓰는 터미널 클라이언트다.
+`todo`는 웹앱(https://todo-cohe.vercel.app)과 같은 API를 쓰는 터미널 클라이언트다 (Rust 단일 바이너리).
 할 일(todo) 3단계 기간(오늘/이번 주/이번 달), 2뎁스 하위 목표, 카테고리, 메모, 시간 기록을 지원한다.
 
 ## 에이전트가 지켜야 할 것
@@ -18,10 +18,10 @@ description: Use the `todo` terminal CLI to read and manage the user's todos, me
 
 ## 설치
 
-Node.js 18+만 있으면 된다:
-
 ```bash
-npm install -g https://todo-cohe.vercel.app/cli.tgz
+npm install -g https://todo-cohe.vercel.app/cli.tgz          # 플랫폼별 바이너리를 릴리스에서 받음
+# 또는 Rust 툴체인이 있으면
+cargo install --git https://github.com/CheHyeonYeong/todo todo
 ```
 
 ## 명령 레퍼런스

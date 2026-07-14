@@ -1,7 +1,7 @@
+use crate::app::{App, Editor, Mode};
 use crate::model::{scope_label, Row};
-use crate::{App, Mode};
-use chrono::{DateTime, Local};
-use ratatui::layout::{Constraint, Layout, Position, Rect};
+use crate::util::{local_timestamp, today_key};
+use ratatui::layout::{Constraint, Layout, Position};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
@@ -30,22 +30,6 @@ fn pad(text: &str, width: usize) -> String {
     let clipped = truncate(text, width);
     let used = UnicodeWidthStr::width(clipped.as_str());
     format!("{clipped}{}", " ".repeat(width.saturating_sub(used)))
-}
-
-fn local_timestamp(value: &str, full: bool) -> String {
-    let Ok(parsed) = DateTime::parse_from_rfc3339(value) else {
-        return String::new();
-    };
-    let local = parsed.with_timezone(&Local);
-    if full {
-        local.format("%Y-%m-%d %H:%M").to_string()
-    } else {
-        local.format("%H:%M").to_string()
-    }
-}
-
-fn today_key() -> String {
-    Local::now().format("%Y-%m-%d").to_string()
 }
 
 enum ListLine {
@@ -259,10 +243,9 @@ pub fn render(frame: &mut Frame, app: &App) {
             );
         }
     }
-    let _ = Rect::default();
 }
 
-fn editor_viewport(editor: &crate::Editor, width: usize) -> (String, usize) {
+fn editor_viewport(editor: &Editor, width: usize) -> (String, usize) {
     let chars = &editor.chars;
     let cursor = editor.cursor.min(chars.len());
     let mut start = 0;

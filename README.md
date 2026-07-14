@@ -4,7 +4,7 @@ todo + timestamp memo + pomodoro 앱.
 
 - 웹: React + Vite + Tailwind + shadcn/ui (`client/`), PWA라 폰 홈 화면에 설치 가능
 - API: 의존성 없는 Node 서버 (`server/`), 저장소는 Postgres 또는 로컬 JSON 파일
-- 터미널: JS CLI/TUI (`cli/`), Rust TUI (`tui/`)
+- 터미널: Rust CLI + TUI (`tui/`)
 - 인증: Google 로그인 하나만. 데이터는 사용자별로 분리된다.
 
 ## 기능
@@ -34,15 +34,21 @@ npm run dev          # http://localhost:3000
 환경변수는 `.env.example`을 참고한다. 프로덕션에서는 `SUPABASE_URL`/`SUPABASE_ANON_KEY`(Google 로그인 JWT 검증)와
 `ALLOWED_ORIGINS`(API를 호출할 프론트엔드 origin)를 반드시 채운다. 안 채우면 API가 무인증으로 열린다.
 
-## 터미널 CLI
+## 터미널 CLI / TUI
 
-웹앱과 같은 API를 쓰는 터미널 클라이언트가 `cli/todo.js`에 있다. Node.js 18+만 있으면 되고 저장소 클론은 필요 없다.
+웹앱과 같은 API를 쓰는 터미널 클라이언트가 `tui/`에 있다. Rust([ratatui](https://ratatui.rs))로 만든 단일 바이너리이고,
+CLI 명령과 전체화면 TUI를 모두 포함한다.
 
 ```bash
-npm install -g https://todo-cohe.vercel.app/cli.tgz
+npm install -g https://todo-cohe.vercel.app/cli.tgz     # 플랫폼에 맞는 바이너리를 릴리스에서 받아온다
 ```
 
-업데이트도 같은 명령을 다시 실행하면 된다. 저장소를 클론해 개발 중이라면 `npm link`가 편하다.
+Rust 툴체인이 있다면 소스에서 바로 설치해도 된다.
+
+```bash
+cargo install --git https://github.com/CheHyeonYeong/todo todo
+# 저장소를 클론해 개발 중이라면: cd tui && cargo build --release
+```
 
 ```bash
 todo login             # 브라우저로 Google 로그인, 토큰은 ~/.config/todo/에 저장
@@ -68,22 +74,20 @@ todo log --week        # 이번 주 작업별 시간 합계
 - 하위 목표는 2뎁스까지. 부모 완료는 자식에 전파되고, 자식이 모두 완료되면 부모도 자동 완료된다.
 - 지난 마감일은 빨간색. 색은 ANSI 16색만 써서 터미널 테마를 그대로 따라간다.
 
+로그인 세션은 `~/.config/todo/session.json`에 저장되고, 웹앱과 같은 서버를 보므로 데이터가 그대로 연동된다.
 다른 서버를 쓰려면 `TODO_API_BASE=http://localhost:3000`.
 
 AI 에이전트(Claude Code, Codex CLI, `npx skills`)용 사용법은 `skills/todo-cli/SKILL.md`에 있다.
 
-## Rust TUI
+### 릴리스
 
-같은 TUI의 [ratatui](https://ratatui.rs) 구현이 `tui/`에 있다. 위 CLI와 같은 API 서버·로그인 세션(`~/.config/todo/session.json`)을
-공유하므로 웹/JS CLI와 데이터가 그대로 연동된다 (먼저 `todo login` 필요).
+`v*` 태그를 밀면 GitHub Actions(`.github/workflows/release-cli.yml`)가 Linux/macOS/Windows 바이너리를 빌드해
+릴리스에 올린다. npm 설치는 latest 릴리스에서 그 바이너리를 받아간다.
 
 ```bash
-cd tui
-cargo build --release
-./target/release/todo-tui
+npm version patch          # package.json 버전 올리고 태그 생성
+git push --follow-tags
 ```
-
-키바인딩은 JS TUI와 같다.
 
 ## 배포
 

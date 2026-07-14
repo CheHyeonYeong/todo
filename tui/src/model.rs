@@ -5,6 +5,45 @@ fn default_scope() -> String {
     "day".to_string()
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Data {
+    #[serde(default)]
+    pub todos: Vec<Todo>,
+    #[serde(default)]
+    pub memos: Vec<Memo>,
+    #[serde(default)]
+    pub sessions: Vec<Session>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Memo {
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub starred: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Session {
+    pub id: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub started_at: String,
+    #[serde(default)]
+    pub ended_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Todo {
@@ -147,6 +186,60 @@ pub fn category_list(todos: &[Todo]) -> Vec<String> {
     names.sort();
     names.dedup();
     names
+}
+
+/// 리스트 명령의 번호와 같은 순서 (오늘 -> 이번 주 -> 이번 달, 부모 뒤에 자식)
+pub fn flattened(todos: &[Todo]) -> Vec<Todo> {
+    let mut flat = Vec::new();
+    for scope in SCOPES {
+        for root in ordered_siblings(todos, scope, None) {
+            flat.push(root.clone());
+            for child in ordered_siblings(todos, scope, Some(&root.id)) {
+                flat.push(child.clone());
+            }
+        }
+    }
+    flat
+}
+
+pub fn extract_tags(text: &str) -> Vec<String> {
+    let mut tags = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '#' {
+            let start = index + 1;
+            let mut end = start;
+            while end < chars.len() && (chars[end].is_alphanumeric() || chars[end] == '_' || chars[end] == '-') {
+                end += 1;
+            }
+            if end > start {
+                tags.push(chars[start..end].iter().collect());
+            }
+            index = end;
+        } else {
+            index += 1;
+        }
+    }
+    tags
+}
+
+/// 메모 본문에서 `- [ ] 할 일` / `todo: 할 일` 줄을 뽑아낸다.
+pub fn extract_todos(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|line| {
+            let trimmed = line.trim_start();
+            let rest = if let Some(rest) = trimmed.strip_prefix("- [ ]").or_else(|| trimmed.strip_prefix("- []")) {
+                rest
+            } else if trimmed.get(..5).is_some_and(|head| head.eq_ignore_ascii_case("todo:")) {
+                &trimmed[5..]
+            } else {
+                return None;
+            };
+            let title = rest.trim();
+            (!title.is_empty()).then(|| title.to_string())
+        })
+        .collect()
 }
 
 pub fn valid_date(value: &str) -> bool {

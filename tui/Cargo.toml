@@ -1,8 +1,12 @@
 [package]
-name = "todo-tui"
-version = "0.1.0"
+name = "todo"
+version = "0.2.0"
 edition = "2021"
-description = "Todo 터미널 TUI (Rust) — 웹앱과 같은 API 서버에 연동"
+description = "Todo 터미널 클라이언트 — 웹앱과 같은 API 서버에 연동되는 CLI + TUI"
+
+[[bin]]
+name = "todo"
+path = "src/main.rs"
 
 [dependencies]
 ratatui = "0.29"
@@ -12,6 +16,8 @@ ureq = { version = "2", features = ["json"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 dirs = "5"
 unicode-width = "0.2"
+sha2 = "0.10"
+base64 = "0.22"
 
 [profile.release]
 strip = true
