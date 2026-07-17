@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import nodemailer from "nodemailer";
 import pg from "pg";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,6 +26,19 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+/* 오래된 완료 할 일 보관(이메일 export 후 삭제) 설정. SMTP가 없으면 기능이 꺼진다. */
+const smtpHost = process.env.SMTP_HOST || "";
+const smtpPort = Number(process.env.SMTP_PORT || 465);
+const smtpUser = process.env.SMTP_USER || "";
+const smtpPass = process.env.SMTP_PASS || "";
+const archiveAfterMonths = Number(process.env.ARCHIVE_AFTER_MONTHS || 6);
+const archiveFallbackEmail = process.env.ARCHIVE_EMAIL_TO || "";
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const archiveIntervalMs = Number(process.env.ARCHIVE_INTERVAL_MS || 24 * 60 * 60 * 1000);
+const archiveEnabled =
+  Boolean(smtpHost && smtpUser && smtpPass) &&
+  archiveAfterMonths > 0 &&
+  Boolean(archiveFallbackEmail || supabaseServiceRoleKey);
 const pool = databaseUrl
   ? new pg.Pool({
       connectionString: databaseUrl,
@@ -1128,6 +1142,155 @@ async function deleteRoutineById(id, userId) {
   data.routines = data.routines.filter((routine) => routine.id !== id);
   data.todos = data.todos.map((todo) => (todo.routineId === id ? { ...todo, routineId: null } : todo));
   await writeData(data, userId);
+}
+
+/* ── 오래된 완료 할 일 보관: 완료된 지 N개월 지난 항목을 이메일로 보내고, 발송이 성공한 경우에만 삭제 ── */
+
+function archiveCutoffIso() {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - archiveAfterMonths);
+  return cutoff.toISOString();
+}
+
+/** 보관 대상: 완료된 지 오래된 최상위 할 일 + 그 하위 목표 전부. 미완료 항목은 절대 건드리지 않는다. */
+function collectArchivable(todos, cutoffIso) {
+  const archived = [];
+  for (const todo of todos) {
+    if (todo.parentId) continue;
+    if (!todo.done || !todo.completedAt || todo.completedAt >= cutoffIso) continue;
+    const children = todos.filter((child) => child.parentId === todo.id);
+    if (children.some((child) => !child.done)) continue;
+    archived.push(todo, ...children);
+  }
+  return archived;
+}
+
+async function lookupArchiveEmail(userId) {
+  if (userId === "default") return archiveFallbackEmail || null;
+  if (!supabaseUrl || !supabaseServiceRoleKey) return archiveFallbackEmail || null;
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+      headers: { apikey: supabaseServiceRoleKey, Authorization: `Bearer ${supabaseServiceRoleKey}` },
+    });
+    if (!response.ok) return null;
+    const user = await response.json();
+    return user?.email || null;
+  } catch {
+    return null;
+  }
+}
+
+function formatArchiveDate(value) {
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: appTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+}
+
+async function sendArchiveEmail(to, todos) {
+  const transport = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPass },
+  });
+  const scopeNames = { day: "오늘", week: "이번 주", month: "이번 달" };
+  const lines = todos
+    .filter((todo) => !todo.parentId)
+    .map((todo) => {
+      const children = todos.filter((child) => child.parentId === todo.id);
+      const childLines = children.map((child) => `    - ${child.title}`);
+      const tags = [formatArchiveDate(todo.completedAt), scopeNames[todo.scope] || todo.scope, todo.category]
+        .filter(Boolean)
+        .join(" · ");
+      return [`[${tags}] ${todo.title}${todo.note ? `\n    메모: ${todo.note}` : ""}`, ...childLines].join("\n");
+    });
+  const today = todayInAppZone().key;
+  await transport.sendMail({
+    from: `Todo <${smtpUser}>`,
+    to,
+    subject: `[Todo] 완료 ${archiveAfterMonths}개월 지난 할 일 ${lines.length}개 보관`,
+    text: [
+      `완료된 지 ${archiveAfterMonths}개월이 지난 할 일을 보관하고 목록에서 삭제했습니다.`,
+      "",
+      ...lines,
+      "",
+      "전체 데이터는 첨부된 JSON에 있습니다. 웹앱에 다시 넣고 싶으면 이 파일을 보관해 두세요.",
+    ].join("\n"),
+    attachments: [
+      {
+        filename: `todo-archive-${today}.json`,
+        content: `${JSON.stringify(todos, null, 2)}\n`,
+        contentType: "application/json",
+      },
+    ],
+  });
+}
+
+async function deleteArchivedTodos(ids, userId) {
+  if (!pool) {
+    const data = await readData(userId);
+    const removed = new Set(ids);
+    data.todos = data.todos.filter((todo) => !removed.has(todo.id));
+    await writeData(data, userId);
+    return;
+  }
+  await pool.query(`delete from ${quoteIdentifier(todosTable)} where user_id = $1 and id = any($2::text[])`, [
+    userId,
+    ids,
+  ]);
+}
+
+async function archiveUserIds(cutoffIso) {
+  if (!pool) return ["default"];
+  const result = await pool.query(
+    `select distinct user_id from ${quoteIdentifier(todosTable)} where done and completed_at < $1`,
+    [cutoffIso],
+  );
+  return result.rows.map((row) => row.user_id);
+}
+
+let archiveSweepRunning = false;
+
+async function runArchiveSweep() {
+  // 스윕이 겹치면 같은 항목이 두 번 메일로 나갈 수 있다.
+  if (archiveSweepRunning) return;
+  archiveSweepRunning = true;
+  try {
+    await archiveSweepOnce();
+  } finally {
+    archiveSweepRunning = false;
+  }
+}
+
+async function archiveSweepOnce() {
+  const cutoffIso = archiveCutoffIso();
+  for (const userId of await archiveUserIds(cutoffIso)) {
+    try {
+      const data = await readData(userId);
+      const archived = collectArchivable(data.todos, cutoffIso);
+      if (archived.length === 0) continue;
+      const email = await lookupArchiveEmail(userId);
+      if (!email) {
+        console.error(`archive: no email for user ${userId}, skipping ${archived.length} todos`);
+        continue;
+      }
+      // 메일이 실제로 나간 뒤에만 지운다. 실패하면 다음 스윕에서 다시 시도한다.
+      await sendArchiveEmail(email, archived);
+      await deleteArchivedTodos(archived.map((todo) => todo.id), userId);
+      console.log(`archive: exported ${archived.length} todos to ${email} (user ${userId})`);
+    } catch (error) {
+      console.error(`archive: sweep failed for user ${userId}: ${error.message}`);
+    }
+  }
+}
+
+if (archiveEnabled) {
+  setTimeout(() => runArchiveSweep().catch((error) => console.error(`archive: ${error.message}`)), Math.min(30_000, archiveIntervalMs));
+  setInterval(() => runArchiveSweep().catch((error) => console.error(`archive: ${error.message}`)), archiveIntervalMs);
+  console.log(`archive: enabled (older than ${archiveAfterMonths} months, every ${Math.round(archiveIntervalMs / 60000)}m)`);
 }
 
 async function readRequestBody(request) {

@@ -15,7 +15,7 @@
     "postinstall": "node scripts/fetch-cli-binary.js"
   },
   "dependencies": {
+    "nodemailer": "^9.0.3",
     "pg": "^8.13.1"
-  },
-  "devDependencies": {}
+  }
 }
