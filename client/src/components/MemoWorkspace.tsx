@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/hooks/useAppData";
+import { formatDate } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 import type { Memo } from "@/lib/types";
 
@@ -117,11 +118,127 @@ function MemoComposer({ vim, onToggleVim }: { vim: boolean; onToggleVim: () => v
   );
 }
 
+/* 카드를 클릭하면 열리는 큰 보기. 여기서 바로 수정·삭제할 수 있다. */
+function MemoViewer({
+  memo,
+  vim,
+  onClose,
+}: {
+  memo: Memo | null;
+  vim: boolean;
+  onClose: () => void;
+}) {
+  const { updateMemo, deleteMemo } = useAppData();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+
+  useEffect(() => {
+    setEditing(false);
+  }, [memo?.id]);
+
+  const startEdit = () => {
+    if (!memo) return;
+    setTitle(memo.title || "");
+    setBody(memo.body);
+    setEditing(true);
+  };
+
+  const save = () => {
+    if (!memo || !(title.trim() || body.trim())) return;
+    updateMemo(memo.id, { title: title.trim(), body: body.trim() });
+    setEditing(false);
+  };
+
+  return (
+    <Sheet open={Boolean(memo)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-5 sm:max-w-xl">
+        {memo && (
+          <>
+            <SheetHeader className="p-0 pb-1">
+              <SheetTitle className="text-lg leading-snug break-words">
+                {editing ? (
+                  <Input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="제목 (선택)"
+                    className="h-9 font-bold"
+                  />
+                ) : (
+                  memo.title || "제목 없는 메모"
+                )}
+              </SheetTitle>
+            </SheetHeader>
+            <p className="shrink-0 pb-3 text-xs font-semibold text-muted-foreground">
+              {formatDate(memo.createdAt)}
+              {memo.tags?.length ? ` · ${memo.tags.map((tag) => `#${tag}`).join(" ")}` : ""}
+            </p>
+            {editing ? (
+              <>
+                {vim ? (
+                  <VimEditor value={body} onChange={setBody} onSubmit={save} placeholder="메모 작성..." className="min-h-0 flex-1 overflow-y-auto" />
+                ) : (
+                  <Textarea
+                    autoFocus
+                    value={body}
+                    onChange={(event) => setBody(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                        event.preventDefault();
+                        save();
+                      }
+                    }}
+                    placeholder="메모 작성..."
+                    className="min-h-0 flex-1 resize-none"
+                  />
+                )}
+                <div className="flex shrink-0 justify-end gap-1.5 pt-3">
+                  <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                    취소
+                  </Button>
+                  <Button size="sm" className="font-bold" onClick={save} disabled={!(title.trim() || body.trim())}>
+                    저장
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-muted p-3.5 text-sm leading-relaxed break-words whitespace-pre-wrap">
+                  {memo.body || <span className="text-muted-foreground">본문이 없습니다.</span>}
+                </div>
+                <div className="flex shrink-0 justify-end gap-1.5 pt-3">
+                  <Button variant="ghost" size="sm" onClick={startEdit}>
+                    <Pencil className="size-3.5" />
+                    수정
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => {
+                      deleteMemo(memo.id);
+                      onClose();
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                    삭제
+                  </Button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function MemoCard({
   memo,
   vim,
   dragging,
   draggable = true,
+  onOpen,
   onDragStart,
   onDragEnter,
   onDragEnd,
@@ -131,6 +248,7 @@ function MemoCard({
   vim: boolean;
   dragging: boolean;
   draggable?: boolean;
+  onOpen: () => void;
   onDragStart: (event: DragEvent) => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
@@ -217,8 +335,14 @@ function MemoCard({
         onDrop();
       }}
       onDragEnd={onDragEnd}
+      onClick={(event) => {
+        // 수정/삭제 버튼 클릭은 카드 열기로 이어지지 않게 한다.
+        if ((event.target as HTMLElement).closest("button")) return;
+        onOpen();
+      }}
+      title="클릭해서 크게 보기"
       className={cn(
-        "group flex min-h-24 cursor-grab flex-col rounded-lg border bg-card p-2.5 shadow-sm transition-shadow hover:shadow-md",
+        "group flex min-h-24 cursor-pointer flex-col rounded-lg border bg-card p-2.5 shadow-sm transition-shadow hover:shadow-md",
         dragging && "opacity-40 ring-2 ring-emerald-500",
       )}
     >
@@ -259,6 +383,7 @@ export function MemoWorkspace() {
   const { data, reorderMemos } = useAppData();
   const [vim, setVim] = useState(() => localStorage.getItem(VIM_KEY) === "1");
   const [query, setQuery] = useState("");
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [previewIds, setPreviewIds] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [orderError, setOrderError] = useState(false);
@@ -360,6 +485,7 @@ export function MemoWorkspace() {
               memo={memo}
               vim={vim}
               draggable={!search}
+              onOpen={() => setViewerId(memo.id)}
               dragging={dragId === memo.id}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
@@ -378,6 +504,11 @@ export function MemoWorkspace() {
           </p>
         )}
       </div>
+      <MemoViewer
+        memo={data.memos.find((memo) => memo.id === viewerId) || null}
+        vim={vim}
+        onClose={() => setViewerId(null)}
+      />
     </div>
   );
 }

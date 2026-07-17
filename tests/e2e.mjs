@@ -161,6 +161,14 @@ try {
   check("메모 검색 빈 결과", (await page.getByText("검색 결과가 없습니다.").count()) === 1);
   await page.getByPlaceholder("메모 검색 (제목·본문·#태그)").fill("");
 
+  // 10.5) 메모 카드 클릭 → 크게 보기
+  await page.locator("article", { hasText: "vim 테스트 메모" }).first().click();
+  await page.waitForTimeout(300);
+  check("메모 크게 보기 열림", await page.getByText("제목 없는 메모").isVisible());
+  check("크게 보기에 본문 표시", (await page.getByText("vim 테스트 메모").count()) >= 2);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+
   // 11) 다크 모드 토글
   await page.getByTitle("다크 모드").click();
   check("다크 모드 적용", await page.evaluate(() => document.documentElement.classList.contains("dark")));
