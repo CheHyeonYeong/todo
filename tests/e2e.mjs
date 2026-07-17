@@ -161,13 +161,18 @@ try {
   check("메모 검색 빈 결과", (await page.getByText("검색 결과가 없습니다.").count()) === 1);
   await page.getByPlaceholder("메모 검색 (제목·본문·#태그)").fill("");
 
-  // 10.5) 메모 카드 클릭 → 크게 보기
+  // 10.5) 메모 카드 클릭 → 플로팅 창에서 바로 수정 (자동 저장)
   await page.locator("article", { hasText: "vim 테스트 메모" }).first().click();
   await page.waitForTimeout(300);
-  check("메모 크게 보기 열림", await page.getByText("제목 없는 메모").isVisible());
-  check("크게 보기에 본문 표시", (await page.getByText("vim 테스트 메모").count()) >= 2);
+  check("메모 플로팅 창 열림", await page.getByText("자동 저장", { exact: false }).first().isVisible());
+  const modalBody = page.locator(".max-w-2xl textarea");
+  await modalBody.fill("vim 테스트 메모 (플로팅 수정)");
+  await page.waitForTimeout(1200); // 자동 저장 디바운스 대기
+  data = await api("/api/data");
+  check("플로팅 창 자동 저장", data.memos.some((memo) => memo.body === "vim 테스트 메모 (플로팅 수정)"));
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
+  check("플로팅 창 닫힘", (await page.locator(".max-w-2xl textarea").count()) === 0);
 
   // 11) 다크 모드 토글
   await page.getByTitle("다크 모드").click();
