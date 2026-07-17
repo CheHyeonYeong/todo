@@ -223,6 +223,32 @@ function PanelSlot({
   );
 }
 
+/* 삭제 직후 6초 동안 뜨는 되돌리기 토스트 */
+function UndoToastBar() {
+  const { undoToast, dismissUndo } = useAppData();
+  if (!undoToast) return null;
+  return (
+    <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-lg">
+      <span className="max-w-64 truncate font-medium">{undoToast.label}</span>
+      <button
+        type="button"
+        className="shrink-0 font-bold text-emerald-400 hover:underline"
+        onClick={() => dismissUndo(true)}
+      >
+        되돌리기
+      </button>
+      <button
+        type="button"
+        aria-label="닫기"
+        className="shrink-0 text-background/60 hover:text-background"
+        onClick={() => dismissUndo()}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function Shell() {
   const { auth } = useAppData();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -310,6 +336,7 @@ function Shell() {
       {!isDesktop && <MemoSheet open={memoOpen} onOpenChange={setMemoOpen} />}
       <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
       <RoutineSheet open={routinesOpen} onOpenChange={setRoutinesOpen} />
+      <UndoToastBar />
     </>
   );
 }

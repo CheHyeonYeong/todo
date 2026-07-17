@@ -26,11 +26,35 @@ import type {
 
 const STORAGE_KEY = "free-adhd-memo:v1";
 const ACTIVE_SESSION_KEY = "free-adhd-memo:active-session";
+const QUEUE_KEY = "free-adhd-memo:pending-mutations";
+
+/* 서버 저장에 실패한 변경. 큐에 쌓아뒀다가 연결이 돌아오면 순서대로 재전송한다. */
+interface PendingMutation {
+  path: string;
+  method: string;
+  body?: string;
+}
+
+function loadQueue(): PendingMutation[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item) => item?.path && item?.method) : [];
+  } catch {
+    return [];
+  }
+}
 
 export type AuthState = "checking" | "login" | "ready";
 export interface SyncStatus {
   label: string;
   tone: "neutral" | "ok" | "warn";
+}
+
+/** 삭제 직후 잠깐 뜨는 "되돌리기" 토스트 */
+export interface UndoToast {
+  id: number;
+  label: string;
+  undo: () => void;
 }
 
 /* PUT /api/todos/order 가 받는 항목. 보낸 할 일만 갱신되고 나머지는 그대로 둔다. */
@@ -77,10 +101,18 @@ interface AppDataValue {
   loginError: string;
   sync: SyncStatus;
   activeSession: ActiveSession | null;
+  undoToast: UndoToast | null;
+  dismissUndo: (applyUndo?: boolean) => void;
   pauseSyncRef: React.MutableRefObject<boolean>;
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  addTodo: (input: { title: string; scope: Scope; dueDate?: string | null; category?: string | null }) => void;
+  addTodo: (input: {
+    title: string;
+    scope: Scope;
+    dueDate?: string | null;
+    category?: string | null;
+    parentId?: string | null;
+  }) => void;
   toggleTodo: (id: string) => void;
   deleteTodo: (id: string) => void;
   updateTodo: (id: string, patch: TodoPatch) => void;
@@ -107,6 +139,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [loginError, setLoginError] = useState("");
   const [sync, setSync] = useState<SyncStatus>({ label: "local", tone: "neutral" });
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(loadActiveSession);
+  const [undoToast, setUndoToast] = useState<UndoToast | null>(null);
+  const undoTimerRef = useRef(0);
   const serverBacked = useRef(false);
   const authRef = useRef<AuthState>("checking");
   const pauseSyncRef = useRef(false);
@@ -116,6 +150,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   dataRef.current = data;
   activeSessionRef.current = activeSession;
 
+  const showUndo = useCallback((label: string, undo: () => void) => {
+    window.clearTimeout(undoTimerRef.current);
+    setUndoToast({ id: Date.now(), label, undo });
+    undoTimerRef.current = window.setTimeout(() => setUndoToast(null), 6000);
+  }, []);
+
+  const dismissUndo = useCallback((applyUndo = false) => {
+    window.clearTimeout(undoTimerRef.current);
+    setUndoToast((current) => {
+      if (applyUndo && current) current.undo();
+      return null;
+    });
+  }, []);
+
   const persist = useCallback((updater: (prev: AppData) => AppData) => {
     setData((prev) => {
       const next = updater(prev);
@@ -124,20 +172,75 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const sendMutation = useCallback(async (path: string, options: RequestInit = {}) => {
-    if (!serverBacked.current || authRef.current !== "ready") return;
-    setSync({ label: "syncing", tone: "neutral" });
-    try {
-      const response = await apiFetch(path, options);
-      if (!response.ok) throw new Error(`Mutation failed: ${response.status}`);
-      setSync({ label: "synced", tone: "ok" });
-    } catch {
-      setSync({ label: "offline", tone: "warn" });
-    }
+  const queueRef = useRef<PendingMutation[]>(loadQueue());
+  const flushingRef = useRef(false);
+
+  const saveQueue = useCallback(() => {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(queueRef.current));
   }, []);
+
+  /* 큐 맨 앞부터 순서대로 재전송한다. 네트워크·서버 오류면 남겨두고 다음 기회에 다시 보낸다.
+     성공했거나 재시도해도 소용없는 응답(대부분의 4xx)이면 큐에서 제거한다. */
+  const flushQueue = useCallback(async () => {
+    if (flushingRef.current) return queueRef.current.length === 0;
+    flushingRef.current = true;
+    try {
+      let refreshed = false;
+      while (queueRef.current.length > 0) {
+        const mutation = queueRef.current[0];
+        let response: Response;
+        try {
+          response = await apiFetch(mutation.path, {
+            method: mutation.method,
+            headers: mutation.body ? { "Content-Type": "application/json" } : undefined,
+            body: mutation.body,
+          });
+        } catch {
+          return false;
+        }
+        if (response.status === 401 && !refreshed) {
+          refreshed = true;
+          if (await refreshAuthToken()) continue;
+          return false;
+        }
+        if (response.status >= 500 || response.status === 408 || response.status === 429) return false;
+        queueRef.current.shift();
+        saveQueue();
+      }
+      return true;
+    } finally {
+      flushingRef.current = false;
+    }
+  }, [saveQueue]);
+
+  const offlineLabel = () => ({ label: `offline (${queueRef.current.length}개 대기)`, tone: "warn" as const });
+
+  const sendMutation = useCallback(
+    async (path: string, options: RequestInit = {}) => {
+      if (authRef.current !== "ready") return;
+      queueRef.current.push({
+        path,
+        method: options.method || "POST",
+        body: typeof options.body === "string" ? options.body : undefined,
+      });
+      saveQueue();
+      setSync({ label: "syncing", tone: "neutral" });
+      const ok = await flushQueue();
+      setSync(ok ? { label: "synced", tone: "ok" } : offlineLabel());
+    },
+    [flushQueue, saveQueue],
+  );
 
   const loadServerData = useCallback(async () => {
     if (authRef.current !== "ready" || pauseSyncRef.current) return;
+    // 아직 서버에 못 보낸 변경이 있으면 먼저 보낸다. 못 보내면 서버 데이터로 덮어쓰지 않는다.
+    if (queueRef.current.length > 0) {
+      const ok = await flushQueue();
+      if (!ok) {
+        setSync(offlineLabel());
+        return;
+      }
+    }
     try {
       let response = await apiFetch("/api/data");
       // 토큰이 만료됐을 뿐일 수 있으니 갱신해서 한 번 더 시도하고, 그래도 안 되면 로그아웃.
@@ -164,7 +267,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       serverBacked.current = false;
       setSync({ label: "local only", tone: "warn" });
     }
-  }, [persist]);
+  }, [persist, flushQueue]);
 
   const checkSession = useCallback(async () => {
     try {
@@ -203,10 +306,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       refreshAuthToken().finally(loadServerData);
     };
     document.addEventListener("visibilitychange", onVisible);
+    // 네트워크가 돌아오면 큐부터 밀어낸 뒤 동기화한다.
+    const onOnline = () => {
+      if (authRef.current === "ready") loadServerData();
+    };
+    window.addEventListener("online", onOnline);
     return () => {
       clearInterval(id);
       listener?.data.subscription.unsubscribe();
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -238,16 +347,43 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       scope,
       dueDate = null,
       category = null,
+      parentId = null,
     }: {
       title: string;
       scope: Scope;
       dueDate?: string | null;
       category?: string | null;
+      parentId?: string | null;
     }) => {
-      const siblings = dataRef.current.todos.filter((item) => item.scope === scope && !item.parentId);
+      // 하위 목표는 부모의 스코프를 따라간다 (서버 정책과 동일).
+      const parent = parentId ? dataRef.current.todos.find((item) => item.id === parentId && !item.parentId) : null;
+      if (parentId && !parent) return;
+      const nextScope = parent ? parent.scope : scope;
+      const siblings = dataRef.current.todos.filter(
+        (item) => item.scope === nextScope && (item.parentId || null) === parentId,
+      );
       const sortOrder = Math.max(-1, ...siblings.map((item) => Number(item.sortOrder) || 0)) + 1;
-      const todo: Todo = { id: uid(), title, scope, done: false, createdAt: nowIso(), dueDate, category, sortOrder };
-      persist((prev) => ({ ...prev, todos: [...prev.todos, todo] }));
+      const todo: Todo = {
+        id: uid(),
+        title,
+        scope: nextScope,
+        done: false,
+        createdAt: nowIso(),
+        dueDate,
+        category,
+        parentId,
+        sortOrder,
+      };
+      persist((prev) => ({
+        ...prev,
+        todos: [
+          // 미완료 하위 목표가 생기면 완료됐던 부모도 다시 미완료가 된다.
+          ...prev.todos.map((item) =>
+            parent && item.id === parent.id ? { ...item, done: false, completedAt: null } : item,
+          ),
+          todo,
+        ],
+      }));
       sendMutation("/api/todos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -325,10 +461,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const deleteTodo = useCallback(
     (id: string) => {
+      // 되돌리기용 스냅샷: 부모를 먼저 넣어야 복원 시 하위 목표가 부모를 찾을 수 있다.
+      const removed = dataRef.current.todos
+        .filter((todo) => todo.id === id || todo.parentId === id)
+        .sort((a, b) => Number(Boolean(a.parentId)) - Number(Boolean(b.parentId)));
       persist((prev) => ({ ...prev, todos: prev.todos.filter((todo) => todo.id !== id && todo.parentId !== id) }));
       sendMutation(`/api/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!removed.length) return;
+      showUndo(`"${removed[0].title}" 삭제됨`, () => {
+        persist((prev) => ({ ...prev, todos: [...prev.todos, ...removed] }));
+        for (const todo of removed) {
+          sendMutation("/api/todos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(todo),
+          });
+        }
+      });
     },
-    [persist, sendMutation],
+    [persist, sendMutation, showUndo],
   );
 
   const updateTodo = useCallback(
@@ -462,10 +613,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const deleteMemo = useCallback(
     (id: string) => {
+      const removed = dataRef.current.memos.find((memo) => memo.id === id);
       persist((prev) => ({ ...prev, memos: prev.memos.filter((memo) => memo.id !== id) }));
       sendMutation(`/api/memos/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!removed) return;
+      showUndo(`"${removed.title || removed.body.slice(0, 20) || "메모"}" 삭제됨`, () => {
+        persist((prev) => ({ ...prev, memos: [removed, ...prev.memos] }));
+        sendMutation("/api/memos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memo: removed, todos: [] }),
+        });
+      });
     },
-    [persist, sendMutation],
+    [persist, sendMutation, showUndo],
   );
 
   /* 드래그앤드롭 순서 저장. 서버 저장 실패 시 기존 순서로 복원하고 false를 반환한다. */
@@ -515,10 +676,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const deleteSession = useCallback(
     (id: string) => {
+      const removed = dataRef.current.sessions.find((session) => session.id === id);
       persist((prev) => ({ ...prev, sessions: prev.sessions.filter((session) => session.id !== id) }));
       sendMutation(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!removed) return;
+      showUndo(`"${removed.label || "이름 없는 작업"}" 기록 삭제됨`, () => {
+        persist((prev) => ({ ...prev, sessions: [removed, ...prev.sessions] }));
+        sendMutation("/api/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(removed),
+        });
+      });
     },
-    [persist, sendMutation],
+    [persist, sendMutation, showUndo],
   );
 
   const startSession = useCallback((label: string) => {
@@ -543,6 +714,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       loginError,
       sync,
       activeSession,
+      undoToast,
+      dismissUndo,
       pauseSyncRef,
       login,
       logout,
@@ -570,6 +743,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       loginError,
       sync,
       activeSession,
+      undoToast,
+      dismissUndo,
       login,
       logout,
       addTodo,
