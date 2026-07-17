@@ -4,9 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import { VimEditor } from "@/components/VimEditor";
 import { useAppData } from "@/hooks/useAppData";
 import { cn } from "@/lib/utils";
 import type { Memo } from "@/lib/types";
+
+const VIM_KEY = "free-adhd-memo:memo-vim";
 
 /* 사용자가 지정한 순서(sortOrder 오름차순). 순서가 없는 기존 메모는 최신순으로 뒤에 붙인다. */
 function sortMemos(memos: Memo[]) {
@@ -27,14 +30,16 @@ function submitOnCtrlEnter(event: KeyboardEvent<HTMLTextAreaElement | HTMLInputE
   }
 }
 
-function MemoComposer() {
+function MemoComposer({ vim, onToggleVim }: { vim: boolean; onToggleVim: () => void }) {
   const { addMemo } = useAppData();
+  const formRef = useRef<HTMLFormElement>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const canSave = Boolean(title.trim() || body.trim());
 
   return (
     <form
+      ref={formRef}
       className="shrink-0 rounded-lg border bg-card p-2.5 shadow-sm"
       onSubmit={(event) => {
         event.preventDefault();
@@ -51,19 +56,41 @@ function MemoComposer() {
         placeholder="제목 (선택)"
         className="h-8 border-0 px-1 font-semibold shadow-none focus-visible:ring-0"
       />
-      <Textarea
-        value={body}
-        onChange={(event) => setBody(event.target.value)}
-        onKeyDown={submitOnCtrlEnter}
-        placeholder="메모 작성..."
-        className="min-h-14 resize-y border-0 px-1 shadow-none focus-visible:ring-0"
-      />
+      {vim ? (
+        <VimEditor
+          value={body}
+          onChange={setBody}
+          onSubmit={() => formRef.current?.requestSubmit()}
+          placeholder="메모 작성..."
+        />
+      ) : (
+        <Textarea
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          onKeyDown={submitOnCtrlEnter}
+          placeholder="메모 작성..."
+          className="min-h-14 resize-y border-0 px-1 shadow-none focus-visible:ring-0"
+        />
+      )}
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground">Ctrl+Enter로 바로 저장</span>
-        <Button type="submit" size="sm" className="font-bold" disabled={!canSave}>
-          <Plus className="size-4" />
-          저장
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            title={vim ? "Vim 키바인딩 끄기" : "메모 입력에 Vim 키바인딩 쓰기"}
+            onClick={onToggleVim}
+            className={cn(
+              "rounded px-1.5 py-0.5 font-mono text-[11px] font-bold transition-colors",
+              vim ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground hover:text-foreground",
+            )}
+          >
+            vim
+          </button>
+          <Button type="submit" size="sm" className="font-bold" disabled={!canSave}>
+            <Plus className="size-4" />
+            저장
+          </Button>
+        </div>
       </div>
     </form>
   );
@@ -71,6 +98,7 @@ function MemoComposer() {
 
 function MemoCard({
   memo,
+  vim,
   dragging,
   onDragStart,
   onDragEnter,
@@ -78,6 +106,7 @@ function MemoCard({
   onDrop,
 }: {
   memo: Memo;
+  vim: boolean;
   dragging: boolean;
   onDragStart: (event: DragEvent) => void;
   onDragEnter: () => void;
@@ -85,6 +114,7 @@ function MemoCard({
   onDrop: () => void;
 }) {
   const { updateMemo, deleteMemo } = useAppData();
+  const formRef = useRef<HTMLFormElement>(null);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -99,6 +129,7 @@ function MemoCard({
     const canSave = Boolean(title.trim() || body.trim());
     return (
       <form
+        ref={formRef}
         className="col-span-full rounded-lg border border-emerald-400 bg-card p-2.5 shadow-sm"
         onSubmit={(event) => {
           event.preventDefault();
@@ -113,15 +144,26 @@ function MemoCard({
           onKeyDown={submitOnCtrlEnter}
           placeholder="제목 (선택)"
           className="h-8 border-0 px-1 font-semibold shadow-none focus-visible:ring-0"
-          autoFocus
+          autoFocus={!vim}
         />
-        <Textarea
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          onKeyDown={submitOnCtrlEnter}
-          placeholder="메모 작성..."
-          className="min-h-20 resize-y border-0 px-1 shadow-none focus-visible:ring-0"
-        />
+        {vim ? (
+          <VimEditor
+            value={body}
+            onChange={setBody}
+            onSubmit={() => formRef.current?.requestSubmit()}
+            placeholder="메모 작성..."
+            className="min-h-20"
+            autoFocus
+          />
+        ) : (
+          <Textarea
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            onKeyDown={submitOnCtrlEnter}
+            placeholder="메모 작성..."
+            className="min-h-20 resize-y border-0 px-1 shadow-none focus-visible:ring-0"
+          />
+        )}
         <div className="mt-1 flex items-center justify-end gap-1.5">
           <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
             취소
@@ -192,6 +234,7 @@ function MemoCard({
 
 export function MemoWorkspace() {
   const { data, reorderMemos } = useAppData();
+  const [vim, setVim] = useState(() => localStorage.getItem(VIM_KEY) === "1");
   const [previewIds, setPreviewIds] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [orderError, setOrderError] = useState(false);
@@ -243,9 +286,16 @@ export function MemoWorkspace() {
     return () => clearTimeout(timer);
   }, [orderError]);
 
+  const toggleVim = () => {
+    setVim((current) => {
+      localStorage.setItem(VIM_KEY, current ? "0" : "1");
+      return !current;
+    });
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <MemoComposer />
+      <MemoComposer vim={vim} onToggleVim={toggleVim} />
 
       {orderError && (
         <p className="mt-2 shrink-0 rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs font-semibold text-destructive">
@@ -268,6 +318,7 @@ export function MemoWorkspace() {
             <MemoCard
               key={memo.id}
               memo={memo}
+              vim={vim}
               dragging={dragId === memo.id}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
