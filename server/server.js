@@ -1173,6 +1173,11 @@ function collectArchivable(todos, cutoffIso) {
   return archived;
 }
 
+/** 보관 대상 시간 기록: 끝난 지 오래된 것 전부 */
+function collectArchivableSessions(sessions, cutoffIso) {
+  return (sessions || []).filter((session) => session.endedAt && session.endedAt < cutoffIso);
+}
+
 async function lookupArchiveEmail(userId) {
   if (userId === "default") return archiveFallbackEmail || null;
   if (!supabaseUrl || !supabaseServiceRoleKey) return archiveFallbackEmail || null;
@@ -1197,7 +1202,7 @@ function formatArchiveDate(value) {
   }).format(new Date(value));
 }
 
-async function sendArchiveEmail(to, todos) {
+async function sendArchiveEmail(to, todos, sessions) {
   const transport = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
@@ -1215,46 +1220,68 @@ async function sendArchiveEmail(to, todos) {
         .join(" · ");
       return [`[${tags}] ${todo.title}${todo.note ? `\n    메모: ${todo.note}` : ""}`, ...childLines].join("\n");
     });
+  const totalSessionMs = sessions.reduce(
+    (sum, session) => sum + Math.max(0, new Date(session.endedAt) - new Date(session.startedAt)),
+    0,
+  );
+  const sessionSummary = sessions.length
+    ? `시간 기록 ${sessions.length}개(총 ${Math.round(totalSessionMs / 3600000)}시간)도 함께 보관했습니다.`
+    : null;
   const today = todayInAppZone().key;
   await transport.sendMail({
     from: `Todo <${smtpUser}>`,
     to,
-    subject: `[Todo] 완료 ${archiveAfterMonths}개월 지난 할 일 ${lines.length}개 보관`,
+    subject: `[Todo] ${archiveAfterMonths}개월 지난 기록 보관 (할 일 ${lines.length}개, 시간 기록 ${sessions.length}개)`,
     text: [
-      `완료된 지 ${archiveAfterMonths}개월이 지난 할 일을 보관하고 목록에서 삭제했습니다.`,
+      `${archiveAfterMonths}개월이 지난 기록을 보관하고 목록에서 삭제했습니다.`,
       "",
-      ...lines,
+      ...(lines.length ? lines : ["(보관한 할 일 없음)"]),
+      ...(sessionSummary ? ["", sessionSummary] : []),
       "",
       "전체 데이터는 첨부된 JSON에 있습니다. 웹앱에 다시 넣고 싶으면 이 파일을 보관해 두세요.",
     ].join("\n"),
     attachments: [
       {
         filename: `todo-archive-${today}.json`,
-        content: `${JSON.stringify(todos, null, 2)}\n`,
+        content: `${JSON.stringify({ todos, sessions }, null, 2)}\n`,
         contentType: "application/json",
       },
     ],
   });
 }
 
-async function deleteArchivedTodos(ids, userId) {
+async function deleteArchived(todoIds, sessionIds, userId) {
   if (!pool) {
     const data = await readData(userId);
-    const removed = new Set(ids);
-    data.todos = data.todos.filter((todo) => !removed.has(todo.id));
+    const removedTodos = new Set(todoIds);
+    const removedSessions = new Set(sessionIds);
+    data.todos = data.todos.filter((todo) => !removedTodos.has(todo.id));
+    data.sessions = data.sessions.filter((session) => !removedSessions.has(session.id));
     await writeData(data, userId);
     return;
   }
-  await pool.query(`delete from ${quoteIdentifier(todosTable)} where user_id = $1 and id = any($2::text[])`, [
-    userId,
-    ids,
-  ]);
+  if (todoIds.length) {
+    await pool.query(`delete from ${quoteIdentifier(todosTable)} where user_id = $1 and id = any($2::text[])`, [
+      userId,
+      todoIds,
+    ]);
+  }
+  if (sessionIds.length) {
+    await pool.query(`delete from ${quoteIdentifier(sessionsTable)} where user_id = $1 and id = any($2::text[])`, [
+      userId,
+      sessionIds,
+    ]);
+  }
 }
 
 async function archiveUserIds(cutoffIso) {
   if (!pool) return ["default"];
   const result = await pool.query(
-    `select distinct user_id from ${quoteIdentifier(todosTable)} where done and completed_at < $1`,
+    `
+      select distinct user_id from ${quoteIdentifier(todosTable)} where done and completed_at < $1
+      union
+      select distinct user_id from ${quoteIdentifier(sessionsTable)} where ended_at < $1
+    `,
     [cutoffIso],
   );
   return result.rows.map((row) => row.user_id);
@@ -1292,16 +1319,23 @@ async function archiveSweepOnce() {
     try {
       const data = await readData(userId);
       const archived = collectArchivable(data.todos, cutoffIso);
-      if (archived.length === 0) continue;
+      const archivedSessions = collectArchivableSessions(data.sessions, cutoffIso);
+      if (archived.length === 0 && archivedSessions.length === 0) continue;
       const email = await lookupArchiveEmail(userId);
       if (!email) {
-        console.error(`archive: no email for user ${userId}, skipping ${archived.length} todos`);
+        console.error(`archive: no email for user ${userId}, skipping ${archived.length + archivedSessions.length} items`);
         continue;
       }
       // 메일이 실제로 나간 뒤에만 지운다. 실패하면 다음 체크 때 다시 시도한다.
-      await sendArchiveEmail(email, archived);
-      await deleteArchivedTodos(archived.map((todo) => todo.id), userId);
-      console.log(`archive: exported ${archived.length} todos to ${email} (user ${userId})`);
+      await sendArchiveEmail(email, archived, archivedSessions);
+      await deleteArchived(
+        archived.map((todo) => todo.id),
+        archivedSessions.map((session) => session.id),
+        userId,
+      );
+      console.log(
+        `archive: exported ${archived.length} todos, ${archivedSessions.length} sessions to ${email} (user ${userId})`,
+      );
     } catch (error) {
       allOk = false;
       console.error(`archive: sweep failed for user ${userId}: ${error.message}`);
