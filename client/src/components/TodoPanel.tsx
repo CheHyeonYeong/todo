@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppData, useTodayTick } from "@/hooks/useAppData";
 import { dateKey, daysFromToday, defaultDueForScope, formatDate, labelHue, scopeLabels, todayKey } from "@/lib/helpers";
 import type { Scope, Todo } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,11 @@ function loadCollapsedScopes(): Partial<Record<Scope, boolean>> {
   } catch {
     return {};
   }
+}
+
+/** 어제까지 완료한 항목은 목록에서 치운다 (완료한 당일에는 남겨둔다). */
+function completedBeforeToday(todo: Todo) {
+  return todo.done && !!todo.completedAt && dateKey(new Date(todo.completedAt)) < todayKey();
 }
 
 function sortTodos(todos: Todo[]) {
@@ -546,6 +551,9 @@ export function TodoPanel() {
   const [view, setView] = useState("list");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [collapsedScopes, setCollapsedScopes] = useState(loadCollapsedScopes);
+  const [showOldDone, setShowOldDone] = useState(false);
+  // 자정이 지나면 어제 완료한 항목이 자동으로 사라지도록 오늘 날짜를 주기적으로 갱신한다.
+  useTodayTick();
   const [dropScope, setDropScope] = useState<Scope | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropBeforeId, setDropBeforeId] = useState<string | null>(null);
@@ -652,23 +660,26 @@ export function TodoPanel() {
             </div>
           )}
           {/* 패널이 좁은 자리로 옮겨질 수 있으므로 뷰포트가 아니라 패널 폭 기준으로 접는다. */}
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto @2xl:grid-cols-3 @2xl:overflow-visible">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto @2xl:flex-row @2xl:overflow-visible">
             {(Object.keys(scopeLabels) as Scope[]).map((scope) => {
               const scopeTodos = data.todos.filter((todo) => todo.scope === scope);
-              const items = sortTodos(scopeTodos.filter((todo) => !todo.parentId)).filter((todo) => {
+              const allItems = sortTodos(scopeTodos.filter((todo) => !todo.parentId)).filter((todo) => {
                 if (!categoryFilter) return true;
                 return (
                   todo.category === categoryFilter ||
                   scopeTodos.some((child) => child.parentId === todo.id && child.category === categoryFilter)
                 );
               });
+              const oldDoneCount = allItems.filter(completedBeforeToday).length;
+              const items = showOldDone ? allItems : allItems.filter((todo) => !completedBeforeToday(todo));
               const sectionCollapsed = !!collapsedScopes[scope];
               return (
                 <div
                   key={scope}
                   className={cn(
                     "rounded-lg bg-muted p-3 transition-shadow",
-                    sectionCollapsed ? "self-start max-lg:self-auto" : "min-h-32 overflow-y-auto",
+                    // 넓은 패널에서는 좌우로 접힌다: 접힌 칸은 세로 띠가 되고 나머지가 폭을 나눠 가진다.
+                    sectionCollapsed ? "@2xl:w-11 @2xl:shrink-0 @2xl:p-2" : "min-h-32 overflow-y-auto @2xl:min-w-0 @2xl:flex-1",
                     dropScope === scope && "shadow-[inset_0_0_0_2px_theme(colors.emerald.500)]",
                   )}
                   onDragOver={(event) => {
@@ -690,12 +701,28 @@ export function TodoPanel() {
                 >
                   <button
                     type="button"
-                    className={cn("flex w-full items-center justify-between text-left", !sectionCollapsed && "mb-2")}
+                    className={cn(
+                      "flex w-full items-center justify-between text-left",
+                      !sectionCollapsed && "mb-2",
+                      sectionCollapsed && "@2xl:h-full @2xl:flex-col @2xl:justify-start @2xl:gap-2",
+                    )}
                     title={sectionCollapsed ? "펼치기" : "접기"}
                     onClick={() => toggleScopeCollapse(scope)}
                   >
-                    <h3 className="text-sm font-bold text-muted-foreground">{scopeLabels[scope]}</h3>
-                    <span className="flex items-center gap-1 text-xs font-bold text-muted-foreground">
+                    <h3
+                      className={cn(
+                        "text-sm font-bold text-muted-foreground",
+                        sectionCollapsed && "@2xl:order-2 @2xl:[writing-mode:vertical-rl]",
+                      )}
+                    >
+                      {scopeLabels[scope]}
+                    </h3>
+                    <span
+                      className={cn(
+                        "flex items-center gap-1 text-xs font-bold text-muted-foreground",
+                        sectionCollapsed && "@2xl:order-1 @2xl:flex-col",
+                      )}
+                    >
                       {sectionCollapsed &&
                         items.some((todo) => !todo.done) &&
                         `${items.filter((todo) => !todo.done).length}개`}
@@ -704,20 +731,32 @@ export function TodoPanel() {
                       />
                     </span>
                   </button>
-                  {!sectionCollapsed &&
-                    (items.length ? (
-                      items.map((todo) => (
-                        <TodoRow
-                          key={todo.id}
-                          todo={todo}
-                          children={sortTodos(scopeTodos.filter((child) => child.parentId === todo.id))}
-                          draggable
-                          dnd={dnd}
-                        />
-                      ))
-                    ) : (
-                      <p className="text-sm font-medium text-muted-foreground/70">없음</p>
-                    ))}
+                  {!sectionCollapsed && (
+                    <>
+                      {items.length ? (
+                        items.map((todo) => (
+                          <TodoRow
+                            key={todo.id}
+                            todo={todo}
+                            children={sortTodos(scopeTodos.filter((child) => child.parentId === todo.id))}
+                            draggable
+                            dnd={dnd}
+                          />
+                        ))
+                      ) : (
+                        <p className="text-sm font-medium text-muted-foreground/70">없음</p>
+                      )}
+                      {oldDoneCount > 0 && (
+                        <button
+                          type="button"
+                          className="mt-1.5 text-xs font-semibold text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+                          onClick={() => setShowOldDone((current) => !current)}
+                        >
+                          {showOldDone ? "지난 완료 숨기기" : `지난 완료 ${oldDoneCount}개 보기`}
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               );
             })}
