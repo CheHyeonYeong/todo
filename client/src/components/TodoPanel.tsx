@@ -8,9 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppData } from "@/hooks/useAppData";
-import { dateKey, daysFromToday, formatDate, labelHue, scopeLabels, todayKey } from "@/lib/helpers";
+import { dateKey, daysFromToday, defaultDueForScope, formatDate, labelHue, scopeLabels, todayKey } from "@/lib/helpers";
 import type { Scope, Todo } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const SCOPE_COLLAPSE_KEY = "free-adhd-memo:collapse:scopes";
+
+function loadCollapsedScopes(): Partial<Record<Scope, boolean>> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SCOPE_COLLAPSE_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 function sortTodos(todos: Todo[]) {
   return [...todos].sort(
@@ -75,12 +86,18 @@ function TodoRow({
   children?: Todo[];
   dnd?: RowDnd;
 }) {
-  const { toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
+  const { data, toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(todo.title);
+  const [categoryDraft, setCategoryDraft] = useState(todo.category || "");
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState(todo.note || "");
   const [collapsed, setCollapsed] = useState(false);
+
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(data.todos.map((item) => item.category).filter(Boolean) as string[])),
+    [data.todos],
+  );
 
   const overdueDays = todo.dueDate && !todo.done ? -daysFromToday(todo.dueDate) : 0;
   const overdue = overdueDays > 0;
@@ -92,11 +109,21 @@ function TodoRow({
     };
   }, [editing, noteOpen, pauseSyncRef]);
 
-  const commitTitle = () => {
+  const commitEdit = () => {
     setEditing(false);
     const title = draft.trim();
-    if (title && title !== todo.title) updateTodo(todo.id, { title });
-    else setDraft(todo.title);
+    const category = categoryDraft.trim();
+    const patch: { title?: string; category?: string | null } = {};
+    if (title && title !== todo.title) patch.title = title;
+    if (category !== (todo.category || "")) patch.category = category || null;
+    if (Object.keys(patch).length) updateTodo(todo.id, patch);
+    if (!title) setDraft(todo.title);
+  };
+
+  const cancelEdit = () => {
+    setDraft(todo.title);
+    setCategoryDraft(todo.category || "");
+    setEditing(false);
   };
 
   const commitNote = () => {
@@ -160,20 +187,31 @@ function TodoRow({
           <Check className="size-3.5" strokeWidth={3} />
         </button>
         {editing ? (
-          <Input
-            autoFocus
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") commitTitle();
-              if (event.key === "Escape") {
-                setDraft(todo.title);
-                setEditing(false);
-              }
+          <div
+            className="flex min-w-0 flex-1 gap-1.5"
+            // 두 입력 사이를 오갈 때는 저장하지 않고, 바깥으로 나갈 때만 저장한다.
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) commitEdit();
             }}
-            className="h-7 flex-1 px-2 text-sm"
-          />
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitEdit();
+              if (event.key === "Escape") cancelEdit();
+            }}
+          >
+            <Input
+              value={categoryDraft}
+              onChange={(event) => setCategoryDraft(event.target.value)}
+              placeholder="카테고리"
+              list={`todo-categories-${todo.id}`}
+              className="h-7 w-24 shrink-0 px-2 text-sm"
+            />
+            <datalist id={`todo-categories-${todo.id}`}>
+              {categoryOptions.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
+            <Input autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} className="h-7 min-w-0 flex-1 px-2 text-sm" />
+          </div>
         ) : (
           <span
             className={cn(
@@ -219,7 +257,17 @@ function TodoRow({
             >
               <StickyNote className="size-3.5" fill={todo.note ? "currentColor" : "none"} fillOpacity={0.25} />
             </Button>
-            <Button variant="ghost" size="icon" className="size-6" title="수정" onClick={() => setEditing(true)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              title="수정"
+              onClick={() => {
+                setDraft(todo.title);
+                setCategoryDraft(todo.category || "");
+                setEditing(true);
+              }}
+            >
               <Pencil className="size-3.5" />
             </Button>
             <Button variant="ghost" size="icon" className="size-6" title="삭제" onClick={() => deleteTodo(todo.id)}>
@@ -274,6 +322,8 @@ function TodoForm({ categories, activeCategory }: { categories: string[]; active
   const [category, setCategory] = useState(activeCategory || "");
   const [scope, setScope] = useState<Scope>("day");
   const [dueDate, setDueDate] = useState(todayKey());
+  // 날짜를 직접 고르기 전까지는 기간에 맞춰 자동으로 바꿔준다 (오늘/이번 주 일요일/이번 달 말일).
+  const [dueTouched, setDueTouched] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // 카테고리 탭을 고르면 그 카테고리로 바로 추가할 수 있게 입력칸을 채워둔다(TUI와 동일).
@@ -335,11 +385,21 @@ function TodoForm({ categories, activeCategory }: { categories: string[]; active
       <Input
         type="date"
         value={dueDate}
-        onChange={(event) => setDueDate(event.target.value)}
-        title="마감일 (기본 오늘)"
+        onChange={(event) => {
+          setDueDate(event.target.value);
+          setDueTouched(true);
+        }}
+        title="마감일 (직접 안 고르면 기간에 맞춰 자동 설정)"
         className="w-36 text-muted-foreground max-sm:flex-1"
       />
-      <Select value={scope} onValueChange={(value) => setScope(value as Scope)}>
+      <Select
+        value={scope}
+        onValueChange={(value) => {
+          const next = value as Scope;
+          setScope(next);
+          if (!dueTouched) setDueDate(defaultDueForScope(next));
+        }}
+      >
         <SelectTrigger className="w-27">
           <SelectValue />
         </SelectTrigger>
@@ -378,7 +438,8 @@ function CalendarView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
-      <div className="flex min-w-0 flex-[1.4] flex-col">
+      {/* 캘린더는 내용이 많아져도 크기가 안 변한다. 목록 쪽만 스크롤. */}
+      <div className="flex min-w-0 shrink-0 flex-col lg:flex-[1.4]">
         <div className="mb-2 flex items-center justify-between">
           <Button
             variant="secondary"
@@ -405,7 +466,7 @@ function CalendarView() {
             <span key={day}>{day}</span>
           ))}
         </div>
-        <div className="grid min-h-0 flex-1 auto-rows-fr grid-cols-7 gap-1.5 overflow-y-auto">
+        <div className="grid auto-rows-[3rem] grid-cols-7 gap-1.5 lg:min-h-0 lg:flex-1 lg:auto-rows-fr lg:overflow-y-auto">
           {Array.from({ length: firstDay.getDay() }).map((_, index) => (
             <div key={`blank-${index}`} />
           ))}
@@ -440,7 +501,7 @@ function CalendarView() {
           })}
         </div>
       </div>
-      <div className="min-w-0 flex-1 overflow-y-auto rounded-lg bg-muted p-3.5">
+      <div className="min-w-0 flex-1 overflow-y-auto rounded-lg bg-muted p-3.5 max-lg:max-h-96">
         {selected ? (
           <>
             <h4 className="mb-3 text-sm font-bold">{formatDate(`${selected}T00:00:00`)}</h4>
@@ -484,6 +545,7 @@ export function TodoPanel() {
   const { data, reorderTodos } = useAppData();
   const [view, setView] = useState("list");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [collapsedScopes, setCollapsedScopes] = useState(loadCollapsedScopes);
   const [dropScope, setDropScope] = useState<Scope | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropBeforeId, setDropBeforeId] = useState<string | null>(null);
@@ -529,6 +591,14 @@ export function TodoPanel() {
     },
     dropBeforeId,
     draggingId,
+  };
+
+  const toggleScopeCollapse = (scope: Scope) => {
+    setCollapsedScopes((current) => {
+      const next = { ...current, [scope]: !current[scope] };
+      localStorage.setItem(SCOPE_COLLAPSE_KEY, JSON.stringify(next));
+      return next;
+    });
   };
 
   const categories = useMemo(
@@ -592,11 +662,13 @@ export function TodoPanel() {
                   scopeTodos.some((child) => child.parentId === todo.id && child.category === categoryFilter)
                 );
               });
+              const sectionCollapsed = !!collapsedScopes[scope];
               return (
                 <div
                   key={scope}
                   className={cn(
-                    "min-h-32 overflow-y-auto rounded-lg bg-muted p-3 transition-shadow",
+                    "rounded-lg bg-muted p-3 transition-shadow",
+                    sectionCollapsed ? "self-start max-lg:self-auto" : "min-h-32 overflow-y-auto",
                     dropScope === scope && "shadow-[inset_0_0_0_2px_theme(colors.emerald.500)]",
                   )}
                   onDragOver={(event) => {
@@ -616,20 +688,36 @@ export function TodoPanel() {
                     if (id) moveTodo(id, scope, null);
                   }}
                 >
-                  <h3 className="mb-2 text-sm font-bold text-muted-foreground">{scopeLabels[scope]}</h3>
-                  {items.length ? (
-                    items.map((todo) => (
-                      <TodoRow
-                        key={todo.id}
-                        todo={todo}
-                        children={sortTodos(scopeTodos.filter((child) => child.parentId === todo.id))}
-                        draggable
-                        dnd={dnd}
+                  <button
+                    type="button"
+                    className={cn("flex w-full items-center justify-between text-left", !sectionCollapsed && "mb-2")}
+                    title={sectionCollapsed ? "펼치기" : "접기"}
+                    onClick={() => toggleScopeCollapse(scope)}
+                  >
+                    <h3 className="text-sm font-bold text-muted-foreground">{scopeLabels[scope]}</h3>
+                    <span className="flex items-center gap-1 text-xs font-bold text-muted-foreground">
+                      {sectionCollapsed &&
+                        items.some((todo) => !todo.done) &&
+                        `${items.filter((todo) => !todo.done).length}개`}
+                      <ChevronDown
+                        className={cn("size-4 transition-transform", sectionCollapsed && "-rotate-90")}
                       />
-                    ))
-                  ) : (
-                    <p className="text-sm font-medium text-muted-foreground/70">없음</p>
-                  )}
+                    </span>
+                  </button>
+                  {!sectionCollapsed &&
+                    (items.length ? (
+                      items.map((todo) => (
+                        <TodoRow
+                          key={todo.id}
+                          todo={todo}
+                          children={sortTodos(scopeTodos.filter((child) => child.parentId === todo.id))}
+                          draggable
+                          dnd={dnd}
+                        />
+                      ))
+                    ) : (
+                      <p className="text-sm font-medium text-muted-foreground/70">없음</p>
+                    ))}
                 </div>
               );
             })}

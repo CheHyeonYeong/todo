@@ -2,7 +2,8 @@ use crate::api::Client;
 use crate::model::{extract_tags, extract_todos, flattened, scope_label, Todo};
 use crate::util::color::{bold, cyan, dim, green, red, strike, yellow};
 use crate::util::{
-    date_key, format_duration, format_time, monday_key, new_uuid, now_iso, pad_label, today_key, duration_ms,
+    date_key, format_duration, format_time, monday_key, month_end_key, new_uuid, now_iso, pad_label, today_key,
+    duration_ms, week_end_key,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -137,6 +138,14 @@ pub fn add(client: &mut Client, args: &[String]) -> Result<(), String> {
             return Err("마감일은 YYYY-MM-DD 형식으로 넣으세요.".to_string());
         }
     }
+    // 마감일을 직접 안 주면 웹과 같은 정책: 오늘 / 이번 주 일요일 / 이번 달 말일.
+    let due_date = due_date.or_else(|| {
+        Some(match scope {
+            "week" => week_end_key(),
+            "month" => month_end_key(),
+            _ => today_key(),
+        })
+    });
 
     let id = new_uuid();
     client.create_todo(&json!({

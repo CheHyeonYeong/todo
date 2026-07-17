@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GripHorizontal } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { FocusPanel } from "@/components/FocusPanel";
 import { InstallSheet } from "@/components/InstallSheet";
 import { LoginScreen } from "@/components/LoginScreen";
 import { MemoSheet, MemoWorkspace } from "@/components/MemoWorkspace";
@@ -19,12 +18,11 @@ const LAYOUT_KEY = "free-adhd-memo:panel-layout";
 const PANEL_MIME = "text/panel-key";
 
 /* 배치는 슬롯 순서(왼쪽 위, 왼쪽 아래 독, 오른쪽 3칸)에 어떤 패널이 오는지로 저장한다. */
-type PanelKey = "todo" | "memo" | "focus" | "pomodoro" | "timetable";
-const DEFAULT_LAYOUT: PanelKey[] = ["todo", "memo", "focus", "pomodoro", "timetable"];
+type PanelKey = "todo" | "memo" | "pomodoro" | "timetable";
+const DEFAULT_LAYOUT: PanelKey[] = ["todo", "memo", "pomodoro", "timetable"];
 const panelTitles: Record<PanelKey, string> = {
   todo: "할 일",
   memo: "메모",
-  focus: "집중 큐",
   pomodoro: "타이머",
   timetable: "타임테이블",
 };
@@ -41,8 +39,6 @@ function renderPanel(key: PanelKey) {
           <MemoWorkspace />
         </Card>
       );
-    case "focus":
-      return <FocusPanel />;
     case "pomodoro":
       return <PomodoroPanel />;
     case "timetable":

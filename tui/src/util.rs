@@ -156,6 +156,25 @@ pub fn monday_key() -> String {
     (now - chrono::Duration::days(offset)).format("%Y-%m-%d").to_string()
 }
 
+/// 이번 주 일요일(주의 끝)의 날짜 키
+pub fn week_end_key() -> String {
+    use chrono::Datelike;
+    let now = Local::now();
+    let offset = 6 - now.weekday().num_days_from_monday() as i64;
+    (now + chrono::Duration::days(offset)).format("%Y-%m-%d").to_string()
+}
+
+/// 이번 달 마지막 날의 날짜 키
+pub fn month_end_key() -> String {
+    use chrono::Datelike;
+    let now = Local::now();
+    let (year, month) = if now.month() == 12 { (now.year() + 1, 1) } else { (now.year(), now.month() + 1) };
+    let last = chrono::NaiveDate::from_ymd_opt(year, month, 1)
+        .and_then(|first| first.pred_opt())
+        .unwrap_or_else(|| now.date_naive());
+    last.format("%Y-%m-%d").to_string()
+}
+
 pub fn duration_ms(started_at: &str, ended_at: &str) -> i64 {
     match (local(started_at), local(ended_at)) {
         (Some(start), Some(end)) => (end - start).num_milliseconds().max(0),

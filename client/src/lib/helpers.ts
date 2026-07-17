@@ -74,6 +74,23 @@ export function weekStartKey(key: string) {
   return dateKey(date);
 }
 
+export function weekEndKey(key: string) {
+  return shiftDateKey(weekStartKey(key), 6);
+}
+
+export function monthEndKey(key: string) {
+  const date = new Date(`${key}T00:00:00`);
+  return dateKey(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+}
+
+/** 스코프별 기본 마감일. 오늘 / 이번 주 일요일 / 이번 달 말일 — 캘린더 기준. */
+export function defaultDueForScope(scope: Scope) {
+  const today = todayKey();
+  if (scope === "week") return weekEndKey(today);
+  if (scope === "month") return monthEndKey(today);
+  return today;
+}
+
 export function shortDate(key: string) {
   const date = new Date(`${key}T00:00:00`);
   return `${date.getMonth() + 1}월 ${date.getDate()}일`;

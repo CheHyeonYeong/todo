@@ -9,6 +9,7 @@ import { minutesToLabel, uid } from "@/lib/helpers";
 import { cn } from "@/lib/utils";
 
 const TIMER_KEY = "free-adhd-memo:timer-minutes";
+const TASK_KEY = "free-adhd-memo:timer-task";
 const COLLAPSE_KEY = "free-adhd-memo:collapse:pomodoro";
 const defaultModeMinutes = { focus: 25, short: 5, long: 15 };
 const MIN_MINUTES = 1;
@@ -85,6 +86,8 @@ export function PomodoroPanel() {
   const { activeSession, recordSession } = useAppData();
   const [minutes, setMinutes] = useState(loadTimerMinutes);
   const [mode, setMode] = useState<TimerMode>("focus");
+  // 지금 뭘 하는지 적어두면 실행 중에 보여주고 집중 기록 이름으로도 쓴다.
+  const [task, setTask] = useState(() => localStorage.getItem(TASK_KEY) || "");
   // 입력 중에는 원본 문자열을 들고 있어야 "25"를 지우고 "30"을 칠 수 있다.
   const [minutesDraft, setMinutesDraft] = useState(() => String(minutes.focus));
   const [secondsLeft, setSecondsLeft] = useState(minutes.focus * 60);
@@ -97,6 +100,8 @@ export function PomodoroPanel() {
   activeSessionRef.current = activeSession;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const taskRef = useRef(task);
+  taskRef.current = task;
   // 탭이 백그라운드로 가도 시간이 정확하도록 마감시각 기준으로 계산한다.
   const endAtRef = useRef<number | null>(null);
   const startedAtRef = useRef<number | null>(null);
@@ -114,7 +119,7 @@ export function PomodoroPanel() {
     if (endedAtMs - startedAt < 60 * 1000) return;
     recordSessionRef.current({
       id: uid(),
-      label: "뽀모도로 집중",
+      label: taskRef.current.trim() || "뽀모도로 집중",
       startedAt: new Date(startedAt).toISOString(),
       endedAt: new Date(endedAtMs).toISOString(),
     });
@@ -184,6 +189,9 @@ export function PomodoroPanel() {
           <h2 className="text-lg font-bold">타이머</h2>
         </div>
         <div className="flex items-center gap-2 lg:hidden">
+          {collapsed && running && task.trim() && (
+            <span className="max-w-28 truncate text-xs font-semibold text-muted-foreground">{task}</span>
+          )}
           {collapsed && (
             <span className={cn("text-sm font-bold tabular-nums", running ? "text-emerald-600" : "text-muted-foreground")}>
               {minutesToLabel(secondsLeft)}
@@ -196,6 +204,19 @@ export function PomodoroPanel() {
         <div className="my-5 text-center text-[clamp(2rem,22cqw,5rem)] leading-none font-black tabular-nums @container">
           {minutesToLabel(secondsLeft)}
         </div>
+        <Input
+          value={task}
+          onChange={(event) => {
+            setTask(event.target.value);
+            localStorage.setItem(TASK_KEY, event.target.value);
+          }}
+          placeholder="지금 뭘 하는 중? (집중 기록 이름)"
+          title="집중이 끝나면 이 이름으로 타임테이블에 기록됩니다"
+          className={cn(
+            "mb-3 h-8 text-center text-sm",
+            running && mode === "focus" && task.trim() && "border-emerald-600 font-bold text-emerald-700",
+          )}
+        />
         <Tabs value={mode} onValueChange={(value) => selectMode(value as TimerMode)}>
           <TabsList className="w-full">
             {(Object.keys(modeNames) as TimerMode[]).map((key) => (
