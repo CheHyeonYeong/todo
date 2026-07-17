@@ -26,18 +26,26 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
-/* 오래된 완료 할 일 보관(이메일 export 후 삭제) 설정. SMTP가 없으면 기능이 꺼진다. */
+/* 오래된 완료 할 일 보관(이메일 export 후 삭제) 설정. SMTP가 없으면 기능이 꺼진다.
+   ARCHIVE_MONTHS에 지정된 달(기본 6월·12월)에 한 번씩만 실행되는 반기 배치. */
 const smtpHost = process.env.SMTP_HOST || "";
 const smtpPort = Number(process.env.SMTP_PORT || 465);
 const smtpUser = process.env.SMTP_USER || "";
 const smtpPass = process.env.SMTP_PASS || "";
 const archiveAfterMonths = Number(process.env.ARCHIVE_AFTER_MONTHS || 6);
+const archiveMonths = (process.env.ARCHIVE_MONTHS || "6,12")
+  .split(",")
+  .map((month) => Number(month.trim()))
+  .filter((month) => Number.isInteger(month) && month >= 1 && month <= 12);
 const archiveFallbackEmail = process.env.ARCHIVE_EMAIL_TO || "";
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const archiveIntervalMs = Number(process.env.ARCHIVE_INTERVAL_MS || 24 * 60 * 60 * 1000);
+const archiveCheckIntervalMs = Number(process.env.ARCHIVE_CHECK_INTERVAL_MS || 6 * 60 * 60 * 1000);
+// 이번 달에 이미 실행했는지 기억하는 마커 파일 (한 달에 한 번만 메일이 가도록)
+const archiveStateFile = process.env.ARCHIVE_STATE_FILE || join(dirname(dataFile), ".archive-last-run");
 const archiveEnabled =
   Boolean(smtpHost && smtpUser && smtpPass) &&
   archiveAfterMonths > 0 &&
+  archiveMonths.length > 0 &&
   Boolean(archiveFallbackEmail || supabaseServiceRoleKey);
 const pool = databaseUrl
   ? new pg.Pool({
@@ -1254,12 +1262,24 @@ async function archiveUserIds(cutoffIso) {
 
 let archiveSweepRunning = false;
 
+/** 지정된 달(기본 6월·12월)에만, 그 달에 아직 안 했을 때만 스윕한다. */
 async function runArchiveSweep() {
   // 스윕이 겹치면 같은 항목이 두 번 메일로 나갈 수 있다.
   if (archiveSweepRunning) return;
   archiveSweepRunning = true;
   try {
-    await archiveSweepOnce();
+    const { key } = todayInAppZone();
+    const monthKey = key.slice(0, 7);
+    if (!archiveMonths.includes(Number(key.slice(5, 7)))) return;
+    const lastRun = await readFile(archiveStateFile, "utf8").catch(() => "");
+    if (lastRun.trim() === monthKey) return;
+    const allOk = await archiveSweepOnce();
+    // 실패한 사용자가 있으면 마커를 안 남겨 다음 체크 때 재시도한다.
+    // (성공한 사용자의 항목은 이미 지워졌으므로 다시 메일이 가지 않는다.)
+    if (allOk) {
+      await mkdir(dirname(archiveStateFile), { recursive: true });
+      await writeFile(archiveStateFile, `${monthKey}\n`, "utf8");
+    }
   } finally {
     archiveSweepRunning = false;
   }
@@ -1267,6 +1287,7 @@ async function runArchiveSweep() {
 
 async function archiveSweepOnce() {
   const cutoffIso = archiveCutoffIso();
+  let allOk = true;
   for (const userId of await archiveUserIds(cutoffIso)) {
     try {
       const data = await readData(userId);
@@ -1277,20 +1298,22 @@ async function archiveSweepOnce() {
         console.error(`archive: no email for user ${userId}, skipping ${archived.length} todos`);
         continue;
       }
-      // 메일이 실제로 나간 뒤에만 지운다. 실패하면 다음 스윕에서 다시 시도한다.
+      // 메일이 실제로 나간 뒤에만 지운다. 실패하면 다음 체크 때 다시 시도한다.
       await sendArchiveEmail(email, archived);
       await deleteArchivedTodos(archived.map((todo) => todo.id), userId);
       console.log(`archive: exported ${archived.length} todos to ${email} (user ${userId})`);
     } catch (error) {
+      allOk = false;
       console.error(`archive: sweep failed for user ${userId}: ${error.message}`);
     }
   }
+  return allOk;
 }
 
 if (archiveEnabled) {
-  setTimeout(() => runArchiveSweep().catch((error) => console.error(`archive: ${error.message}`)), Math.min(30_000, archiveIntervalMs));
-  setInterval(() => runArchiveSweep().catch((error) => console.error(`archive: ${error.message}`)), archiveIntervalMs);
-  console.log(`archive: enabled (older than ${archiveAfterMonths} months, every ${Math.round(archiveIntervalMs / 60000)}m)`);
+  setTimeout(() => runArchiveSweep().catch((error) => console.error(`archive: ${error.message}`)), Math.min(30_000, archiveCheckIntervalMs));
+  setInterval(() => runArchiveSweep().catch((error) => console.error(`archive: ${error.message}`)), archiveCheckIntervalMs);
+  console.log(`archive: enabled (months: ${archiveMonths.join(",")}, cutoff: ${archiveAfterMonths} months)`);
 }
 
 async function readRequestBody(request) {
