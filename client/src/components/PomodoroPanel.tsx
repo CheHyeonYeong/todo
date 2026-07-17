@@ -96,12 +96,18 @@ export function PomodoroPanel() {
   const [notifyPermission, setNotifyPermission] = useState<NotificationPermission | "unsupported">(() =>
     "Notification" in window ? Notification.permission : "unsupported",
   );
+  // 이번 사이클에서 끝낸 집중 횟수. 4번째 집중 후엔 긴 휴식으로 넘어간다.
+  const [focusCount, setFocusCount] = useState(0);
   const activeSessionRef = useRef(activeSession);
   activeSessionRef.current = activeSession;
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const taskRef = useRef(task);
   taskRef.current = task;
+  const minutesRef = useRef(minutes);
+  minutesRef.current = minutes;
+  const focusCountRef = useRef(focusCount);
+  focusCountRef.current = focusCount;
   // 탭이 백그라운드로 가도 시간이 정확하도록 마감시각 기준으로 계산한다.
   const endAtRef = useRef<number | null>(null);
   const startedAtRef = useRef<number | null>(null);
@@ -127,6 +133,35 @@ export function PomodoroPanel() {
   const recordFocusSegmentRef = useRef(recordFocusSegment);
   recordFocusSegmentRef.current = recordFocusSegment;
 
+  /* 타이머가 끝났을 때: 집중이면 기록 후 휴식을 자동 시작(4번째는 긴 휴식),
+     휴식이면 집중 모드로 되돌려 놓고 시작은 사용자에게 맡긴다. */
+  const handleComplete = (endAt: number) => {
+    endAtRef.current = null;
+    setRunning(false);
+    playBeep();
+    recordFocusSegment(endAt);
+    if (modeRef.current === "focus") {
+      const count = focusCountRef.current + 1;
+      setFocusCount(count);
+      const nextMode: TimerMode = count % 4 === 0 ? "long" : "short";
+      void notify(`집중 끝! ${modeNames[nextMode]}을 자동으로 시작했어요.`);
+      setMode(nextMode);
+      setMinutesDraft(String(minutesRef.current[nextMode]));
+      const seconds = minutesRef.current[nextMode] * 60;
+      setSecondsLeft(seconds);
+      endAtRef.current = Date.now() + seconds * 1000;
+      startedAtRef.current = Date.now();
+      setRunning(true);
+    } else {
+      void notify("휴식 끝! 준비되면 시작을 눌러 다음 집중을 이어가세요.");
+      setMode("focus");
+      setMinutesDraft(String(minutesRef.current.focus));
+      setSecondsLeft(minutesRef.current.focus * 60);
+    }
+  };
+  const handleCompleteRef = useRef(handleComplete);
+  handleCompleteRef.current = handleComplete;
+
   useEffect(() => {
     if (!running) return;
     const tick = () => {
@@ -135,12 +170,7 @@ export function PomodoroPanel() {
       const remaining = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
       setSecondsLeft(remaining);
       if (remaining > 0) return;
-      endAtRef.current = null;
-      setRunning(false);
-      playBeep();
-      const message = modeRef.current === "focus" ? "집중 끝! 잠깐 쉬세요." : "휴식 끝! 다시 시작해볼까요.";
-      void notify(message);
-      recordFocusSegmentRef.current(endAt);
+      handleCompleteRef.current(endAt);
     };
     const id = setInterval(tick, 500);
     document.addEventListener("visibilitychange", tick);
@@ -193,7 +223,7 @@ export function PomodoroPanel() {
             <span className="max-w-28 truncate text-xs font-semibold text-muted-foreground">{task}</span>
           )}
           {collapsed && (
-            <span className={cn("text-sm font-bold tabular-nums", running ? "text-emerald-600" : "text-muted-foreground")}>
+            <span className={cn("text-sm font-bold tabular-nums", running ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
               {minutesToLabel(secondsLeft)}
             </span>
           )}
@@ -214,7 +244,7 @@ export function PomodoroPanel() {
           title="집중이 끝나면 이 이름으로 타임테이블에 기록됩니다"
           className={cn(
             "mb-3 h-8 text-center text-sm",
-            running && mode === "focus" && task.trim() && "border-emerald-600 font-bold text-emerald-700",
+            running && mode === "focus" && task.trim() && "border-emerald-600 font-bold text-emerald-700 dark:text-emerald-300",
           )}
         />
         <Tabs value={mode} onValueChange={(value) => selectMode(value as TimerMode)}>
@@ -226,6 +256,20 @@ export function PomodoroPanel() {
             ))}
           </TabsList>
         </Tabs>
+        <div
+          className="mt-2.5 flex items-center justify-center gap-1.5"
+          title={`이번 사이클 집중 ${focusCount}회 (4회마다 긴 휴식)`}
+        >
+          {[0, 1, 2, 3].map((index) => {
+            const filled = focusCount > 0 && index < (focusCount % 4 === 0 ? 4 : focusCount % 4);
+            return (
+              <span
+                key={index}
+                className={cn("size-2 rounded-full", filled ? "bg-emerald-600" : "bg-muted-foreground/25")}
+              />
+            );
+          })}
+        </div>
         <div className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-muted-foreground">
           <label htmlFor="timerMinutes">분 설정</label>
           <Input
@@ -256,7 +300,7 @@ export function PomodoroPanel() {
             ? `${MIN_MINUTES}~${MAX_MINUTES} 사이의 분을 입력하세요`
             : notifyPermission === "denied"
               ? "알림이 차단돼 있어 소리로만 알려요 (브라우저 설정에서 허용)"
-              : "집중 1분 이상이면 타임테이블에 자동 기록"}
+              : "집중이 끝나면 휴식 자동 시작 · 1분 이상 집중은 타임테이블에 기록"}
         </p>
         <div className="mt-3 flex gap-2">
           <Button

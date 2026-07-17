@@ -30,10 +30,10 @@ export function LoginScreen({ checking }: { checking: boolean }) {
   const { login, loginError } = useAppData();
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-gradient-to-br from-slate-50 via-emerald-50/60 to-emerald-100/50 p-5">
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-gradient-to-br from-slate-50 via-emerald-50/60 to-emerald-100/50 dark:from-slate-950 dark:via-emerald-950/60 dark:to-emerald-900/40 p-5">
       <div className="pointer-events-none absolute -top-32 -right-20 size-[420px] rounded-full bg-emerald-500/15 blur-[90px]" />
       <div className="pointer-events-none absolute -bottom-36 -left-24 size-[420px] rounded-full bg-slate-900/10 blur-[90px]" />
-      <Card className="w-full max-w-sm border-border/60 bg-white/90 shadow-xl backdrop-blur">
+      <Card className="w-full max-w-sm border-border/60 bg-white/90 dark:bg-card/90 shadow-xl backdrop-blur">
         <CardContent className="flex flex-col items-center px-7 py-9 text-center">
           <img src="/icons/icon-192.png" alt="" width={76} height={76} className="rounded-[20px] shadow-lg" />
           <h1 className="mt-5 text-xl font-bold leading-snug">오늘 할 일, 시간까지 한눈에</h1>

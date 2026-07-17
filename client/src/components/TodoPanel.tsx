@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Repeat, StickyNote, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CornerDownRight,
+  Pencil,
+  Plus,
+  Repeat,
+  Search,
+  StickyNote,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -91,12 +103,14 @@ function TodoRow({
   children?: Todo[];
   dnd?: RowDnd;
 }) {
-  const { data, toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
+  const { data, addTodo, toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(todo.title);
   const [categoryDraft, setCategoryDraft] = useState(todo.category || "");
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState(todo.note || "");
+  const [subOpen, setSubOpen] = useState(false);
+  const [subDraft, setSubDraft] = useState("");
   const [collapsed, setCollapsed] = useState(false);
 
   const categoryOptions = useMemo(
@@ -108,11 +122,11 @@ function TodoRow({
   const overdue = overdueDays > 0;
 
   useEffect(() => {
-    pauseSyncRef.current = editing || noteOpen;
+    pauseSyncRef.current = editing || noteOpen || subOpen;
     return () => {
       pauseSyncRef.current = false;
     };
-  }, [editing, noteOpen, pauseSyncRef]);
+  }, [editing, noteOpen, subOpen, pauseSyncRef]);
 
   const commitEdit = () => {
     setEditing(false);
@@ -239,7 +253,7 @@ function TodoRow({
               <span
                 className={cn(
                   "ml-1.5 text-xs font-semibold whitespace-nowrap",
-                  overdue ? "font-bold text-red-600" : "text-muted-foreground",
+                  overdue ? "font-bold text-red-600 dark:text-red-400" : "text-muted-foreground",
                 )}
               >
                 ~{todo.dueDate}
@@ -253,7 +267,7 @@ function TodoRow({
             <Button
               variant="ghost"
               size="icon"
-              className={cn("size-6", todo.note && "text-amber-600")}
+              className={cn("size-6", todo.note && "text-amber-600 dark:text-amber-400")}
               title={todo.note ? "메모 보기/수정" : "메모 달기"}
               onClick={() => {
                 setNoteDraft(todo.note || "");
@@ -262,6 +276,17 @@ function TodoRow({
             >
               <StickyNote className="size-3.5" fill={todo.note ? "currentColor" : "none"} fillOpacity={0.25} />
             </Button>
+            {depth === 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                title="하위 목표 추가"
+                onClick={() => setSubOpen((open) => !open)}
+              >
+                <CornerDownRight className="size-3.5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -309,6 +334,31 @@ function TodoRow({
             {todo.note}
           </p>
         )
+      )}
+      {subOpen && (
+        <Input
+          autoFocus
+          value={subDraft}
+          onChange={(event) => setSubDraft(event.target.value)}
+          onBlur={() => {
+            if (!subDraft.trim()) setSubOpen(false);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              const title = subDraft.trim();
+              if (!title) return;
+              addTodo({ title, scope: todo.scope, parentId: todo.id });
+              setSubDraft("");
+              setCollapsed(false);
+            }
+            if (event.key === "Escape") {
+              setSubDraft("");
+              setSubOpen(false);
+            }
+          }}
+          placeholder="하위 목표 (Enter로 추가, Esc로 닫기)"
+          className="mt-1.5 ml-7 h-7 w-auto bg-background px-2 text-sm"
+        />
       )}
       {!collapsed && children.length > 0 && (
         <div className="mt-0.5">
@@ -495,7 +545,7 @@ function CalendarView() {
                   <span
                     className={cn(
                       "self-end rounded-full bg-emerald-700 px-1.5 text-[11px] text-white",
-                      key === selected && "bg-white text-primary",
+                      key === selected && "bg-white text-emerald-700 dark:bg-slate-900 dark:text-emerald-300",
                     )}
                   >
                     {count}
@@ -552,6 +602,7 @@ export function TodoPanel() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [collapsedScopes, setCollapsedScopes] = useState(loadCollapsedScopes);
   const [showOldDone, setShowOldDone] = useState(false);
+  const [query, setQuery] = useState("");
   // 자정이 지나면 어제 완료한 항목이 자동으로 사라지도록 오늘 날짜를 주기적으로 갱신한다.
   useTodayTick();
   const [dropScope, setDropScope] = useState<Scope | null>(null);
@@ -640,36 +691,57 @@ export function TodoPanel() {
           <div className="mb-2.5">
             <TodoForm categories={categories} activeCategory={categoryFilter} />
           </div>
-          {categories.length > 0 && (
-            <div className="mb-2.5 flex shrink-0 flex-wrap items-center gap-1.5">
-              <Badge
-                variant={categoryFilter ? "outline" : "default"}
-                className="cursor-pointer font-semibold"
-                onClick={() => setCategoryFilter(null)}
-              >
-                전체
-              </Badge>
-              {categories.map((category) => (
-                <CategoryChip
-                  key={category}
-                  category={category}
-                  active={categoryFilter === category}
-                  onClick={() => setCategoryFilter(categoryFilter === category ? null : category)}
-                />
-              ))}
+          <div className="mb-2.5 flex shrink-0 flex-wrap items-center gap-1.5">
+            {categories.length > 0 && (
+              <>
+                <Badge
+                  variant={categoryFilter ? "outline" : "default"}
+                  className="cursor-pointer font-semibold"
+                  onClick={() => setCategoryFilter(null)}
+                >
+                  전체
+                </Badge>
+                {categories.map((category) => (
+                  <CategoryChip
+                    key={category}
+                    category={category}
+                    active={categoryFilter === category}
+                    onClick={() => setCategoryFilter(categoryFilter === category ? null : category)}
+                  />
+                ))}
+              </>
+            )}
+            <div className="relative ml-auto">
+              <Search className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="검색"
+                className="h-7 w-36 pl-7 text-sm"
+              />
             </div>
-          )}
+          </div>
           {/* 패널이 좁은 자리로 옮겨질 수 있으므로 뷰포트가 아니라 패널 폭 기준으로 접는다. */}
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto @2xl:flex-row @2xl:overflow-visible">
             {(Object.keys(scopeLabels) as Scope[]).map((scope) => {
               const scopeTodos = data.todos.filter((todo) => todo.scope === scope);
-              const allItems = sortTodos(scopeTodos.filter((todo) => !todo.parentId)).filter((todo) => {
-                if (!categoryFilter) return true;
-                return (
-                  todo.category === categoryFilter ||
-                  scopeTodos.some((child) => child.parentId === todo.id && child.category === categoryFilter)
+              const search = query.trim().toLowerCase();
+              const matchesSearch = (todo: Todo) =>
+                !search ||
+                [todo.title, todo.note, todo.category].some((value) => value?.toLowerCase().includes(search));
+              const allItems = sortTodos(scopeTodos.filter((todo) => !todo.parentId))
+                .filter((todo) => {
+                  if (!categoryFilter) return true;
+                  return (
+                    todo.category === categoryFilter ||
+                    scopeTodos.some((child) => child.parentId === todo.id && child.category === categoryFilter)
+                  );
+                })
+                .filter(
+                  (todo) =>
+                    matchesSearch(todo) ||
+                    scopeTodos.some((child) => child.parentId === todo.id && matchesSearch(child)),
                 );
-              });
               const oldDoneCount = allItems.filter(completedBeforeToday).length;
               const items = showOldDone ? allItems : allItems.filter((todo) => !completedBeforeToday(todo));
               const sectionCollapsed = !!collapsedScopes[scope];

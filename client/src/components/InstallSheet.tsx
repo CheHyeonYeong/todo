@@ -89,7 +89,7 @@ export function InstallSheet({ open, onOpenChange }: { open: boolean; onOpenChan
             홈 화면에 추가하면 주소창 없이 앱처럼 열리고, 오프라인에서도 목록을 볼 수 있습니다.
           </p>
           {installed ? (
-            <p className="text-xs font-semibold text-emerald-700">이미 앱으로 실행 중입니다.</p>
+            <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">이미 앱으로 실행 중입니다.</p>
           ) : canInstall ? (
             <Button className="w-full font-bold" onClick={install}>
               <Download className="size-4" />앱 설치
@@ -124,7 +124,7 @@ export function InstallSheet({ open, onOpenChange }: { open: boolean; onOpenChan
               href={RELEASES_URL}
               target="_blank"
               rel="noreferrer"
-              className="font-semibold text-emerald-700 underline"
+              className="font-semibold text-emerald-700 dark:text-emerald-300 underline"
             >
               릴리스 페이지
             </a>

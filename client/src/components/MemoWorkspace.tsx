@@ -1,15 +1,36 @@
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
-import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
+import { GripVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { VimEditor } from "@/components/VimEditor";
 import { useAppData } from "@/hooks/useAppData";
 import { cn } from "@/lib/utils";
 import type { Memo } from "@/lib/types";
 
 const VIM_KEY = "free-adhd-memo:memo-vim";
+
+/* CodeMirror가 무거워서 vim 토글을 켠 사람만 내려받게 지연 로딩한다. */
+const LazyVimEditor = lazy(() =>
+  import("@/components/VimEditor").then((module) => ({ default: module.VimEditor })),
+);
+
+function VimEditor(props: ComponentProps<typeof LazyVimEditor>) {
+  return (
+    <Suspense fallback={<div className="min-h-14 px-1 py-1 text-sm text-muted-foreground">vim 에디터 로딩…</div>}>
+      <LazyVimEditor {...props} />
+    </Suspense>
+  );
+}
 
 /* 사용자가 지정한 순서(sortOrder 오름차순). 순서가 없는 기존 메모는 최신순으로 뒤에 붙인다. */
 function sortMemos(memos: Memo[]) {
@@ -81,7 +102,7 @@ function MemoComposer({ vim, onToggleVim }: { vim: boolean; onToggleVim: () => v
             onClick={onToggleVim}
             className={cn(
               "rounded px-1.5 py-0.5 font-mono text-[11px] font-bold transition-colors",
-              vim ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground hover:text-foreground",
+              vim ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" : "bg-muted text-muted-foreground hover:text-foreground",
             )}
           >
             vim
@@ -100,6 +121,7 @@ function MemoCard({
   memo,
   vim,
   dragging,
+  draggable = true,
   onDragStart,
   onDragEnter,
   onDragEnd,
@@ -108,6 +130,7 @@ function MemoCard({
   memo: Memo;
   vim: boolean;
   dragging: boolean;
+  draggable?: boolean;
   onDragStart: (event: DragEvent) => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
@@ -178,7 +201,7 @@ function MemoCard({
 
   return (
     <article
-      draggable
+      draggable={draggable}
       onDragStart={onDragStart}
       onDragEnter={(event) => {
         event.preventDefault();
@@ -235,6 +258,7 @@ function MemoCard({
 export function MemoWorkspace() {
   const { data, reorderMemos } = useAppData();
   const [vim, setVim] = useState(() => localStorage.getItem(VIM_KEY) === "1");
+  const [query, setQuery] = useState("");
   const [previewIds, setPreviewIds] = useState<string[] | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [orderError, setOrderError] = useState(false);
@@ -244,9 +268,16 @@ export function MemoWorkspace() {
   const sorted = sortMemos(data.memos);
   const baseIds = sorted.map((memo) => memo.id);
   const byId = new Map(sorted.map((memo) => [memo.id, memo]));
+  const search = query.trim().toLowerCase();
+  // 검색 중에는 드래그 순서 변경을 끈다 (일부만 보이는 상태에서 순서가 꼬이지 않게).
   const displayed = (previewIds ?? baseIds)
     .map((id) => byId.get(id))
-    .filter((memo): memo is Memo => Boolean(memo));
+    .filter((memo): memo is Memo => Boolean(memo))
+    .filter(
+      (memo) =>
+        !search ||
+        [memo.title, memo.body, ...(memo.tags || [])].some((value) => value?.toLowerCase().includes(search)),
+    );
 
   /* 드래그 중 카드가 들어갈 위치를 미리 보여주기 위해 표시 순서만 먼저 바꾼다. */
   const moveBefore = (targetId: string) => {
@@ -303,8 +334,17 @@ export function MemoWorkspace() {
         </p>
       )}
 
+      <div className="relative mt-3 shrink-0">
+        <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="메모 검색 (제목·본문·#태그)"
+          className="h-8 pl-8"
+        />
+      </div>
       <div
-        className="mt-3 grid min-h-0 flex-1 auto-rows-min content-start gap-2 overflow-y-auto pr-1 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]"
+        className="mt-2 grid min-h-0 flex-1 auto-rows-min content-start gap-2 overflow-y-auto pr-1 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]"
         onDragOver={(event) => {
           if (dragId) event.preventDefault();
         }}
@@ -319,6 +359,7 @@ export function MemoWorkspace() {
               key={memo.id}
               memo={memo}
               vim={vim}
+              draggable={!search}
               dragging={dragId === memo.id}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
@@ -333,7 +374,7 @@ export function MemoWorkspace() {
           ))
         ) : (
           <p className="col-span-full text-sm font-medium text-muted-foreground">
-            아직 메모가 없습니다. 위 입력창에서 첫 메모를 작성해 보세요.
+            {search ? "검색 결과가 없습니다." : "아직 메모가 없습니다. 위 입력창에서 첫 메모를 작성해 보세요."}
           </p>
         )}
       </div>

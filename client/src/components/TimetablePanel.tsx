@@ -39,12 +39,12 @@ function Tracker() {
 
   if (activeSession) {
     return (
-      <div className="mb-3 flex items-center justify-between gap-2.5 rounded-lg bg-emerald-50 px-3.5 py-3">
+      <div className="mb-3 flex items-center justify-between gap-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 px-3.5 py-3">
         <div className="min-w-0">
-          <strong className="block break-words text-sm text-emerald-900">
+          <strong className="block break-words text-sm text-emerald-900 dark:text-emerald-100">
             {activeSession.label || FALLBACK_LABEL}
           </strong>
-          <span className="text-xs font-bold text-emerald-700">
+          <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
             {formatTime(activeSession.startedAt)} 시작 ·{" "}
             {formatDuration(Date.now() - new Date(activeSession.startedAt).getTime())} 경과
           </span>
@@ -171,7 +171,7 @@ function DayGrid({ dayKey }: { dayKey: string }) {
         </div>
       </div>
       {totalMs > 0 && (
-        <p className="mt-2 text-right text-xs font-black text-emerald-700">합계 {formatDuration(totalMs)}</p>
+        <p className="mt-2 text-right text-xs font-black text-emerald-700 dark:text-emerald-300">합계 {formatDuration(totalMs)}</p>
       )}
     </>
   );
@@ -221,7 +221,7 @@ function WeekGrid({ anchorKey }: { anchorKey: string }) {
               <span
                 className={cn(
                   "mb-1 block text-center text-[11px] leading-tight font-bold text-muted-foreground",
-                  key === today && "text-emerald-700",
+                  key === today && "text-emerald-700 dark:text-emerald-300",
                 )}
               >
                 {formatWeekdayShort(date)}
@@ -265,7 +265,7 @@ function WeekGrid({ anchorKey }: { anchorKey: string }) {
             </div>
           ))}
       </div>
-      <p className="mt-2 text-right text-xs font-black text-emerald-700">합계 {formatDuration(totalMs)}</p>
+      <p className="mt-2 text-right text-xs font-black text-emerald-700 dark:text-emerald-300">합계 {formatDuration(totalMs)}</p>
     </>
   );
 }

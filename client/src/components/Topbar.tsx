@@ -1,8 +1,11 @@
-import { Download, LayoutGrid, LogOut, PenLine, Repeat } from "lucide-react";
+import { useState } from "react";
+import { Download, LayoutGrid, LogOut, Moon, PenLine, Repeat, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/hooks/useAppData";
 import { cn } from "@/lib/utils";
+
+const THEME_KEY = "free-adhd-memo:theme";
 
 export function Topbar({
   onOpenMemo,
@@ -16,6 +19,16 @@ export function Topbar({
   onResetLayout?: () => void;
 }) {
   const { email, logout, sync } = useAppData();
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+
+  const toggleTheme = () => {
+    setDark((current) => {
+      const next = !current;
+      document.documentElement.classList.toggle("dark", next);
+      localStorage.setItem(THEME_KEY, next ? "dark" : "light");
+      return next;
+    });
+  };
 
   return (
     <header className="mb-4 flex shrink-0 items-center justify-between gap-4">
@@ -39,6 +52,9 @@ export function Topbar({
             <span className="hidden sm:inline">배치 초기화</span>
           </Button>
         )}
+        <Button variant="ghost" size="icon" className="size-8" onClick={toggleTheme} title={dark ? "라이트 모드" : "다크 모드"}>
+          {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+        </Button>
         <Button variant="ghost" size="sm" onClick={logout} title="로그아웃">
           <LogOut className="size-4" />
           <span className="hidden sm:inline">Logout</span>
@@ -47,8 +63,8 @@ export function Topbar({
           variant="secondary"
           className={cn(
             "font-bold",
-            sync.tone === "ok" && "bg-emerald-100 text-emerald-800",
-            sync.tone === "warn" && "bg-amber-100 text-amber-800",
+            sync.tone === "ok" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+            sync.tone === "warn" && "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
           )}
         >
           {sync.label}
