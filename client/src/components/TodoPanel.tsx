@@ -622,7 +622,7 @@ function CalendarView() {
 
 export function TodoPanel() {
   const { data, reorderTodos } = useAppData();
-  const [view, setView] = useState("list");
+  const [view, setView] = useState("calendar");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [collapsedScopes, setCollapsedScopes] = useState(loadCollapsedScopes);
   const [showOldDone, setShowOldDone] = useState(false);
