@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppData, useTodayTick } from "@/hooks/useAppData";
 import { dateKey, daysFromToday, defaultDueForScope, formatDate, labelHue, scopeLabels, todayKey } from "@/lib/helpers";
@@ -486,17 +485,44 @@ function TodoForm({ categories, activeCategory }: { categories: string[]; active
   );
 }
 
-function CalendarView() {
+function CalendarView({
+  categories,
+  categoryFilter,
+  setCategoryFilter,
+  categoryDraft,
+  setCategoryDraft,
+  addCategoryOnly,
+}: {
+  categories: string[];
+  categoryFilter: string | null;
+  setCategoryFilter: (category: string | null) => void;
+  categoryDraft: string;
+  setCategoryDraft: (value: string) => void;
+  addCategoryOnly: () => void;
+}) {
   const { data, addTodo } = useAppData();
-  const [month, setMonth] = useState(() => new Date());
-  const [selected, setSelected] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState(() => new Date());
+  const [mode, setMode] = useState<"day" | "week" | "month">("month");
+  const [selected, setSelected] = useState<string>(() => todayKey());
   const [quickTitle, setQuickTitle] = useState("");
 
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
+  const year = anchor.getFullYear();
+  const monthIndex = anchor.getMonth();
   const firstDay = new Date(year, monthIndex, 1);
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const today = todayKey();
+  const weekStart = new Date(anchor);
+  weekStart.setDate(anchor.getDate() - anchor.getDay());
+  const visibleDates =
+    mode === "day"
+      ? [new Date(anchor)]
+      : mode === "week"
+        ? Array.from({ length: 7 }, (_, index) => {
+            const date = new Date(weekStart);
+            date.setDate(weekStart.getDate() + index);
+            return date;
+          })
+        : Array.from({ length: daysInMonth }, (_, index) => new Date(year, monthIndex, index + 1));
 
   const countByDate = data.todos.reduce<Record<string, number>>((acc, todo) => {
     if (!todo.dueDate) return acc;
@@ -504,47 +530,71 @@ function CalendarView() {
     return acc;
   }, {});
 
-  const selectedTodos = selected
-    ? sortTodos(data.todos.filter((todo) => todo.dueDate === selected && !todo.parentId))
-    : [];
+  const selectedTodos = data.todos
+    .filter(
+      (todo) =>
+        !!todo.dueDate &&
+        todo.dueDate >= selected &&
+        !todo.parentId &&
+        (!categoryFilter || todo.category === categoryFilter),
+    )
+    .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || "") || (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+  const moveAnchor = (direction: -1 | 1) => {
+    const next = new Date(anchor);
+    if (mode === "day") next.setDate(next.getDate() + direction);
+    else if (mode === "week") next.setDate(next.getDate() + direction * 7);
+    else next.setMonth(next.getMonth() + direction, 1);
+    setAnchor(next);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
       {/* 캘린더는 내용이 많아져도 크기가 안 변한다. 목록 쪽만 스크롤. */}
       <div className="flex min-w-0 shrink-0 flex-col lg:flex-[1.4]">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <Button
             variant="secondary"
             size="icon"
             className="size-8"
-            onClick={() => setMonth(new Date(year, monthIndex - 1, 1))}
+            onClick={() => moveAnchor(-1)}
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <h3 className="text-sm font-bold">
-            {year}년 {monthIndex + 1}월
-          </h3>
+          <h3 className="text-sm font-bold">{year}년 {monthIndex + 1}월</h3>
+          <div className="flex rounded-lg bg-muted p-1">
+            {(["day", "week", "month"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setMode(value)}
+                className={cn("rounded-md px-3 py-1 text-xs font-bold", mode === value && "bg-background shadow-sm")}
+              >
+                {{ day: "일", week: "주", month: "월" }[value]}
+              </button>
+            ))}
+          </div>
           <Button
             variant="secondary"
             size="icon"
             className="size-8"
-            onClick={() => setMonth(new Date(year, monthIndex + 1, 1))}
+            onClick={() => moveAnchor(1)}
           >
             <ChevronRight className="size-4" />
           </Button>
         </div>
-        <div className="mb-1.5 grid grid-cols-7 text-center text-xs font-bold text-muted-foreground">
-          {["일", "월", "화", "수", "목", "금", "토"].map((day) => (
+        <div className={cn("mb-1.5 grid text-center text-xs font-bold text-muted-foreground", mode === "day" ? "grid-cols-1" : "grid-cols-7")}>
+          {(mode === "day" ? [formatDate(`${dateKey(anchor)}T00:00:00`)] : ["일", "월", "화", "수", "목", "금", "토"]).map((day) => (
             <span key={day}>{day}</span>
           ))}
         </div>
-        <div className="grid auto-rows-[3rem] grid-cols-7 gap-1.5 lg:min-h-0 lg:flex-1 lg:auto-rows-fr lg:overflow-y-auto">
-          {Array.from({ length: firstDay.getDay() }).map((_, index) => (
+        <div className={cn("grid auto-rows-[3rem] gap-1.5 lg:min-h-0 lg:flex-1 lg:auto-rows-fr lg:overflow-y-auto", mode === "day" ? "grid-cols-1" : "grid-cols-7")}>
+          {mode === "month" && Array.from({ length: firstDay.getDay() }).map((_, index) => (
             <div key={`blank-${index}`} />
           ))}
-          {Array.from({ length: daysInMonth }).map((_, index) => {
-            const day = index + 1;
-            const key = dateKey(new Date(year, monthIndex, day));
+          {visibleDates.map((date) => {
+            const day = date.getDate();
+            const key = dateKey(date);
             const count = countByDate[key] || 0;
             return (
               <button
@@ -576,14 +626,15 @@ function CalendarView() {
       <div className="min-w-0 flex-1 overflow-y-auto rounded-lg bg-muted p-3.5 max-lg:max-h-96">
         {selected ? (
           <>
-            <h4 className="mb-3 text-sm font-bold">{formatDate(`${selected}T00:00:00`)}</h4>
+            <h4 className="mb-1 text-sm font-bold">{formatDate(`${selected}T00:00:00`)} 이후 마감</h4>
+            <p className="mb-3 text-xs text-muted-foreground">가까운 마감일부터 순서대로 표시합니다.</p>
             <form
               className="mb-3 flex gap-1.5"
               onSubmit={(event) => {
                 event.preventDefault();
                 const title = quickTitle.trim();
                 if (!title) return;
-                addTodo({ title, scope: "day", dueDate: selected });
+                addTodo({ title, scope: "day", dueDate: selected, category: categoryFilter });
                 setQuickTitle("");
               }}
             >
@@ -597,14 +648,30 @@ function CalendarView() {
                 <Plus className="size-4" />
               </Button>
             </form>
+            {categories.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <Badge variant={categoryFilter ? "outline" : "default"} className="cursor-pointer" onClick={() => setCategoryFilter(null)}>전체</Badge>
+                {categories.map((category) => (
+                  <CategoryChip key={category} category={category} active={categoryFilter === category} onClick={() => setCategoryFilter(categoryFilter === category ? null : category)} />
+                ))}
+              </div>
+            )}
+            <form
+              className="mb-3 flex gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                addCategoryOnly();
+              }}
+            >
+              <Input value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} placeholder="새 카테고리" className="h-8 bg-background" />
+              <Button type="submit" variant="outline" size="sm">카테고리 추가</Button>
+            </form>
             {selectedTodos.length ? (
               selectedTodos.map((todo) => (
-                <TodoRow
-                  key={todo.id}
-                  todo={todo}
-                  children={data.todos.filter((child) => child.parentId === todo.id)}
-                  showChildren={false}
-                />
+                <div key={todo.id}>
+                  <p className="mt-3 mb-1 text-[11px] font-bold text-muted-foreground">{formatDate(`${todo.dueDate}T00:00:00`)}</p>
+                  <TodoRow todo={todo} children={data.todos.filter((child) => child.parentId === todo.id)} showChildren={false} />
+                </div>
               ))
             ) : (
               <p className="text-sm font-medium text-muted-foreground">이 날짜에 마감인 할 일이 없습니다.</p>
@@ -612,7 +679,7 @@ function CalendarView() {
           </>
         ) : (
           <p className="text-sm font-medium text-muted-foreground">
-            날짜를 선택하면 그날 마감인 할 일을 보고 추가할 수 있습니다.
+            날짜를 선택하면 그날 이후의 마감을 볼 수 있습니다.
           </p>
         )}
       </div>
@@ -622,7 +689,7 @@ function CalendarView() {
 
 export function TodoPanel() {
   const { data, reorderTodos } = useAppData();
-  const [view, setView] = useState("calendar");
+  const view = "calendar";
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [collapsedScopes, setCollapsedScopes] = useState(loadCollapsedScopes);
   const [showOldDone, setShowOldDone] = useState(false);
@@ -718,12 +785,6 @@ export function TodoPanel() {
           <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">todo</p>
           <h2 className="text-lg font-bold">기간별 할 일</h2>
         </div>
-        <Tabs value={view} onValueChange={setView}>
-          <TabsList>
-            <TabsTrigger value="list">목록</TabsTrigger>
-            <TabsTrigger value="calendar">캘린더</TabsTrigger>
-          </TabsList>
-        </Tabs>
       </div>
       {view === "list" ? (
         <>
@@ -905,7 +966,14 @@ export function TodoPanel() {
           </div>
         </>
       ) : (
-        <CalendarView />
+        <CalendarView
+          categories={categories}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          categoryDraft={categoryDraft}
+          setCategoryDraft={setCategoryDraft}
+          addCategoryOnly={addCategoryOnly}
+        />
       )}
     </Card>
   );

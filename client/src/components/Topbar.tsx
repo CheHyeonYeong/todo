@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  CalendarDays,
   CheckSquare2,
   Clock3,
   Download,
@@ -15,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useAppData } from "@/hooks/useAppData";
 
 const THEME_KEY = "free-adhd-memo:theme";
-export type WorkspacePanel = "todo" | "memo" | "pomodoro" | "timetable";
+export type WorkspacePanel = "todo" | "memo" | "time";
 
 export function Topbar({
   onOpenMemo,
@@ -61,11 +60,8 @@ export function Topbar({
         <button className={activePanel === "memo" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("memo")}>
           <NotebookPen className="size-4" /> 메모
         </button>
-        <button className={activePanel === "pomodoro" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("pomodoro")}>
-          <Clock3 className="size-4" /> 타이머
-        </button>
-        <button className={activePanel === "timetable" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("timetable")}>
-          <CalendarDays className="size-4" /> 타임테이블
+        <button className={activePanel === "time" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("time")}>
+          <Clock3 className="size-4" /> 시간
         </button>
       </nav>
 

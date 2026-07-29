@@ -269,14 +269,20 @@ function Shell() {
               <h2 className="mt-1 text-2xl font-black tracking-tight">
                 {activePanel === "todo" && "캘린더"}
                 {activePanel === "memo" && "메모"}
-                {activePanel === "pomodoro" && "타이머"}
-                {activePanel === "timetable" && "타임테이블"}
+                {activePanel === "time" && "시간"}
               </h2>
             </div>
             <p className="text-sm text-muted-foreground">필요한 화면 하나에만 집중하세요.</p>
           </div>
           <div className="min-h-[calc(100dvh-6rem)] lg:h-[calc(100%_-_4rem)] lg:min-h-0">
-            <PanelSlot panel={activePanel} layout={fixedLayout} className="flex h-full min-h-[620px] flex-col lg:min-h-0" />
+            {activePanel === "time" ? (
+              <div className="grid h-full min-h-[720px] gap-4 lg:min-h-0 lg:grid-cols-[minmax(360px,0.8fr)_minmax(520px,1.2fr)]">
+                <PanelSlot panel="pomodoro" layout={fixedLayout} className="flex min-h-0 flex-col" />
+                <PanelSlot panel="timetable" layout={fixedLayout} className="flex min-h-0 flex-col" />
+              </div>
+            ) : (
+              <PanelSlot panel={activePanel} layout={fixedLayout} className="flex h-full min-h-[620px] flex-col lg:min-h-0" />
+            )}
           </div>
         </main>
       </div>
