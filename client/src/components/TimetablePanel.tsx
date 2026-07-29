@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Play, Square, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Play, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -81,7 +81,7 @@ function Tracker() {
 }
 
 function DayGrid({ dayKey }: { dayKey: string }) {
-  const { data, activeSession, deleteSession } = useAppData();
+  const { data, activeSession, deleteSession, updateSession } = useAppData();
   const gridRef = useRef<HTMLDivElement>(null);
   const didAutoScroll = useRef(false);
 
@@ -156,14 +156,27 @@ function DayGrid({ dayKey }: { dayKey: string }) {
                 <span className="truncate font-bold">{label}</span>
                 <span className="truncate font-semibold opacity-60">{timeText}</span>
                 {!running && (
-                  <button
-                    type="button"
-                    title="기록 삭제"
-                    onClick={() => deleteSession(session.id)}
-                    className="absolute top-0.5 right-0.5 grid size-4.5 place-items-center rounded opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-60"
-                  >
-                    <X className="size-3" />
-                  </button>
+                  <span className="absolute top-0.5 right-0.5 flex opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-70">
+                    <button
+                      type="button"
+                      title="기록 이름 수정"
+                      onClick={() => {
+                        const next = window.prompt("기록 이름", session.label || FALLBACK_LABEL);
+                        if (next !== null) updateSession(session.id, next === FALLBACK_LABEL ? "" : next);
+                      }}
+                      className="grid size-4.5 place-items-center rounded"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      title="기록 삭제"
+                      onClick={() => deleteSession(session.id)}
+                      className="grid size-4.5 place-items-center rounded"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
                 )}
               </div>
             );

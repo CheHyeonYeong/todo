@@ -482,6 +482,7 @@ pub fn help() {
   todo track \"작업명\"       시간 기록 시작
   todo stop                시간 기록 종료 (서버에 저장)
   todo status              로그인/기록 상태
+  todo open                브라우저에서 Todo 웹 화면 열기 (TODO_WEB_URL로 주소 변경)
   todo login / logout      Google 로그인 / 로그아웃",
         bold("todo")
     );

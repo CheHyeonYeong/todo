@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, LayoutGrid, LogOut, Moon, PenLine, Repeat, Sun } from "lucide-react";
+import { DatabaseBackup, Download, LayoutGrid, LogOut, Moon, PenLine, Repeat, Share2, Sun } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/hooks/useAppData";
@@ -18,7 +18,7 @@ export function Topbar({
   onOpenRoutines: () => void;
   onResetLayout?: () => void;
 }) {
-  const { email, logout, sync } = useAppData();
+  const { data, email, logout, sync } = useAppData();
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
 
   const toggleTheme = () => {
@@ -28,6 +28,38 @@ export function Topbar({
       localStorage.setItem(THEME_KEY, next ? "dark" : "light");
       return next;
     });
+  };
+
+  const download = (name: string, content: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = name;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const backupData = () => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    download(`todo-backup-${stamp}.json`, JSON.stringify({ exportedAt: new Date().toISOString(), ...data }, null, 2), "application/json");
+  };
+
+  const exportMemos = async () => {
+    const text = data.memos
+      .map((memo) => [memo.title && `# ${memo.title}`, memo.body].filter(Boolean).join("\n"))
+      .filter(Boolean)
+      .join("\n\n---\n\n");
+    const file = new File([text], "todo-memos.txt", { type: "text/plain" });
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      try {
+        await navigator.share({ title: "Todo 메모", files: [file] });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        download("todo-memos.txt", text, "text/plain");
+      }
+      return;
+    }
+    download("todo-memos.txt", text, "text/plain");
   };
 
   return (
@@ -45,6 +77,13 @@ export function Topbar({
         <Button variant="ghost" size="sm" onClick={onOpenInstall} title="앱·터미널 설치 안내">
           <Download className="size-4" />
           <span className="hidden sm:inline">설치</span>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={backupData} title="할 일·메모·타임테이블 전체 백업">
+          <DatabaseBackup className="size-4" />
+          <span className="hidden sm:inline">백업</span>
+        </Button>
+        <Button variant="ghost" size="icon" className="size-8" onClick={() => void exportMemos()} title="메모를 휴대폰 앱으로 공유">
+          <Share2 className="size-4" />
         </Button>
         {onResetLayout && (
           <Button variant="ghost" size="sm" onClick={onResetLayout} title="패널 배치를 기본값으로 되돌리기">

@@ -62,6 +62,13 @@ fn main() {
             cli::status(&client);
             Ok(())
         }
+        "open" => {
+            let url = std::env::var("TODO_WEB_URL")
+                .unwrap_or_else(|_| "https://158-179-193-175.nip.io".to_string());
+            login::open_browser(&url);
+            println!("웹 화면을 열었습니다: {url}");
+            Ok(())
+        }
         "login" => login::login(&mut client),
         "logout" => {
             client.logout();

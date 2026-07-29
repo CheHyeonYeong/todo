@@ -125,6 +125,7 @@ interface AppDataValue {
   deleteMemo: (id: string) => void;
   reorderMemos: (ids: string[]) => Promise<boolean>;
   recordSession: (session: Session) => void;
+  updateSession: (id: string, label: string) => void;
   deleteSession: (id: string) => void;
   startSession: (label: string) => void;
   stopSession: () => void;
@@ -708,6 +709,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [persist, sendMutation, showUndo],
   );
 
+  const updateSession = useCallback(
+    (id: string, label: string) => {
+      const current = dataRef.current.sessions.find((session) => session.id === id);
+      if (!current) return;
+      const updated = { ...current, label: label.trim() };
+      persist((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((session) => (session.id === id ? updated : session)),
+      }));
+      sendMutation(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+      sendMutation("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      });
+    },
+    [persist, sendMutation],
+  );
+
   const startSession = useCallback((label: string) => {
     const next: ActiveSession = { id: uid(), label, startedAt: nowIso() };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(next));
@@ -748,6 +768,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteMemo,
       reorderMemos,
       recordSession,
+      updateSession,
       deleteSession,
       startSession,
       stopSession,
@@ -776,6 +797,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteMemo,
       reorderMemos,
       recordSession,
+      updateSession,
       deleteSession,
       startSession,
       stopSession,

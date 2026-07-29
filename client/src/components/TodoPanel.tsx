@@ -95,12 +95,14 @@ function TodoRow({
   draggable = false,
   depth = 0,
   children = [],
+  showChildren = true,
   dnd,
 }: {
   todo: Todo;
   draggable?: boolean;
   depth?: number;
   children?: Todo[];
+  showChildren?: boolean;
   dnd?: RowDnd;
 }) {
   const { data, addTodo, toggleTodo, deleteTodo, updateTodo, pauseSyncRef } = useAppData();
@@ -182,7 +184,7 @@ function TodoRow({
       }}
     >
       <div className="flex items-start gap-2">
-        {children.length > 0 && (
+        {showChildren && children.length > 0 && (
           <button
             type="button"
             className="mt-0.5 grid size-5 shrink-0 place-items-center text-muted-foreground"
@@ -360,7 +362,7 @@ function TodoRow({
           className="mt-1.5 ml-7 h-7 w-auto bg-background px-2 text-sm"
         />
       )}
-      {!collapsed && children.length > 0 && (
+      {showChildren && !collapsed && children.length > 0 && (
         <div className="mt-0.5">
           {children.map((child) => (
             <TodoRow key={child.id} todo={child} depth={1} />
@@ -489,7 +491,9 @@ function CalendarView() {
     return acc;
   }, {});
 
-  const selectedTodos = selected ? sortTodos(data.todos.filter((todo) => todo.dueDate === selected)) : [];
+  const selectedTodos = selected
+    ? sortTodos(data.todos.filter((todo) => todo.dueDate === selected && !todo.parentId))
+    : [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
@@ -581,7 +585,14 @@ function CalendarView() {
               </Button>
             </form>
             {selectedTodos.length ? (
-              selectedTodos.map((todo) => <TodoRow key={todo.id} todo={todo} />)
+              selectedTodos.map((todo) => (
+                <TodoRow
+                  key={todo.id}
+                  todo={todo}
+                  children={data.todos.filter((child) => child.parentId === todo.id)}
+                  showChildren={false}
+                />
+              ))
             ) : (
               <p className="text-sm font-medium text-muted-foreground">이 날짜에 마감인 할 일이 없습니다.</p>
             )}
