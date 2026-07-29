@@ -65,7 +65,7 @@ export function Topbar({
   return (
     <header className="mb-4 flex shrink-0 items-center justify-between gap-4">
       <span className="truncate text-sm font-semibold text-muted-foreground">{email}</span>
-      <div className="flex items-center gap-2">
+      <div className="-my-1 flex min-w-0 items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <Button variant="outline" size="sm" className="lg:hidden" onClick={onOpenMemo}>
           <PenLine className="size-4" />
           메모

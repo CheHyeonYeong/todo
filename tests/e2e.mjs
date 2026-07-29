@@ -239,6 +239,29 @@ try {
   const desktopBadgeBox = await syncBadge.boundingBox();
   check("데스크톱: 배지 패딩 유지", desktopBadgeBox.height >= 18, `h=${Math.round(desktopBadgeBox.height)}`);
 
+  // 14) 아주 좁은 폭: 넘침이 앱 전체가 아니라 nav 안에서만 스크롤된다 (issue #28)
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.waitForTimeout(300);
+  const layout = await page.evaluate(() => {
+    const header = document.querySelector("header");
+    const shell = header.parentElement;
+    const nav = header.querySelector(":scope > div");
+    return {
+      doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      shell: shell.scrollWidth - shell.clientWidth,
+      header: header.scrollWidth - header.clientWidth,
+      navOverflowX: getComputedStyle(nav).overflowX,
+    };
+  });
+  // issue #28의 원문 증상이 "모바일 화면 자체에 가로 스크롤"이므로 문서 레벨도 직접 본다.
+  check("좁은 폭: 문서 가로 스크롤 없음", layout.doc <= 0, `+${layout.doc}px`);
+  check("좁은 폭: 앱 셸 가로 넘침 없음", layout.shell <= 0, `+${layout.shell}px`);
+  check("좁은 폭: header 가로 넘침 없음", layout.header <= 0, `+${layout.header}px`);
+  check("좁은 폭: nav가 가로 스크롤 컨테이너", layout.navOverflowX === "auto", layout.navOverflowX);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(300);
+
   // 10.5) 메모 카드 클릭 → 플로팅 창에서 바로 수정 (자동 저장)
   await page.locator("article", { hasText: "vim 테스트 메모" }).first().click();
   await page.waitForTimeout(300);
