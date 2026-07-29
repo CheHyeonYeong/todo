@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Todo",
+    "slug": "todo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "todo",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.chehyeonyeong.todo"
+    },
+    "android": {
+      "package": "com.chehyeonyeong.todo"
+    }
+  }
+}
