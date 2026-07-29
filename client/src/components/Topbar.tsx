@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { Download, LayoutGrid, LogOut, Moon, PenLine, Repeat, Sun } from "lucide-react";
+import {
+  CalendarDays,
+  CheckSquare2,
+  Clock3,
+  Download,
+  LogOut,
+  Moon,
+  NotebookPen,
+  PenLine,
+  Repeat,
+  Sun,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/hooks/useAppData";
@@ -11,12 +22,10 @@ export function Topbar({
   onOpenMemo,
   onOpenInstall,
   onOpenRoutines,
-  onResetLayout,
 }: {
   onOpenMemo: () => void;
   onOpenInstall: () => void;
   onOpenRoutines: () => void;
-  onResetLayout?: () => void;
 }) {
   const { email, logout, sync } = useAppData();
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
@@ -30,39 +39,62 @@ export function Topbar({
     });
   };
 
+  const goTo = (panel: string) => {
+    document.getElementById(`panel-${panel}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <header className="mb-4 flex shrink-0 items-center justify-between gap-4">
-      <span className="truncate text-sm font-semibold text-muted-foreground">{email}</span>
-      <div className="flex items-center gap-2">
+    <aside className="flex shrink-0 items-center justify-between border-b bg-card/85 px-4 py-3 backdrop-blur lg:w-56 lg:flex-col lg:items-stretch lg:border-r lg:border-b-0 lg:px-4 lg:py-5">
+      <div className="flex min-w-0 items-center gap-3 lg:block">
+        <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+          <CheckSquare2 className="size-5" />
+        </div>
+        <div className="min-w-0 lg:mt-3">
+          <h1 className="text-lg font-black tracking-tight">Todo</h1>
+          <span className="block truncate text-xs text-muted-foreground">{email}</span>
+        </div>
+      </div>
+
+      <nav className="mt-7 hidden flex-col gap-1.5 lg:flex">
+        <button className="flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" onClick={() => goTo("todo")}>
+          <CheckSquare2 className="size-4" /> 할 일
+        </button>
+        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => goTo("memo")}>
+          <NotebookPen className="size-4" /> 메모
+        </button>
+        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => goTo("pomodoro")}>
+          <Clock3 className="size-4" /> 타이머
+        </button>
+        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => goTo("timetable")}>
+          <CalendarDays className="size-4" /> 타임테이블
+        </button>
+      </nav>
+
+      <div className="flex items-center gap-1.5 lg:mt-auto lg:flex-col lg:items-stretch">
         <Button variant="outline" size="sm" className="lg:hidden" onClick={onOpenMemo}>
           <PenLine className="size-4" />
           메모
         </Button>
-        <Button variant="ghost" size="sm" onClick={onOpenRoutines} title="요일별 반복 할 일">
+        <Button variant="ghost" size="sm" className="lg:justify-start" onClick={onOpenRoutines} title="요일별 반복 할 일">
           <Repeat className="size-4" />
           <span className="hidden sm:inline">루틴</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={onOpenInstall} title="앱·터미널 설치 안내">
+        <Button variant="ghost" size="sm" className="lg:justify-start" onClick={onOpenInstall} title="앱·터미널 설치 안내">
           <Download className="size-4" />
           <span className="hidden sm:inline">설치</span>
         </Button>
-        {onResetLayout && (
-          <Button variant="ghost" size="sm" onClick={onResetLayout} title="패널 배치를 기본값으로 되돌리기">
-            <LayoutGrid className="size-4" />
-            <span className="hidden sm:inline">배치 초기화</span>
-          </Button>
-        )}
-        <Button variant="ghost" size="icon" className="size-8" onClick={toggleTheme} title={dark ? "라이트 모드" : "다크 모드"}>
+        <Button variant="ghost" size="sm" className="lg:justify-start" onClick={toggleTheme} title={dark ? "라이트 모드" : "다크 모드"}>
           {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          <span className="hidden lg:inline">{dark ? "라이트 모드" : "다크 모드"}</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={logout} title="로그아웃">
+        <Button variant="ghost" size="sm" className="lg:justify-start" onClick={logout} title="로그아웃">
           <LogOut className="size-4" />
-          <span className="hidden sm:inline">Logout</span>
+          <span className="hidden sm:inline">로그아웃</span>
         </Button>
         <Badge
           variant="secondary"
           className={cn(
-            "font-bold",
+            "hidden justify-center font-bold lg:flex",
             sync.tone === "ok" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
             sync.tone === "warn" && "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
           )}
@@ -70,6 +102,6 @@ export function Topbar({
           {sync.label}
         </Badge>
       </div>
-    </header>
+    </aside>
   );
 }

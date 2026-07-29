@@ -180,6 +180,7 @@ function PanelSlot({
 
   return (
     <div
+      id={`panel-${panel}`}
       ref={draggableRef}
       className={cn("group/panel relative", className, over && "rounded-xl ring-2 ring-emerald-500")}
       style={style}
@@ -208,16 +209,6 @@ function PanelSlot({
         if (source) swap(source, panel);
       }}
     >
-      <button
-        type="button"
-        title={`${panelTitles[panel]} 위치 옮기기 (끌어서 다른 패널과 자리 교환)`}
-        aria-label={`${panelTitles[panel]} 위치 옮기기`}
-        className="absolute top-0 left-1/2 z-10 grid h-6 w-16 -translate-x-1/2 cursor-grab place-items-center rounded-b-lg border border-t-0 border-border bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing"
-        onPointerDown={() => setArmed(true)}
-        onPointerUp={() => setArmed(false)}
-      >
-        <GripHorizontal className="size-4" />
-      </button>
       {renderPanel(panel)}
     </div>
   );
@@ -252,88 +243,41 @@ function UndoToastBar() {
 function Shell() {
   const { auth } = useAppData();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
-  const panelLayout = usePanelLayout();
   const [memoOpen, setMemoOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [routinesOpen, setRoutinesOpen] = useState(false);
-  const [leftWidth, saveLeftWidth] = useStoredPx(DASHBOARD_WIDTH_KEY);
-  const [dockHeight, saveDockHeight] = useStoredPx(MEMO_DOCK_HEIGHT_KEY);
-  const leftRef = useRef<HTMLDivElement>(null);
-  const dockRef = useRef<HTMLDivElement>(null);
-  const dragBase = useRef(0);
+  const fixedLayout = usePanelLayout();
 
   const showLogin = auth !== "ready";
-  // 모바일에서는 배치를 바꾸지 않고 기본 순서를 그대로 쓴다.
-  const [mainPanel, dockPanel, ...sidePanels] = isDesktop ? panelLayout.layout : DEFAULT_LAYOUT;
 
   return (
     <>
       {showLogin && <LoginScreen checking={auth === "checking"} />}
-      <div className="flex h-dvh w-full flex-col overflow-y-auto p-4 lg:overflow-hidden">
+      <div className="flex h-dvh w-full flex-col overflow-hidden bg-background lg:flex-row">
         <Topbar
           onOpenMemo={() => setMemoOpen(true)}
           onOpenInstall={() => setInstallOpen(true)}
           onOpenRoutines={() => setRoutinesOpen(true)}
-          onResetLayout={isDesktop && panelLayout.customized ? panelLayout.reset : undefined}
         />
-        <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-          <div
-            ref={leftRef}
-            className="flex min-h-0 flex-col max-lg:shrink-0 lg:min-w-[360px]"
-            style={isDesktop ? (leftWidth ? { flex: `0 1 ${leftWidth}px` } : { flex: "1.6 1 0%" }) : undefined}
-          >
-            <PanelSlot panel={mainPanel} layout={panelLayout} className="flex min-h-[220px] flex-1 flex-col" />
-            {isDesktop && (
-              <>
-                <DragHandle
-                  direction="row"
-                  onDrag={(delta) => {
-                    if (!dockRef.current) return;
-                    if (!dragBase.current) dragBase.current = dockRef.current.getBoundingClientRect().height;
-                    const availableHeight = leftRef.current?.getBoundingClientRect().height || window.innerHeight;
-                    const next = Math.max(140, Math.min(availableHeight - 232, dragBase.current - delta));
-                    dockRef.current.style.flex = `0 0 ${next}px`;
-                  }}
-                  onEnd={() => {
-                    if (dockRef.current) saveDockHeight(dockRef.current.getBoundingClientRect().height);
-                    dragBase.current = 0;
-                  }}
-                />
-                <PanelSlot
-                  panel={dockPanel}
-                  layout={panelLayout}
-                  draggableRef={dockRef}
-                  className="flex min-h-[140px] flex-col"
-                  style={{ flex: `0 1 clamp(140px, ${dockHeight || 260}px, calc(100% - 232px))` }}
-                />
-              </>
-            )}
+        <main className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5">
+          <div className="mb-4 hidden items-end justify-between lg:flex">
+            <div>
+              <p className="text-xs font-bold tracking-[0.18em] text-muted-foreground uppercase">Workspace</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight">오늘의 흐름</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">해야 할 일과 기록을 한 화면에서 정리하세요.</p>
           </div>
-          <DragHandle
-            direction="col"
-            onDrag={(delta) => {
-              if (!leftRef.current) return;
-              if (!dragBase.current) dragBase.current = leftRef.current.getBoundingClientRect().width;
-              const maxW = window.innerWidth * 0.7;
-              const next = Math.min(maxW, Math.max(360, dragBase.current + delta));
-              leftRef.current.style.flex = `0 1 ${next}px`;
-            }}
-            onEnd={() => {
-              if (leftRef.current) saveLeftWidth(leftRef.current.getBoundingClientRect().width);
-              dragBase.current = 0;
-            }}
-          />
-          <div className="flex min-w-0 flex-1 flex-col gap-3 max-lg:shrink-0 lg:min-w-[280px] lg:overflow-y-auto">
-            {sidePanels.map((panel) => (
-              <PanelSlot
-                key={panel}
-                panel={panel}
-                layout={panelLayout}
-                className={cn("flex shrink-0 flex-col", growingPanels.includes(panel) && "min-h-90")}
-              />
-            ))}
+          <div className="grid min-h-0 gap-4 lg:h-[calc(100%_-_4rem)] lg:grid-cols-[minmax(560px,1.65fr)_minmax(360px,0.85fr)]">
+            <section className="grid min-h-0 gap-4 lg:grid-rows-[minmax(430px,1.5fr)_minmax(260px,0.8fr)]">
+              <PanelSlot panel="todo" layout={fixedLayout} className="flex min-h-[520px] flex-col lg:min-h-0" />
+              <PanelSlot panel="memo" layout={fixedLayout} className="flex min-h-[320px] flex-col lg:min-h-0" />
+            </section>
+            <section className="grid min-h-0 gap-4 lg:grid-rows-[minmax(300px,0.8fr)_minmax(400px,1.2fr)]">
+              <PanelSlot panel="pomodoro" layout={fixedLayout} className="flex min-h-[340px] flex-col lg:min-h-0" />
+              <PanelSlot panel="timetable" layout={fixedLayout} className="flex min-h-[480px] flex-col lg:min-h-0" />
+            </section>
           </div>
-        </div>
+        </main>
       </div>
       {!isDesktop && <MemoSheet open={memoOpen} onOpenChange={setMemoOpen} />}
       <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
