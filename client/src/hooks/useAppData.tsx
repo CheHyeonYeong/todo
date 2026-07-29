@@ -174,6 +174,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const queueRef = useRef<PendingMutation[]>(loadQueue());
   const flushingRef = useRef(false);
+  // 서버 GET이 시작된 뒤 로컬 변경이 생기면 그 응답은 이미 낡은 스냅샷이다.
+  const mutationVersionRef = useRef(0);
+  // reorder는 전용 API를 직접 호출하므로 진행 중에는 GET 동기화를 시작하지 않는다.
+  const directMutationsRef = useRef(0);
 
   const saveQueue = useCallback(() => {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queueRef.current));
@@ -218,6 +222,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const sendMutation = useCallback(
     async (path: string, options: RequestInit = {}) => {
       if (authRef.current !== "ready") return;
+      mutationVersionRef.current += 1;
       queueRef.current.push({
         path,
         method: options.method || "POST",
@@ -232,7 +237,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const loadServerData = useCallback(async () => {
-    if (authRef.current !== "ready" || pauseSyncRef.current) return;
+    if (authRef.current !== "ready" || pauseSyncRef.current || directMutationsRef.current > 0) return;
+    const startedMutationVersion = mutationVersionRef.current;
     // 아직 서버에 못 보낸 변경이 있으면 먼저 보낸다. 못 보내면 서버 데이터로 덮어쓰지 않는다.
     if (queueRef.current.length > 0) {
       const ok = await flushQueue();
@@ -255,6 +261,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!response.ok) throw new Error(`Sync failed: ${response.status}`);
       const serverData = await response.json();
       if (!Array.isArray(serverData.todos) || !Array.isArray(serverData.memos)) return;
+      // 요청을 보낸 뒤 사용자가 체크·이동·수정했다면 이 응답으로 최신 화면을 덮지 않는다.
+      if (startedMutationVersion !== mutationVersionRef.current || directMutationsRef.current > 0) return;
       persist((prev) => ({
         todos: serverData.todos,
         memos: serverData.memos,
@@ -427,6 +435,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   /* 드래그로 바뀐 순서/스코프를 저장한다. 서버 저장에 실패하면 이전 상태로 되돌리고 false를 반환한다. */
   const reorderTodos = useCallback(
     async (items: TodoOrderItem[]) => {
+      mutationVersionRef.current += 1;
       const prevTodos = dataRef.current.todos;
       const changes = new Map(items.map((item) => [item.id, item]));
       persist((prev) => ({
@@ -439,7 +448,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         }),
       }));
 
-      if (!serverBacked.current || authRef.current !== "ready") return true;
+      if (authRef.current !== "ready") return true;
+      directMutationsRef.current += 1;
       setSync({ label: "syncing", tone: "neutral" });
       try {
         const response = await apiFetch("/api/todos/order", {
@@ -454,6 +464,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         persist((prev) => ({ ...prev, todos: prevTodos }));
         setSync({ label: "offline", tone: "warn" });
         return false;
+      } finally {
+        directMutationsRef.current -= 1;
       }
     },
     [persist],
@@ -632,6 +644,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   /* 드래그앤드롭 순서 저장. 서버 저장 실패 시 기존 순서로 복원하고 false를 반환한다. */
   const reorderMemos = useCallback(
     async (ids: string[]) => {
+      mutationVersionRef.current += 1;
       const prevMemos = dataRef.current.memos;
       const byId = new Map(prevMemos.map((memo) => [memo.id, memo]));
       const ordered: Memo[] = [];
@@ -642,7 +655,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const rest = prevMemos.filter((memo) => !ids.includes(memo.id));
       persist((prev) => ({ ...prev, memos: [...ordered, ...rest] }));
 
-      if (!serverBacked.current || authRef.current !== "ready") return true;
+      if (authRef.current !== "ready") return true;
+      directMutationsRef.current += 1;
       setSync({ label: "syncing", tone: "neutral" });
       try {
         const response = await apiFetch("/api/memos/order", {
@@ -657,6 +671,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         persist((prev) => ({ ...prev, memos: prevMemos }));
         setSync({ label: "offline", tone: "warn" });
         return false;
+      } finally {
+        directMutationsRef.current -= 1;
       }
     },
     [persist],
