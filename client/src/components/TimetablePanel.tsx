@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil, Play, Square, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Play, Plus, Square, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,74 @@ import { cn } from "@/lib/utils";
 const HOUR_PX = 44;
 const WEEK_HOUR_PX = 16;
 const FALLBACK_LABEL = "이름 없는 작업";
+const MOMENT_NOTE_PREFIX = "__moment_note__:";
+
+function isMomentNote(session: Session) {
+  return session.label.startsWith(MOMENT_NOTE_PREFIX);
+}
+
+function MomentNotes({ dayKey }: { dayKey: string }) {
+  const { data, recordSession, deleteSession } = useAppData();
+  const [draft, setDraft] = useState("");
+  const notes = data.sessions
+    .filter((session) => isMomentNote(session) && dateKey(new Date(session.startedAt)) === dayKey)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+
+  return (
+    <div>
+      <form
+        className="mb-3 flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const body = draft.trim();
+          if (!body) return;
+          const now = new Date();
+          recordSession({
+            id: crypto.randomUUID(),
+            label: `${MOMENT_NOTE_PREFIX}${body}`,
+            startedAt: now.toISOString(),
+            endedAt: new Date(now.getTime() + 1).toISOString(),
+          });
+          setDraft("");
+        }}
+      >
+        <Input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="측정 없이 지금 시각에 메모"
+          className="min-w-0 flex-1"
+        />
+        <Button type="submit" size="icon" className="shrink-0" title="시간 메모 추가">
+          <Plus className="size-4" />
+        </Button>
+      </form>
+      <div className="grid gap-2">
+        {notes.length ? (
+          notes.map((note) => (
+            <div key={note.id} className="group flex items-start gap-3 rounded-lg bg-muted px-3 py-2.5">
+              <time className="shrink-0 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                {formatTime(note.startedAt)}
+              </time>
+              <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm font-medium">
+                {note.label.slice(MOMENT_NOTE_PREFIX.length)}
+              </p>
+              <button
+                type="button"
+                title="메모 삭제"
+                onClick={() => deleteSession(note.id)}
+                className="opacity-0 transition-opacity group-hover:opacity-100 max-lg:opacity-60"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm font-medium text-muted-foreground">이 날짜에 남긴 시간 메모가 없습니다.</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Tracker() {
   const { activeSession, startSession, stopSession } = useAppData();
@@ -88,7 +156,7 @@ function DayGrid({ dayKey }: { dayKey: string }) {
   const sessions = useMemo(
     () =>
       data.sessions
-        .filter((session) => dateKey(new Date(session.startedAt)) === dayKey)
+        .filter((session) => !isMomentNote(session) && dateKey(new Date(session.startedAt)) === dayKey)
         .sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
     [data.sessions, dayKey],
   );
@@ -198,6 +266,7 @@ function WeekGrid({ anchorKey }: { anchorKey: string }) {
 
   const byDay = new Map<string, Session[]>(dayKeys.map((key) => [key, []]));
   data.sessions.forEach((session) => {
+    if (isMomentNote(session)) return;
     const key = dateKey(new Date(session.startedAt));
     if (byDay.has(key)) byDay.get(key)!.push(session);
   });
@@ -308,10 +377,11 @@ export function TimetablePanel() {
           <TabsList>
             <TabsTrigger value="day">일</TabsTrigger>
             <TabsTrigger value="week">주</TabsTrigger>
+            <TabsTrigger value="memo">메모</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
-      <Tracker />
+      {view !== "memo" && <Tracker />}
       <div className="mb-2.5 flex items-center justify-between">
         <Button
           variant="secondary"
@@ -333,7 +403,13 @@ export function TimetablePanel() {
           <ChevronRight className="size-4" />
         </Button>
       </div>
-      {view === "day" ? <DayGrid dayKey={anchorKey} /> : <WeekGrid anchorKey={anchorKey} />}
+      {view === "day" ? (
+        <DayGrid dayKey={anchorKey} />
+      ) : view === "week" ? (
+        <WeekGrid anchorKey={anchorKey} />
+      ) : (
+        <MomentNotes dayKey={anchorKey} />
+      )}
     </Card>
   );
 }

@@ -25,6 +25,19 @@ import type { Scope, Todo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const SCOPE_COLLAPSE_KEY = "free-adhd-memo:collapse:scopes";
+const CUSTOM_CATEGORIES_KEY = "free-adhd-memo:custom-categories";
+const scopePreviewCount: Record<Scope, number> = { day: 1, week: 2, month: 3 };
+
+function loadCustomCategories() {
+  try {
+    const value = JSON.parse(localStorage.getItem(CUSTOM_CATEGORIES_KEY) || "[]");
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+      : [];
+  } catch {
+    return [];
+  }
+}
 
 function loadCollapsedScopes(): Partial<Record<Scope, boolean>> {
   try {
@@ -614,6 +627,9 @@ export function TodoPanel() {
   const [collapsedScopes, setCollapsedScopes] = useState(loadCollapsedScopes);
   const [showOldDone, setShowOldDone] = useState(false);
   const [query, setQuery] = useState("");
+  const [customCategories, setCustomCategories] = useState<string[]>(loadCustomCategories);
+  const [categoryDraft, setCategoryDraft] = useState("");
+  const [expandedScopes, setExpandedScopes] = useState<Partial<Record<Scope, boolean>>>({});
   // 자정이 지나면 어제 완료한 항목이 자동으로 사라지도록 오늘 날짜를 주기적으로 갱신한다.
   useTodayTick();
   const [dropScope, setDropScope] = useState<Scope | null>(null);
@@ -673,11 +689,23 @@ export function TodoPanel() {
 
   const categories = useMemo(
     () =>
-      Array.from(new Set(data.todos.map((todo) => todo.category).filter(Boolean) as string[])).sort((a, b) =>
-        a.localeCompare(b),
-      ),
-    [data.todos],
+      Array.from(
+        new Set([
+          ...customCategories,
+          ...(data.todos.map((todo) => todo.category).filter(Boolean) as string[]),
+        ]),
+      ).sort((a, b) => a.localeCompare(b)),
+    [customCategories, data.todos],
   );
+
+  const addCategoryOnly = () => {
+    const category = categoryDraft.trim();
+    if (!category || categories.includes(category)) return;
+    const next = [...customCategories, category];
+    setCustomCategories(next);
+    localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(next));
+    setCategoryDraft("");
+  };
 
   useEffect(() => {
     if (categoryFilter && !categories.includes(categoryFilter)) setCategoryFilter(null);
@@ -722,6 +750,23 @@ export function TodoPanel() {
                 ))}
               </>
             )}
+            <form
+              className="flex items-center gap-1"
+              onSubmit={(event) => {
+                event.preventDefault();
+                addCategoryOnly();
+              }}
+            >
+              <Input
+                value={categoryDraft}
+                onChange={(event) => setCategoryDraft(event.target.value)}
+                placeholder="카테고리만 추가"
+                className="h-7 w-28 text-xs"
+              />
+              <Button type="submit" variant="outline" size="icon" className="size-7" title="카테고리 추가">
+                <Plus className="size-3.5" />
+              </Button>
+            </form>
             <div className="relative ml-auto">
               <Search className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -755,6 +800,9 @@ export function TodoPanel() {
                 );
               const oldDoneCount = allItems.filter(completedBeforeToday).length;
               const items = showOldDone ? allItems : allItems.filter((todo) => !completedBeforeToday(todo));
+              const previewCount = scopePreviewCount[scope];
+              const shownItems =
+                expandedScopes[scope] || query.trim() || categoryFilter ? items : items.slice(0, previewCount);
               const sectionCollapsed = !!collapsedScopes[scope];
               return (
                 <div
@@ -816,8 +864,8 @@ export function TodoPanel() {
                   </button>
                   {!sectionCollapsed && (
                     <>
-                      {items.length ? (
-                        items.map((todo) => (
+                      {shownItems.length ? (
+                        shownItems.map((todo) => (
                           <TodoRow
                             key={todo.id}
                             todo={todo}
@@ -828,6 +876,17 @@ export function TodoPanel() {
                         ))
                       ) : (
                         <p className="text-sm font-medium text-muted-foreground/70">없음</p>
+                      )}
+                      {items.length > previewCount && !query.trim() && !categoryFilter && (
+                        <button
+                          type="button"
+                          className="mt-1 w-full text-center text-xs font-bold text-muted-foreground hover:text-foreground"
+                          onClick={() =>
+                            setExpandedScopes((current) => ({ ...current, [scope]: !current[scope] }))
+                          }
+                        >
+                          {expandedScopes[scope] ? "접기" : `${items.length - previewCount}개 더 보기`}
+                        </button>
                       )}
                       {oldDoneCount > 0 && (
                         <button

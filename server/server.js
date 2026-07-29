@@ -184,6 +184,19 @@ function materializeRoutines(data) {
   return created;
 }
 
+/** 루틴 항목은 매일 새 체크리스트다. 오늘 것이 아닌 인스턴스는 쌓아두지 않는다. */
+function resetStaleRoutineTodos(data) {
+  const { key: today } = todayInAppZone();
+  const staleIds = data.todos
+    .filter((todo) => todo.routineId && todo.dueDate !== today)
+    .map((todo) => todo.id);
+  if (staleIds.length) {
+    const stale = new Set(staleIds);
+    data.todos = data.todos.filter((todo) => !stale.has(todo.id) && !stale.has(todo.parentId));
+  }
+  return staleIds;
+}
+
 function cleanTodo(todo) {
   return {
     id: String(todo?.id || ""),
@@ -270,12 +283,19 @@ async function readData(userId) {
 /** 목록을 내려주기 전에 오늘 몫의 루틴 할 일을 만들어 저장한다. */
 async function readDataWithRoutines(userId) {
   const data = await readData(userId);
+  const staleIds = resetStaleRoutineTodos(data);
   const created = materializeRoutines(data);
-  if (created.length === 0) return data;
   if (pool) {
+    if (staleIds.length) {
+      await pool.query(
+        `delete from ${quoteIdentifier(todosTable)} where user_id = $1 and id = any($2::text[])`,
+        [userId, staleIds],
+      );
+    }
     await insertTodos(created, userId);
     return data;
   }
+  if (created.length === 0 && staleIds.length === 0) return data;
   return writeData(data, userId);
 }
 
