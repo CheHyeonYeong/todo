@@ -54,11 +54,17 @@ fn wait_for_code(listener: &TcpListener) -> Result<String, String> {
         BufReader::new(&stream)
             .read_line(&mut request_line)
             .map_err(|error| error.to_string())?;
-        let _ = stream.write_all(
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n\
-              <h2>\xeb\xa1\x9c\xea\xb7\xb8\xec\x9d\xb8 \xec\xb2\x98\xeb\xa6\xac \xec\x99\x84\xeb\xa3\x8c. \
-              \xed\x84\xb0\xeb\xaf\xb8\xeb\x84\x90\xeb\xa1\x9c \xeb\x8f\x8c\xec\x95\x84\xea\xb0\x80\xec\x84\xb8\xec\x9a\x94.</h2>",
-        );
+        let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n\
+          <!doctype html><html lang=\"ko\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">\
+          <title>Todo 로그인 완료</title><style>\
+          body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f0fdf4;color:#1e293b;\
+          font-family:system-ui,-apple-system,\"Segoe UI\",sans-serif}\
+          main{max-width:360px;margin:24px;padding:32px;text-align:center;border:1px solid #bbf7d0;border-radius:20px;\
+          background:white;box-shadow:0 16px 40px #14532d20}\
+          b{display:grid;place-items:center;width:52px;height:52px;margin:auto;border-radius:50%;background:#059669;color:white;font-size:28px}\
+          h1{font-size:22px;margin:18px 0 8px}p{margin:0;color:#64748b}</style>\
+          <main><b>✓</b><h1>로그인 완료</h1><p>이 창을 닫고 터미널로 돌아가세요.</p></main></html>";
+        let _ = stream.write_all(response.as_bytes());
         let Some(target) = request_line.split_whitespace().nth(1) else {
             continue;
         };

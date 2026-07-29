@@ -108,9 +108,10 @@ export function extractTodos(text: string) {
 }
 
 export function labelHue(label: string) {
+  const palette = [4, 32, 52, 92, 148, 188, 216, 252, 286, 326];
   let hash = 0;
-  for (const char of label) hash = (hash * 31 + (char.codePointAt(0) || 0)) % 360;
-  return hash;
+  for (const char of label) hash = (hash * 31 + (char.codePointAt(0) || 0)) >>> 0;
+  return palette[hash % palette.length];
 }
 
 export function sessionDurationMs(session: Session) {

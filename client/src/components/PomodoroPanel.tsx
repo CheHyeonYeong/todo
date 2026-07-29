@@ -234,9 +234,40 @@ export function PomodoroPanel() {
         </div>
       </button>
       <div className={cn(collapsed && "max-lg:hidden")}>
-        <div className="my-5 text-center text-[clamp(2rem,22cqw,5rem)] leading-none font-black tabular-nums @container">
-          {minutesToLabel(secondsLeft)}
-        </div>
+        {running ? (
+          <div className="my-5 text-center text-[clamp(2rem,22cqw,5rem)] leading-none font-black tabular-nums @container">
+            {minutesToLabel(secondsLeft)}
+          </div>
+        ) : (
+          <div className="relative my-3 @container">
+            <Input
+              id="timerMinutes"
+              type="number"
+              min={MIN_MINUTES}
+              max={MAX_MINUTES}
+              aria-label="타이머 분 설정"
+              className={cn(
+                "h-auto border-0 bg-transparent p-0 text-center text-[clamp(2rem,22cqw,5rem)] leading-none font-black tabular-nums shadow-none focus-visible:ring-0",
+                !draftMinutes && "text-destructive",
+              )}
+              value={minutesDraft}
+              onChange={(event) => {
+                const draft = event.target.value;
+                setMinutesDraft(draft);
+                const value = parseMinutes(draft);
+                if (value == null) return;
+                const next = { ...minutes, [mode]: value };
+                setMinutes(next);
+                localStorage.setItem(TIMER_KEY, JSON.stringify(next));
+                setSecondsLeft(value * 60);
+              }}
+              onBlur={() => {
+                if (!draftMinutes) setMinutesDraft(String(minutes[mode]));
+              }}
+            />
+            <span className="pointer-events-none absolute right-[15%] bottom-1 text-xs font-bold text-muted-foreground">분</span>
+          </div>
+        )}
         <Input
           value={task}
           onChange={(event) => {
@@ -278,31 +309,6 @@ export function PomodoroPanel() {
               />
             );
           })}
-        </div>
-        <div className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-muted-foreground">
-          <label htmlFor="timerMinutes">분 설정</label>
-          <Input
-            id="timerMinutes"
-            type="number"
-            min={MIN_MINUTES}
-            max={MAX_MINUTES}
-            className={cn("h-8 w-16 text-center", !draftMinutes && "border-destructive text-destructive")}
-            value={minutesDraft}
-            onChange={(event) => {
-              const draft = event.target.value;
-              setMinutesDraft(draft);
-              const value = parseMinutes(draft);
-              if (value == null) return;
-              const next = { ...minutes, [mode]: value };
-              setMinutes(next);
-              localStorage.setItem(TIMER_KEY, JSON.stringify(next));
-              if (!running) setSecondsLeft(value * 60);
-            }}
-            onBlur={() => {
-              // 빈 칸이나 범위 밖인 채로 벗어나면 마지막 유효값으로 되돌린다.
-              if (!draftMinutes) setMinutesDraft(String(minutes[mode]));
-            }}
-          />
         </div>
         <p className="mt-2 text-center text-xs font-medium text-muted-foreground">
           {!draftMinutes
