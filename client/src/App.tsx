@@ -280,9 +280,9 @@ function Shell() {
           <div
             ref={leftRef}
             className="flex min-h-0 flex-col max-lg:shrink-0 lg:min-w-[360px]"
-            style={isDesktop ? (leftWidth ? { flex: `0 0 ${leftWidth}px` } : { flex: "1.6 1 0%" }) : undefined}
+            style={isDesktop ? (leftWidth ? { flex: `0 1 ${leftWidth}px` } : { flex: "1.6 1 0%" }) : undefined}
           >
-            <PanelSlot panel={mainPanel} layout={panelLayout} className="flex min-h-0 flex-1 flex-col" />
+            <PanelSlot panel={mainPanel} layout={panelLayout} className="flex min-h-[220px] flex-1 flex-col" />
             {isDesktop && (
               <>
                 <DragHandle
@@ -290,7 +290,8 @@ function Shell() {
                   onDrag={(delta) => {
                     if (!dockRef.current) return;
                     if (!dragBase.current) dragBase.current = dockRef.current.getBoundingClientRect().height;
-                    const next = Math.max(140, dragBase.current - delta);
+                    const availableHeight = leftRef.current?.getBoundingClientRect().height || window.innerHeight;
+                    const next = Math.max(140, Math.min(availableHeight - 232, dragBase.current - delta));
                     dockRef.current.style.flex = `0 0 ${next}px`;
                   }}
                   onEnd={() => {
@@ -302,8 +303,8 @@ function Shell() {
                   panel={dockPanel}
                   layout={panelLayout}
                   draggableRef={dockRef}
-                  className="flex min-h-0 flex-col"
-                  style={{ flex: `0 0 ${dockHeight || 260}px` }}
+                  className="flex min-h-[140px] flex-col"
+                  style={{ flex: `0 1 clamp(140px, ${dockHeight || 260}px, calc(100% - 232px))` }}
                 />
               </>
             )}
@@ -313,8 +314,9 @@ function Shell() {
             onDrag={(delta) => {
               if (!leftRef.current) return;
               if (!dragBase.current) dragBase.current = leftRef.current.getBoundingClientRect().width;
-              const next = Math.max(360, dragBase.current + delta);
-              leftRef.current.style.flex = `0 0 ${next}px`;
+              const maxW = window.innerWidth * 0.7;
+              const next = Math.min(maxW, Math.max(360, dragBase.current + delta));
+              leftRef.current.style.flex = `0 1 ${next}px`;
             }}
             onEnd={() => {
               if (leftRef.current) saveLeftWidth(leftRef.current.getBoundingClientRect().width);

@@ -78,7 +78,7 @@ fn wait_for_code(listener: &TcpListener) -> Result<String, String> {
     Err("로그인 실패: 콜백을 받지 못했습니다.".to_string())
 }
 
-fn open_browser(url: &str) {
+pub(crate) fn open_browser(url: &str) {
     let candidates: Vec<Vec<&str>> = if cfg!(target_os = "windows") {
         vec![vec!["rundll32", "url.dll,FileProtocolHandler", url]]
     } else if cfg!(target_os = "macos") {

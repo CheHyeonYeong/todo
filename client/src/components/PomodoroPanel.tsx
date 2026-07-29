@@ -199,6 +199,8 @@ export function PomodoroPanel() {
   };
 
   const selectMode = (next: TimerMode) => {
+    // 실행 중인 타이머는 다른 모드 탭을 잘못 눌러도 계속 간다.
+    if (running && next !== mode) return;
     pause();
     setMode(next);
     setMinutesDraft(String(minutes[next]));
@@ -250,7 +252,13 @@ export function PomodoroPanel() {
         <Tabs value={mode} onValueChange={(value) => selectMode(value as TimerMode)}>
           <TabsList className="w-full">
             {(Object.keys(modeNames) as TimerMode[]).map((key) => (
-              <TabsTrigger key={key} value={key} className="flex-1 text-xs">
+              <TabsTrigger
+                key={key}
+                value={key}
+                disabled={running && key !== mode}
+                title={running && key !== mode ? "진행 중인 타이머를 먼저 정지하세요" : undefined}
+                className="flex-1 text-xs"
+              >
                 {modeNames[key]}
               </TabsTrigger>
             ))}
