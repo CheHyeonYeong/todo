@@ -269,7 +269,7 @@ function Shell() {
   return (
     <>
       {showLogin && <LoginScreen checking={auth === "checking"} />}
-      <div className="mx-auto flex h-dvh w-full max-w-[1480px] flex-col overflow-y-auto p-4 lg:overflow-hidden">
+      <div className="flex h-dvh w-full flex-col overflow-y-auto p-4 lg:overflow-hidden">
         <Topbar
           onOpenMemo={() => setMemoOpen(true)}
           onOpenInstall={() => setInstallOpen(true)}
