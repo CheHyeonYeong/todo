@@ -99,6 +99,39 @@ try {
   let data = await api("/api/data");
   check("수정으로 카테고리 추가", data.todos.find((todo) => todo.title === "이커머스 기획")?.category === "업무");
 
+  // 3.5) 먼저 시작한 GET 응답이 늦게 와도 그 사이 완료한 상태를 덮어쓰지 않는다.
+  let staleSnapshotCaptured;
+  const captured = new Promise((resolve) => {
+    staleSnapshotCaptured = resolve;
+  });
+  let releaseStaleSnapshot;
+  const release = new Promise((resolve) => {
+    releaseStaleSnapshot = resolve;
+  });
+  await page.route(
+    "**/api/data",
+    async (route) => {
+      const response = await route.fetch();
+      staleSnapshotCaptured();
+      await release;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await captured;
+  const doneButton = row.getByTitle("완료 전환");
+  await doneButton.click();
+  await page.waitForTimeout(300);
+  releaseStaleSnapshot();
+  await page.waitForTimeout(500);
+  check(
+    "늦은 동기화 응답이 완료 상태를 되돌리지 않음",
+    (await doneButton.getAttribute("class"))?.includes("bg-emerald-600"),
+  );
+  await doneButton.click();
+  await page.waitForTimeout(300);
+
   // 4) 하위 목표 추가
   await row.hover();
   await row.getByTitle("하위 목표 추가").click();
