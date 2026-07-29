@@ -485,6 +485,14 @@ function TodoForm({ categories, activeCategory }: { categories: string[]; active
   );
 }
 
+function dueUrgencyLabel(dueDate: string) {
+  const days = daysFromToday(dueDate);
+  if (days < 0) return `${Math.abs(days)}일 지남`;
+  if (days === 0) return "오늘";
+  if (days === 1) return "내일";
+  return `D-${days}`;
+}
+
 function CalendarView({
   categories,
   categoryFilter,
@@ -511,6 +519,7 @@ function CalendarView({
   const firstDay = new Date(year, monthIndex, 1);
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const today = todayKey();
+  const selectedDate = new Date(`${selected}T00:00:00`);
   const weekStart = new Date(anchor);
   weekStart.setDate(anchor.getDate() - anchor.getDay());
   const visibleDates =
@@ -525,7 +534,12 @@ function CalendarView({
         : Array.from({ length: daysInMonth }, (_, index) => new Date(year, monthIndex, index + 1));
 
   const countByDate = data.todos.reduce<Record<string, number>>((acc, todo) => {
-    if (!todo.dueDate) return acc;
+    if (
+      !todo.dueDate ||
+      todo.parentId ||
+      todo.done ||
+      (categoryFilter && todo.category !== categoryFilter)
+    ) return acc;
     acc[todo.dueDate] = (acc[todo.dueDate] || 0) + 1;
     return acc;
   }, {});
@@ -536,6 +550,7 @@ function CalendarView({
         !!todo.dueDate &&
         todo.dueDate >= selected &&
         !todo.parentId &&
+        !todo.done &&
         (!categoryFilter || todo.category === categoryFilter),
     )
     .sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || "") || (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -546,7 +561,26 @@ function CalendarView({
     else if (mode === "week") next.setDate(next.getDate() + direction * 7);
     else next.setMonth(next.getMonth() + direction, 1);
     setAnchor(next);
+    setSelected(dateKey(next));
   };
+
+  const selectMode = (nextMode: "day" | "week" | "month") => {
+    setMode(nextMode);
+    setAnchor(new Date(selectedDate));
+  };
+
+  const goToday = () => {
+    const now = new Date();
+    setAnchor(now);
+    setSelected(dateKey(now));
+  };
+
+  const rangeTitle =
+    mode === "day"
+      ? formatDate(`${dateKey(anchor)}T00:00:00`)
+      : mode === "week"
+        ? `${formatDate(`${dateKey(weekStart)}T00:00:00`)} 주간`
+        : `${year}년 ${monthIndex + 1}월`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
@@ -561,13 +595,14 @@ function CalendarView({
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <h3 className="text-sm font-bold">{year}년 {monthIndex + 1}월</h3>
+          <h3 className="min-w-28 text-center text-sm font-bold">{rangeTitle}</h3>
+          <Button variant="outline" size="sm" className="h-8" onClick={goToday}>오늘</Button>
           <div className="flex rounded-lg bg-muted p-1">
             {(["day", "week", "month"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
-                onClick={() => setMode(value)}
+                  onClick={() => selectMode(value)}
                 className={cn("rounded-md px-3 py-1 text-xs font-bold", mode === value && "bg-background shadow-sm")}
               >
                 {{ day: "일", week: "주", month: "월" }[value]}
@@ -667,14 +702,23 @@ function CalendarView({
               <Button type="submit" variant="outline" size="sm">카테고리 추가</Button>
             </form>
             {selectedTodos.length ? (
-              selectedTodos.map((todo) => (
+              selectedTodos.map((todo, index) => (
                 <div key={todo.id}>
-                  <p className="mt-3 mb-1 text-[11px] font-bold text-muted-foreground">{formatDate(`${todo.dueDate}T00:00:00`)}</p>
+                  {(index === 0 || selectedTodos[index - 1].dueDate !== todo.dueDate) && (
+                    <div className="mt-4 mb-1 flex items-center justify-between border-b pb-1">
+                      <p className="text-[11px] font-bold text-muted-foreground">
+                        {formatDate(`${todo.dueDate}T00:00:00`)}
+                      </p>
+                      <span className="text-[10px] font-bold text-emerald-700">
+                        {dueUrgencyLabel(todo.dueDate!)}
+                      </span>
+                    </div>
+                  )}
                   <TodoRow todo={todo} children={data.todos.filter((child) => child.parentId === todo.id)} showChildren={false} />
                 </div>
               ))
             ) : (
-              <p className="text-sm font-medium text-muted-foreground">이 날짜에 마감인 할 일이 없습니다.</p>
+                <p className="text-sm font-medium text-muted-foreground">선택한 날짜 이후에 남은 마감이 없습니다.</p>
             )}
           </>
         ) : (

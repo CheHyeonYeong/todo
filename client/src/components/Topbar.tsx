@@ -6,7 +6,6 @@ import {
   LogOut,
   Moon,
   NotebookPen,
-  PenLine,
   Repeat,
   Sun,
 } from "lucide-react";
@@ -17,13 +16,11 @@ const THEME_KEY = "free-adhd-memo:theme";
 export type WorkspacePanel = "todo" | "memo" | "time";
 
 export function Topbar({
-  onOpenMemo,
   onOpenInstall,
   onOpenRoutines,
   activePanel,
   onSelectPanel,
 }: {
-  onOpenMemo: () => void;
   onOpenInstall: () => void;
   onOpenRoutines: () => void;
   activePanel: WorkspacePanel;
@@ -65,11 +62,19 @@ export function Topbar({
         </button>
       </nav>
 
+      <nav className="fixed inset-x-3 bottom-3 z-40 flex rounded-2xl border bg-card/95 p-1.5 shadow-xl backdrop-blur lg:hidden">
+        <button className={activePanel === "todo" ? "flex flex-1 flex-col items-center gap-1 rounded-xl bg-accent px-2 py-2 text-xs font-bold text-accent-foreground" : "flex flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-muted-foreground"} onClick={() => onSelectPanel("todo")}>
+          <CheckSquare2 className="size-4" /> 할 일
+        </button>
+        <button className={activePanel === "memo" ? "flex flex-1 flex-col items-center gap-1 rounded-xl bg-accent px-2 py-2 text-xs font-bold text-accent-foreground" : "flex flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-muted-foreground"} onClick={() => onSelectPanel("memo")}>
+          <NotebookPen className="size-4" /> 메모
+        </button>
+        <button className={activePanel === "time" ? "flex flex-1 flex-col items-center gap-1 rounded-xl bg-accent px-2 py-2 text-xs font-bold text-accent-foreground" : "flex flex-1 flex-col items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-muted-foreground"} onClick={() => onSelectPanel("time")}>
+          <Clock3 className="size-4" /> 시간
+        </button>
+      </nav>
+
       <div className="flex items-center gap-1.5 lg:mt-auto lg:flex-col lg:items-stretch">
-        <Button variant="outline" size="sm" className="lg:hidden" onClick={onOpenMemo}>
-          <PenLine className="size-4" />
-          메모
-        </Button>
         <Button variant="ghost" size="sm" className="lg:justify-start" onClick={onOpenRoutines} title="요일별 반복 할 일">
           <Repeat className="size-4" />
           <span className="hidden sm:inline">루틴</span>

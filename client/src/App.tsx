@@ -3,7 +3,7 @@ import { GripHorizontal } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { InstallSheet } from "@/components/InstallSheet";
 import { LoginScreen } from "@/components/LoginScreen";
-import { MemoSheet, MemoWorkspace } from "@/components/MemoWorkspace";
+import { MemoWorkspace } from "@/components/MemoWorkspace";
 import { PomodoroPanel } from "@/components/PomodoroPanel";
 import { RoutineSheet } from "@/components/RoutineSheet";
 import { TimetablePanel } from "@/components/TimetablePanel";
@@ -242,8 +242,6 @@ function UndoToastBar() {
 
 function Shell() {
   const { auth } = useAppData();
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
-  const [memoOpen, setMemoOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
   const [routinesOpen, setRoutinesOpen] = useState(false);
   const fixedLayout = usePanelLayout();
@@ -256,13 +254,12 @@ function Shell() {
       {showLogin && <LoginScreen checking={auth === "checking"} />}
       <div className="flex h-dvh w-full flex-col overflow-hidden bg-background lg:flex-row">
         <Topbar
-          onOpenMemo={() => setMemoOpen(true)}
           onOpenInstall={() => setInstallOpen(true)}
           onOpenRoutines={() => setRoutinesOpen(true)}
           activePanel={activePanel}
           onSelectPanel={setActivePanel}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5">
+        <main className="min-h-0 flex-1 overflow-y-auto p-3 pb-24 sm:p-4 sm:pb-24 lg:p-5">
           <div className="mb-4 hidden items-end justify-between lg:flex">
             <div>
               <p className="text-xs font-bold tracking-[0.18em] text-muted-foreground uppercase">Workspace</p>
@@ -286,7 +283,6 @@ function Shell() {
           </div>
         </main>
       </div>
-      {!isDesktop && <MemoSheet open={memoOpen} onOpenChange={setMemoOpen} />}
       <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
       <RoutineSheet open={routinesOpen} onOpenChange={setRoutinesOpen} />
       <UndoToastBar />
