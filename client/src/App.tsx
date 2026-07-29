@@ -8,7 +8,7 @@ import { PomodoroPanel } from "@/components/PomodoroPanel";
 import { RoutineSheet } from "@/components/RoutineSheet";
 import { TimetablePanel } from "@/components/TimetablePanel";
 import { TodoPanel } from "@/components/TodoPanel";
-import { Topbar } from "@/components/Topbar";
+import { Topbar, type WorkspacePanel } from "@/components/Topbar";
 import { AppDataProvider, useAppData } from "@/hooks/useAppData";
 import { cn } from "@/lib/utils";
 
@@ -247,6 +247,7 @@ function Shell() {
   const [installOpen, setInstallOpen] = useState(false);
   const [routinesOpen, setRoutinesOpen] = useState(false);
   const fixedLayout = usePanelLayout();
+  const [activePanel, setActivePanel] = useState<WorkspacePanel>("todo");
 
   const showLogin = auth !== "ready";
 
@@ -258,24 +259,24 @@ function Shell() {
           onOpenMemo={() => setMemoOpen(true)}
           onOpenInstall={() => setInstallOpen(true)}
           onOpenRoutines={() => setRoutinesOpen(true)}
+          activePanel={activePanel}
+          onSelectPanel={setActivePanel}
         />
         <main className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5">
           <div className="mb-4 hidden items-end justify-between lg:flex">
             <div>
               <p className="text-xs font-bold tracking-[0.18em] text-muted-foreground uppercase">Workspace</p>
-              <h2 className="mt-1 text-2xl font-black tracking-tight">오늘의 흐름</h2>
+              <h2 className="mt-1 text-2xl font-black tracking-tight">
+                {activePanel === "todo" && "캘린더"}
+                {activePanel === "memo" && "메모"}
+                {activePanel === "pomodoro" && "타이머"}
+                {activePanel === "timetable" && "타임테이블"}
+              </h2>
             </div>
-            <p className="text-sm text-muted-foreground">해야 할 일과 기록을 한 화면에서 정리하세요.</p>
+            <p className="text-sm text-muted-foreground">필요한 화면 하나에만 집중하세요.</p>
           </div>
-          <div className="grid min-h-0 gap-4 lg:h-[calc(100%_-_4rem)] lg:grid-cols-[minmax(560px,1.65fr)_minmax(360px,0.85fr)]">
-            <section className="grid min-h-0 gap-4 lg:grid-rows-[minmax(430px,1.5fr)_minmax(260px,0.8fr)]">
-              <PanelSlot panel="todo" layout={fixedLayout} className="flex min-h-[520px] flex-col lg:min-h-0" />
-              <PanelSlot panel="memo" layout={fixedLayout} className="flex min-h-[320px] flex-col lg:min-h-0" />
-            </section>
-            <section className="grid min-h-0 gap-4 lg:grid-rows-[minmax(300px,0.8fr)_minmax(400px,1.2fr)]">
-              <PanelSlot panel="pomodoro" layout={fixedLayout} className="flex min-h-[340px] flex-col lg:min-h-0" />
-              <PanelSlot panel="timetable" layout={fixedLayout} className="flex min-h-[480px] flex-col lg:min-h-0" />
-            </section>
+          <div className="min-h-[calc(100dvh-6rem)] lg:h-[calc(100%_-_4rem)] lg:min-h-0">
+            <PanelSlot panel={activePanel} layout={fixedLayout} className="flex h-full min-h-[620px] flex-col lg:min-h-0" />
           </div>
         </main>
       </div>

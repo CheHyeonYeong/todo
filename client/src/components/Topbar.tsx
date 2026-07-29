@@ -11,23 +11,26 @@ import {
   Repeat,
   Sun,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppData } from "@/hooks/useAppData";
-import { cn } from "@/lib/utils";
 
 const THEME_KEY = "free-adhd-memo:theme";
+export type WorkspacePanel = "todo" | "memo" | "pomodoro" | "timetable";
 
 export function Topbar({
   onOpenMemo,
   onOpenInstall,
   onOpenRoutines,
+  activePanel,
+  onSelectPanel,
 }: {
   onOpenMemo: () => void;
   onOpenInstall: () => void;
   onOpenRoutines: () => void;
+  activePanel: WorkspacePanel;
+  onSelectPanel: (panel: WorkspacePanel) => void;
 }) {
-  const { email, logout, sync } = useAppData();
+  const { email, logout } = useAppData();
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
 
   const toggleTheme = () => {
@@ -37,10 +40,6 @@ export function Topbar({
       localStorage.setItem(THEME_KEY, next ? "dark" : "light");
       return next;
     });
-  };
-
-  const goTo = (panel: string) => {
-    document.getElementById(`panel-${panel}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
@@ -56,16 +55,16 @@ export function Topbar({
       </div>
 
       <nav className="mt-7 hidden flex-col gap-1.5 lg:flex">
-        <button className="flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" onClick={() => goTo("todo")}>
+        <button className={activePanel === "todo" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("todo")}>
           <CheckSquare2 className="size-4" /> 할 일
         </button>
-        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => goTo("memo")}>
+        <button className={activePanel === "memo" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("memo")}>
           <NotebookPen className="size-4" /> 메모
         </button>
-        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => goTo("pomodoro")}>
+        <button className={activePanel === "pomodoro" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("pomodoro")}>
           <Clock3 className="size-4" /> 타이머
         </button>
-        <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClick={() => goTo("timetable")}>
+        <button className={activePanel === "timetable" ? "flex items-center gap-3 rounded-xl bg-accent px-3 py-2.5 text-left text-sm font-bold text-accent-foreground" : "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"} onClick={() => onSelectPanel("timetable")}>
           <CalendarDays className="size-4" /> 타임테이블
         </button>
       </nav>
@@ -91,16 +90,6 @@ export function Topbar({
           <LogOut className="size-4" />
           <span className="hidden sm:inline">로그아웃</span>
         </Button>
-        <Badge
-          variant="secondary"
-          className={cn(
-            "hidden justify-center font-bold lg:flex",
-            sync.tone === "ok" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
-            sync.tone === "warn" && "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-          )}
-        >
-          {sync.label}
-        </Badge>
       </div>
     </aside>
   );
