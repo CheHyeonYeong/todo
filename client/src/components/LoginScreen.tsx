@@ -55,6 +55,14 @@ export function LoginScreen({ checking }: { checking: boolean }) {
               <p className="mt-4 text-xs font-medium text-muted-foreground">
                 로그인하면 폰과 PC 어디서든 같은 데이터가 이어집니다.
               </p>
+              <a
+                href="/privacy.html"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 text-[11px] font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                개인정보처리방침
+              </a>
             </>
           )}
         </CardContent>

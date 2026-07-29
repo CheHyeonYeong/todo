@@ -138,6 +138,7 @@ export function PomodoroPanel() {
   const handleComplete = (endAt: number) => {
     endAtRef.current = null;
     setRunning(false);
+    window.focus();
     playBeep();
     recordFocusSegment(endAt);
     if (modeRef.current === "focus") {
