@@ -11,16 +11,34 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = Number(process.env.E2E_PORT || 34599);
 const BASE = `http://localhost:${PORT}`;
 
+// playwright는 캐시 루트와 번들 내부 경로가 둘 다 플랫폼별로 다르다.
+function playwrightCacheDir() {
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH) return process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (process.platform === "darwin") return path.join(os.homedir(), "Library/Caches/ms-playwright");
+  if (process.platform === "win32") {
+    return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData/Local"), "ms-playwright");
+  }
+  return path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache"), "ms-playwright");
+}
+
+function chromiumShellPath(bundleDir) {
+  if (process.platform === "darwin") {
+    const arch = process.arch === "arm64" ? "arm64" : "x64";
+    return path.join(bundleDir, `chrome-headless-shell-mac-${arch}`, "chrome-headless-shell");
+  }
+  if (process.platform === "win32") return path.join(bundleDir, "chrome-headless-shell-win64", "chrome-headless-shell.exe");
+  return path.join(bundleDir, "chrome-headless-shell-linux64", "chrome-headless-shell");
+}
+
 function findChromium() {
   if (process.env.E2E_CHROMIUM) return process.env.E2E_CHROMIUM;
-  const cache = path.join(os.homedir(), ".cache/ms-playwright");
-  const shell = fs
-    .readdirSync(cache)
+  const cache = playwrightCacheDir();
+  const shell = (fs.existsSync(cache) ? fs.readdirSync(cache) : [])
     .filter((dir) => dir.startsWith("chromium_headless_shell"))
     .sort()
     .pop();
-  if (!shell) throw new Error("chromium_headless_shell이 없습니다. npx playwright install chromium 후 다시 시도하세요.");
-  return path.join(cache, shell, "chrome-headless-shell-linux64/chrome-headless-shell");
+  if (!shell) throw new Error(`chromium_headless_shell이 없습니다(${cache}). npx playwright install chromium 후 다시 시도하세요.`);
+  return chromiumShellPath(path.join(cache, shell));
 }
 
 let failures = 0;
