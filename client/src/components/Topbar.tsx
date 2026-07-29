@@ -100,13 +100,15 @@ export function Topbar({
         </Button>
         <Badge
           variant="secondary"
+          title={sync.label}
+          aria-label={sync.label}
           className={cn(
-            "font-bold",
+            "size-2.5 border-0 p-0 font-bold sm:size-auto sm:border sm:px-2 sm:py-0.5",
             sync.tone === "ok" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
             sync.tone === "warn" && "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
           )}
         >
-          {sync.label}
+          <span className="hidden sm:inline">{sync.label}</span>
         </Badge>
       </div>
     </header>

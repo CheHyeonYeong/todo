@@ -212,6 +212,33 @@ try {
   check("메모 검색 빈 결과", (await page.getByText("검색 결과가 없습니다.").count()) === 1);
   await page.getByPlaceholder("메모 검색 (제목·본문·#태그)").fill("");
 
+  // 13) 모바일 폭: 동기화 배지는 텍스트 없이 점으로만 (issue #28)
+  // 아래 10.5 절이 현재 스위트를 중단시키므로 그 앞에 둔다. 앞선 체크들은 모두 1440에서 끝난 뒤라
+  // 여기서 뷰포트를 바꿔도 영향이 없고, 블록 끝에서 1440으로 되돌린다.
+  const syncBadge = page.locator('header [data-slot="badge"]').first();
+  const syncLabel = syncBadge.locator("> span").first();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(300);
+  // count()를 같이 보는 이유: locator.isVisible()은 매치가 0개여도 예외 없이 false라서,
+  // span 자체가 없는 수정 전 상태에서 이 체크가 거짓 통과한다.
+  check("모바일: 배지 라벨 숨김", (await syncLabel.count()) === 1 && !(await syncLabel.isVisible()));
+  check("모바일: 배지 title 제공", ((await syncBadge.getAttribute("title")) || "").length > 0);
+  const badgeBox = await syncBadge.boundingBox();
+  check(
+    "모바일: 배지가 점 크기",
+    badgeBox.width <= 12 && badgeBox.height <= 12,
+    `${Math.round(badgeBox.width)}x${Math.round(badgeBox.height)}`,
+  );
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(300);
+  check("데스크톱: 배지 라벨 표시", await syncLabel.isVisible());
+  // sm: 프리픽스가 무프리픽스 p-0/size-2.5를 실제로 이겼는지 확인한다.
+  // 라벨이 보이기만 해서는 10px 상자에 눌린 배지와 구분되지 않는다. 기준선 높이 21px.
+  const desktopBadgeBox = await syncBadge.boundingBox();
+  check("데스크톱: 배지 패딩 유지", desktopBadgeBox.height >= 18, `h=${Math.round(desktopBadgeBox.height)}`);
+
   // 10.5) 메모 카드 클릭 → 플로팅 창에서 바로 수정 (자동 저장)
   await page.locator("article", { hasText: "vim 테스트 메모" }).first().click();
   await page.waitForTimeout(300);
