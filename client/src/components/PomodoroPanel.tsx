@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Play, RotateCcw, Square } from "lucide-react";
+import { ChevronDown, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,18 @@ import { cn } from "@/lib/utils";
 const TIMER_KEY = "free-adhd-memo:timer-minutes";
 const TASK_KEY = "free-adhd-memo:timer-task";
 const COLLAPSE_KEY = "free-adhd-memo:collapse:pomodoro";
+const EXTRA_TIMERS_KEY = "free-adhd-memo:extra-timers";
 const defaultModeMinutes = { focus: 25, short: 5, long: 15 };
 const MIN_MINUTES = 1;
 const MAX_MINUTES = 180;
 type TimerMode = keyof typeof defaultModeMinutes;
+interface ExtraTimer {
+  id: string;
+  name: string;
+  minutes: number;
+  remaining: number;
+  endAt: number | null;
+}
 const modeNames: Record<TimerMode, string> = { focus: "집중", short: "짧은 휴식", long: "긴 휴식" };
 
 function parseMinutes(draft: string) {
@@ -33,6 +41,24 @@ function loadTimerMinutes() {
     };
   } catch {
     return { ...defaultModeMinutes };
+  }
+}
+
+function loadExtraTimers(): ExtraTimer[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(EXTRA_TIMERS_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((timer) => timer?.id && Number(timer.minutes) > 0)
+      .map((timer) => ({
+        id: String(timer.id),
+        name: String(timer.name || "타이머"),
+        minutes: Math.min(1440, Math.max(1, Number(timer.minutes))),
+        remaining: Math.max(0, Number(timer.remaining) || Number(timer.minutes) * 60),
+        endAt: Number(timer.endAt) > 0 ? Number(timer.endAt) : null,
+      }));
+  } catch {
+    return [];
   }
 }
 
@@ -80,6 +106,136 @@ function playBeep() {
   } catch {
     // 사운드가 안 되는 환경이면 조용히 넘어간다.
   }
+}
+
+function ExtraTimerRack() {
+  const [timers, setTimers] = useState<ExtraTimer[]>(loadExtraTimers);
+
+  useEffect(() => {
+    localStorage.setItem(EXTRA_TIMERS_KEY, JSON.stringify(timers));
+  }, [timers]);
+
+  useEffect(() => {
+    if (!timers.some((timer) => timer.endAt)) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      const completed: ExtraTimer[] = [];
+      setTimers((current) =>
+        current.map((timer) => {
+          if (!timer.endAt) return timer;
+          const remaining = Math.max(0, Math.ceil((timer.endAt - now) / 1000));
+          if (remaining > 0) return { ...timer, remaining };
+          completed.push(timer);
+          return { ...timer, remaining: 0, endAt: null };
+        }),
+      );
+      completed.forEach((timer) => {
+        playBeep();
+        void notify(`${timer.name} 타이머가 끝났어요.`);
+      });
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [timers.some((timer) => Boolean(timer.endAt))]);
+
+  const update = (id: string, patch: Partial<ExtraTimer>) => {
+    setTimers((current) => current.map((timer) => (timer.id === id ? { ...timer, ...patch } : timer)));
+  };
+
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">추가 타이머</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() =>
+            setTimers((current) => [
+              ...current,
+              {
+                id: crypto.randomUUID(),
+                name: `타이머 ${current.length + 1}`,
+                minutes: 60,
+                remaining: 3600,
+                endAt: null,
+              },
+            ])
+          }
+        >
+          <Plus className="size-3.5" />
+          추가
+        </Button>
+      </div>
+      <div className="grid gap-2">
+        {timers.map((timer) => {
+          const running = Boolean(timer.endAt);
+          return (
+            <div key={timer.id} className="flex items-center gap-1.5 rounded-lg bg-muted p-2">
+              <Input
+                value={timer.name}
+                disabled={running}
+                onChange={(event) => update(timer.id, { name: event.target.value })}
+                className="h-7 min-w-0 flex-1 bg-background px-2 text-xs font-semibold"
+                aria-label="타이머 이름"
+              />
+              {running ? (
+                <span className="w-16 text-center text-sm font-black tabular-nums">
+                  {minutesToLabel(timer.remaining)}
+                </span>
+              ) : (
+                <Input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={timer.minutes}
+                  onChange={(event) => {
+                    const minutes = Math.min(1440, Math.max(1, Number(event.target.value) || 1));
+                    update(timer.id, { minutes, remaining: minutes * 60 });
+                  }}
+                  className="h-7 w-16 bg-background px-1 text-center text-xs"
+                  aria-label="타이머 분"
+                />
+              )}
+              <Button
+                size="icon"
+                variant={running ? "secondary" : "default"}
+                className="size-7 shrink-0"
+                title={running ? "일시정지" : "시작"}
+                onClick={() => {
+                  if (running) {
+                    update(timer.id, { endAt: null });
+                  } else {
+                    const remaining = timer.remaining > 0 ? timer.remaining : timer.minutes * 60;
+                    update(timer.id, { remaining, endAt: Date.now() + remaining * 1000 });
+                  }
+                }}
+              >
+                {running ? <Square className="size-3" /> : <Play className="size-3" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 shrink-0"
+                title="리셋"
+                onClick={() => update(timer.id, { remaining: timer.minutes * 60, endAt: null })}
+              >
+                <RotateCcw className="size-3" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                title="삭제"
+                onClick={() => setTimers((current) => current.filter((item) => item.id !== timer.id))}
+              >
+                <Trash2 className="size-3" />
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function PomodoroPanel() {
@@ -331,6 +487,7 @@ export function PomodoroPanel() {
             리셋
           </Button>
         </div>
+        <ExtraTimerRack />
       </div>
     </Card>
   );
