@@ -733,7 +733,7 @@ function CalendarView({
 
 export function TodoPanel() {
   const { data, reorderTodos } = useAppData();
-  const view = "calendar";
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [collapsedScopes, setCollapsedScopes] = useState(loadCollapsedScopes);
   const [showOldDone, setShowOldDone] = useState(false);
@@ -828,6 +828,21 @@ export function TodoPanel() {
         <div>
           <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">todo</p>
           <h2 className="text-lg font-bold">기간별 할 일</h2>
+        </div>
+        <div className="flex rounded-lg bg-muted p-1">
+          {(["list", "calendar"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setView(value)}
+              className={cn(
+                "rounded-md px-3 py-1 text-xs font-bold transition-colors",
+                view === value && "bg-background shadow-sm",
+              )}
+            >
+              {value === "list" ? "목록" : "캘린더"}
+            </button>
+          ))}
         </div>
       </div>
       {view === "list" ? (
