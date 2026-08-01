@@ -17,3 +17,4 @@ bin/
 .codex/skills/
 .agents/skills/
 skills-lock.json
+.vercel

@@ -9,4 +9,5 @@ Expo 기반 React Native 클라이언트다. 기존 웹과 같은 API와 Supabas
 3. `npm install`
 4. `npm run android` 또는 `npm run ios`
 
-현재 모바일 화면은 핵심 Todo 흐름(조회, 추가, 완료, 삭제)에 집중한다. 삭제는 항목을 길게 누르면 된다.
+현재 클라이언트는 Todo와 하위 목표, 반복 루틴, 메모, 집중 타이머, 작업 시간 추적 및 날짜별 기록을 제공한다.
+같은 Expo 코드로 Android, iOS, Web을 지원한다.
