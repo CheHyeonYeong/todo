@@ -1,15 +1,17 @@
-const API_BASE_KEY = "free-adhd-memo:api-base";
+const required = (name: string, value: string | undefined) => {
+  if (!value) throw new Error(`${name} 환경 변수가 필요합니다.`);
+  return value.replace(/\/$/, "");
+};
 
-const urlParams = new URLSearchParams(window.location.search);
-const requestedApiBase = urlParams.get("api");
-if (requestedApiBase) {
-  localStorage.setItem(API_BASE_KEY, requestedApiBase);
-  urlParams.delete("api");
-  const nextQuery = urlParams.toString();
-  window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
-}
-
-export const API_BASE_URL = (localStorage.getItem(API_BASE_KEY) || "https://158-179-193-175.nip.io").replace(/\/$/, "");
-export const SUPABASE_URL = "https://mkvgbffihswfjzgegwlx.supabase.co";
-export const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rdmdiZmZpaHN3Zmp6Z2Vnd2x4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NzA5NzksImV4cCI6MjA5ODU0Njk3OX0.MrKmcsAMCU9fepyD97HMuSSImARjtchiCAaGRzgqsQ8";
+export const API_BASE_URL = required(
+  "EXPO_PUBLIC_API_BASE_URL",
+  process.env.EXPO_PUBLIC_API_BASE_URL,
+);
+export const SUPABASE_URL = required(
+  "EXPO_PUBLIC_SUPABASE_URL",
+  process.env.EXPO_PUBLIC_SUPABASE_URL,
+);
+export const SUPABASE_ANON_KEY = required(
+  "EXPO_PUBLIC_SUPABASE_ANON_KEY",
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+);

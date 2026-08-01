@@ -7,9 +7,10 @@ const DEFAULT_API_BASE: &str = "https://158-179-193-175.nip.io";
 const DEFAULT_SUPABASE_URL: &str = "https://mkvgbffihswfjzgegwlx.supabase.co";
 const DEFAULT_ANON_KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rdmdiZmZpaHN3Zmp6Z2Vnd2x4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NzA5NzksImV4cCI6MjA5ODU0Njk3OX0.MrKmcsAMCU9fepyD97HMuSSImARjtchiCAaGRzgqsQ8";
 
-fn env_or(keys: &[&str], fallback: &str) -> String {
-    keys.iter()
-        .find_map(|key| std::env::var(key).ok().filter(|value| !value.is_empty()))
+fn env_or(key: &str, fallback: &str) -> String {
+    std::env::var(key)
+        .ok()
+        .filter(|value| !value.is_empty())
         .unwrap_or_else(|| fallback.to_string())
         .trim_end_matches('/')
         .to_string()
@@ -20,7 +21,6 @@ pub struct Client {
     pub supabase: String,
     pub anon_key: String,
     session_path: PathBuf,
-    legacy_session_path: PathBuf,
     /// 세션 파일에는 토큰 외에 tracking / lastAction 같은 상태도 함께 들어간다.
     session: Value,
     agent: ureq::Agent,
@@ -30,16 +30,12 @@ impl Client {
     pub fn new() -> Self {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         let session_path = home.join(".config").join("todo").join("session.json");
-        let legacy_session_path = home.join(".config").join("free-adhd-memo").join("session.json");
-        let session = read_json(&session_path)
-            .or_else(|| read_json(&legacy_session_path))
-            .unwrap_or_else(|| json!({}));
+        let session = read_json(&session_path).unwrap_or_else(|| json!({}));
         Client {
-            base: env_or(&["TODO_API_BASE", "ADHD_API_BASE"], DEFAULT_API_BASE),
-            supabase: env_or(&["TODO_SUPABASE_URL", "ADHD_SUPABASE_URL"], DEFAULT_SUPABASE_URL),
-            anon_key: env_or(&["TODO_SUPABASE_ANON_KEY", "ADHD_SUPABASE_ANON_KEY"], DEFAULT_ANON_KEY),
+            base: env_or("TODO_API_BASE", DEFAULT_API_BASE),
+            supabase: env_or("TODO_SUPABASE_URL", DEFAULT_SUPABASE_URL),
+            anon_key: env_or("TODO_SUPABASE_ANON_KEY", DEFAULT_ANON_KEY),
             session_path,
-            legacy_session_path,
             session,
             agent: ureq::AgentBuilder::new().timeout(Duration::from_secs(20)).build(),
         }
@@ -62,7 +58,6 @@ impl Client {
 
     pub fn logout(&mut self) {
         let _ = std::fs::remove_file(&self.session_path);
-        let _ = std::fs::remove_file(&self.legacy_session_path);
         self.session = json!({});
     }
 

@@ -1,35 +1,28 @@
 {
   "name": "todo-client",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.2.0",
-  "type": "module",
+  "main": "expo/AppEntry.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@codemirror/commands": "^6.10.4",
-    "@codemirror/state": "^6.7.1",
-    "@codemirror/view": "^6.43.6",
-    "@replit/codemirror-vim": "^6.3.0",
-    "@supabase/supabase-js": "^2.49.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "lucide-react": "^1.24.0",
-    "radix-ui": "^1.6.2",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "tailwind-merge": "^3.6.0"
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.111.0",
+    "expo": "^57.0.8",
+    "expo-linking": "^57.0.4",
+    "expo-status-bar": "^57.0.1",
+    "expo-web-browser": "^57.0.2",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-url-polyfill": "^4.0.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.0",
-    "@types/node": "^22.10.0",
-    "@types/react": "^19.1.0",
-    "@types/react-dom": "^19.1.0",
-    "@vitejs/plugin-react": "^4.5.0",
-    "tailwindcss": "^4.1.0",
-    "typescript": "^5.7.0",
-    "vite": "^6.3.0"
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.17",
+    "typescript": "~6.0.3"
   }
 }

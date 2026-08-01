@@ -8,10 +8,8 @@ on:
       - "server/**"
       - "package.json"
       - "package-lock.json"
-      - "supabase/**"
       - ".github/workflows/deploy-server.yml"
       - "scripts/deploy-server.sh"
-      - "systemd/free-adhd-memo.service"
   workflow_dispatch:
 
 jobs:

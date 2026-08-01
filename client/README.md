@@ -1,4 +1,4 @@
-# Todo Mobile
+# Todo Client
 
 Expo 기반 React Native 클라이언트다. 기존 웹과 같은 API와 Supabase 계정을 사용한다.
 

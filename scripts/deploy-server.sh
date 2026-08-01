@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-$(pwd)}"
-SERVICE_NAME="${SERVICE_NAME:-free-adhd-memo}"
+SERVICE_NAME="${SERVICE_NAME:-todo}"
 
 cd "$APP_DIR"
 git fetch origin main

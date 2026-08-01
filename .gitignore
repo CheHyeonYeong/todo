@@ -1,7 +1,6 @@
 node_modules
 dist
 tui/target
-client/dist
 .env
 .env.*
 !.env.example

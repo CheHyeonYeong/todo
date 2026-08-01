@@ -1,6 +1,6 @@
 # AI 에이전트 가이드
 
-이 저장소는 todo/메모/타임테이블 웹앱이다. 프론트엔드는 `client/`(React + Vite), API 서버는 `server/server.js`(Node, 무의존성),
+이 저장소는 todo/메모 앱이다. 클라이언트는 `client/`(React Native + Expo), API 서버는 `server/server.js`(Node, 무의존성),
 터미널 클라이언트는 `tui/`(Rust CLI + TUI 단일 바이너리)다.
 
 ## todo CLI 사용법
