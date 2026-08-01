@@ -6,6 +6,9 @@
     "orientation": "portrait",
     "scheme": "todo",
     "userInterfaceStyle": "automatic",
+    "web": {
+      "output": "single"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.chehyeonyeong.todo"

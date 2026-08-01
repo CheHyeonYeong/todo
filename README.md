@@ -53,6 +53,10 @@ todo undo
 
 ## 배포
 
+Expo Web은 Vercel에서 `client`를 Root Directory로 지정해 배포한다. `client/vercel.json`이 웹 빌드와 `dist` 출력 설정을 관리한다.
+
+Vercel 프로젝트에는 `EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` 환경변수를 설정한다.
+
 API 서버는 Docker 또는 `.github/workflows/deploy-server.yml`을 통해 배포한다. 서버 서비스의 기본 이름은 `todo`다.
 
 ```bash
