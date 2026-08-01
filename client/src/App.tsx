@@ -214,12 +214,13 @@ function PanelSlot({
   );
 }
 
-/* 삭제 직후 6초 동안 뜨는 되돌리기 토스트 */
+/* 삭제 직후 6초 동안 뜨는 되돌리기 토스트.
+   모바일에서는 하단 탭바(bottom-3 + 높이 66px) 위로 올려 겹치지 않게 한다. */
 function UndoToastBar() {
   const { undoToast, dismissUndo } = useAppData();
   if (!undoToast) return null;
   return (
-    <div className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-lg">
+    <div className="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-lg lg:bottom-5">
       <span className="max-w-64 truncate font-medium">{undoToast.label}</span>
       <button
         type="button"
