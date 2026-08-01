@@ -5,14 +5,14 @@ import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, SafeAreaView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { supabase } from "./src/api";
-import { CalendarScreen, MemoScreen, TimeScreen, TodoScreen } from "./src/Screens";
+import { MemoScreen, TimeScreen, TodoScreen } from "./src/Screens";
 import { useAppData } from "./src/useAppData";
 
 WebBrowser.maybeCompleteAuthSession();
-type Workspace = "todo" | "memo" | "calendar" | "time";
+type Workspace = "todo" | "memo" | "time";
 const tabs: { key: Workspace; label: string; icon: string }[] = [
   { key: "todo", label: "할 일", icon: "✓" }, { key: "memo", label: "메모", icon: "✎" },
-  { key: "calendar", label: "캘린더", icon: "□" }, { key: "time", label: "시간", icon: "◷" },
+  { key: "time", label: "시간", icon: "◷" },
 ];
 
 async function sessionFromCallback(url: string) {
@@ -54,7 +54,7 @@ export default function App() {
       <View style={styles.mainColumn}>
         <View style={[styles.topbar, desktop && styles.desktopTopbar]}><View><Text style={styles.brand}>{tabs.find((tab) => tab.key === workspace)?.label}</Text><Text style={styles.email}>{desktop ? "오늘도 가볍게 시작해보세요." : session.user.email}</Text></View><View style={styles.topActions}><Pressable style={desktop && styles.topActionButton} onPress={() => void store.reload()}><Text style={styles.refresh}>↻ 새로고침</Text></Pressable>{!desktop && <Pressable onPress={() => void supabase.auth.signOut()}><Text style={styles.logout}>로그아웃</Text></Pressable>}</View></View>
         {store.error && <Pressable style={styles.errorBar} onPress={() => void store.reload()}><Text style={styles.errorText}>{store.error} · 다시 시도</Text></Pressable>}
-        <View style={[styles.content, desktop && styles.desktopContent]}>{store.loading ? <ActivityIndicator style={styles.loader} color="#176b47" /> : workspace === "todo" ? <TodoScreen store={store} /> : workspace === "memo" ? <MemoScreen store={store} /> : workspace === "calendar" ? <CalendarScreen store={store} /> : <TimeScreen store={store} />}</View>
+        <View style={[styles.content, desktop && styles.desktopContent]}>{store.loading ? <ActivityIndicator style={styles.loader} color="#176b47" /> : workspace === "todo" ? <TodoScreen store={store} /> : workspace === "memo" ? <MemoScreen store={store} /> : <TimeScreen store={store} />}</View>
         {!desktop && navigation}
       </View>
     </View>

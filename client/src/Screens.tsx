@@ -19,6 +19,7 @@ function Card({ children }: { children: React.ReactNode }) {
 }
 
 export function TodoScreen({ store }: { store: Store }) {
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [scope, setScope] = useState<Scope>("day");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -33,7 +34,9 @@ export function TodoScreen({ store }: { store: Store }) {
   };
 
   return <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-    <View style={styles.sectionHeader}><View><Text style={styles.heading}>할 일</Text><Text style={styles.muted}>작게 나누고 하나씩 끝내세요.</Text></View><Pressable style={styles.ghostButton} onPress={() => setShowRoutines((value) => !value)}><Text style={styles.ghostText}>↻ 루틴</Text></Pressable></View>
+    <View style={styles.sectionHeader}><View><Text style={styles.heading}>할 일</Text><Text style={styles.muted}>목록과 캘린더로 일정을 함께 관리하세요.</Text></View><Pressable style={styles.ghostButton} onPress={() => setShowRoutines((value) => !value)}><Text style={styles.ghostText}>↻ 루틴</Text></Pressable></View>
+    <View style={styles.segment}><Pressable style={[styles.segmentItem, view === "list" && styles.segmentActive]} onPress={() => setView("list")}><Text style={[styles.segmentText, view === "list" && styles.segmentTextActive]}>목록</Text></Pressable><Pressable style={[styles.segmentItem, view === "calendar" && styles.segmentActive]} onPress={() => setView("calendar")}><Text style={[styles.segmentText, view === "calendar" && styles.segmentTextActive]}>캘린더</Text></Pressable></View>
+    {view === "calendar" ? <TodoCalendar store={store} /> : <>
     <View style={styles.segment}>{scopeOptions.map((item) => <Pressable key={item.value} style={[styles.segmentItem, scope === item.value && styles.segmentActive]} onPress={() => setScope(item.value)}><Text style={[styles.segmentText, scope === item.value && styles.segmentTextActive]}>{item.label}</Text></Pressable>)}</View>
     {showRoutines && <RoutineEditor store={store} />}
     <Card>
@@ -42,7 +45,7 @@ export function TodoScreen({ store }: { store: Store }) {
       <Pressable style={[styles.primaryButton, !title.trim() && styles.disabled]} disabled={!title.trim()} onPress={() => void submit()}><Text style={styles.primaryText}>추가</Text></Pressable>
     </Card>
     {!roots.length && <Text style={styles.empty}>아직 할 일이 없어요.</Text>}
-    {roots.map((todo) => <TodoItem key={todo.id} todo={todo} store={store} subDraft={subDrafts[todo.id] || ""} setSubDraft={(value) => setSubDrafts((current) => ({ ...current, [todo.id]: value }))} />)}
+    {roots.map((todo) => <TodoItem key={todo.id} todo={todo} store={store} subDraft={subDrafts[todo.id] || ""} setSubDraft={(value) => setSubDrafts((current) => ({ ...current, [todo.id]: value }))} />)}</>}
   </ScrollView>;
 }
 
@@ -80,7 +83,7 @@ export function MemoScreen({ store }: { store: Store }) {
 
 type TimerMode = "focus" | "short" | "long";
 const timerDefaults: Record<TimerMode, number> = { focus: 25, short: 5, long: 15 };
-export function CalendarScreen({ store }: { store: Store }) {
+function TodoCalendar({ store }: { store: Store }) {
   const [cursor, setCursor] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
   const year = cursor.getFullYear(); const month = cursor.getMonth();
   const firstDay = new Date(year, month, 1).getDay(); const lastDate = new Date(year, month + 1, 0).getDate();
@@ -88,13 +91,13 @@ export function CalendarScreen({ store }: { store: Store }) {
   while (cells.length % 7) cells.push(null);
   const todayKey = new Date().toISOString().slice(0, 10);
   const dateKey = (day: number) => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-  return <ScrollView contentContainerStyle={styles.page}>
-    <View style={styles.sectionHeader}><View><Text style={styles.heading}>캘린더</Text><Text style={styles.muted}>마감 일정과 완료 기록을 월간으로 확인하세요.</Text></View><Pressable style={styles.todayButton} onPress={() => { const now = new Date(); setCursor(new Date(now.getFullYear(), now.getMonth(), 1)); }}><Text style={styles.secondaryText}>오늘</Text></Pressable></View>
+  return <>
+    <View style={styles.sectionHeader}><View><Text style={styles.cardTitle}>월간 일정</Text><Text style={styles.muted}>할 일의 마감일을 날짜별로 확인하세요.</Text></View><Pressable style={styles.todayButton} onPress={() => { const now = new Date(); setCursor(new Date(now.getFullYear(), now.getMonth(), 1)); }}><Text style={styles.secondaryText}>오늘</Text></Pressable></View>
     <Card><View style={styles.calendarHeader}><Pressable onPress={() => setCursor(new Date(year, month - 1, 1))}><Text style={styles.calendarArrow}>‹</Text></Pressable><Text style={styles.calendarTitle}>{year}년 {month + 1}월</Text><Pressable onPress={() => setCursor(new Date(year, month + 1, 1))}><Text style={styles.calendarArrow}>›</Text></Pressable></View>
       <View style={styles.calendarGrid}>{weekdays.map((label, index) => <View key={label} style={styles.weekHeader}><Text style={[styles.weekHeaderText, index === 0 && styles.sunday, index === 6 && styles.saturday]}>{label}</Text></View>)}{cells.map((day, index) => { const key = day ? dateKey(day) : ""; const items = day ? store.data.todos.filter((todo) => todo.dueDate === key) : []; return <View key={`${index}-${day}`} style={[styles.calendarCell, key === todayKey && styles.calendarToday]}>{day && <><Text style={[styles.calendarDay, index % 7 === 0 && styles.sunday, index % 7 === 6 && styles.saturday]}>{day}</Text>{items.slice(0, 3).map((todo) => <Text key={todo.id} style={[styles.calendarEvent, todo.done && styles.done]} numberOfLines={1}>{todo.done ? "✓ " : ""}{todo.title}</Text>)}{items.length > 3 && <Text style={styles.more}>+{items.length - 3}</Text>}</>}</View>; })}</View>
     </Card>
     <Card><Text style={styles.cardTitle}>마감일 없는 할 일</Text>{store.data.todos.filter((todo) => !todo.dueDate && !todo.parentId && !todo.done).slice(0, 8).map((todo) => <View key={todo.id} style={styles.listRow}><Text style={styles.todoTitle}>• {todo.title}</Text><Text style={styles.chip}>{scopeOptions.find((item) => item.value === todo.scope)?.label}</Text></View>)}</Card>
-  </ScrollView>;
+  </>;
 }
 
 export function TimeScreen({ store }: { store: Store }) {
