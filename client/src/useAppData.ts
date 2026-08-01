@@ -5,6 +5,7 @@ import type { ActiveSession, AppData, Memo, Routine, Scope, Todo, WorkSession } 
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
 const ACTIVE_SESSION_KEY = "todo:active-session";
+const DATA_CACHE_KEY = "todo:data-cache";
 
 export function uid() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
@@ -46,9 +47,16 @@ export function useAppData(enabled: boolean) {
   }, [enabled]);
 
   useEffect(() => {
-    if (enabled) void reload();
+    if (enabled) {
+      AsyncStorage.getItem(DATA_CACHE_KEY).then((saved) => {
+        if (!saved) return;
+        try { setData(JSON.parse(saved) as AppData); } catch { void AsyncStorage.removeItem(DATA_CACHE_KEY); }
+      }).finally(() => void reload());
+    }
     else setData(EMPTY_DATA);
   }, [enabled, reload]);
+
+  useEffect(() => { if (enabled) void AsyncStorage.setItem(DATA_CACHE_KEY, JSON.stringify(data)); }, [data, enabled]);
 
   useEffect(() => {
     AsyncStorage.getItem(ACTIVE_SESSION_KEY).then((saved) => {
@@ -75,7 +83,16 @@ export function useAppData(enabled: boolean) {
   };
 
   const patchTodo = async (id: string, patch: Partial<Todo>) => {
-    setData((current) => ({ ...current, todos: current.todos.map((todo) => todo.id === id ? { ...todo, ...patch } : todo) }));
+    setData((current) => {
+      let todos = current.todos.map((todo) => todo.id === id ? { ...todo, ...patch } : todo);
+      const selected = todos.find((todo) => todo.id === id);
+      if (selected?.parentId && typeof patch.done === "boolean") {
+        const siblings = todos.filter((todo) => todo.parentId === selected.parentId);
+        const parentDone = siblings.length > 0 && siblings.every((todo) => todo.done);
+        todos = todos.map((todo) => todo.id === selected.parentId ? { ...todo, done: parentDone, completedAt: parentDone ? new Date().toISOString() : null } : todo);
+      }
+      return { ...current, todos };
+    });
     try { await request(`/api/todos/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }); }
     catch (reason) { await reload(); throw reason; }
   };
@@ -88,8 +105,9 @@ export function useAppData(enabled: boolean) {
 
   const addMemo = async (title: string, body: string) => {
     const memo: Memo = { id: uid(), title: title.trim(), body: body.trim(), createdAt: new Date().toISOString(), tags: [...body.matchAll(/#([^\s#]+)/g)].map((match) => match[1]) };
-    setData((current) => ({ ...current, memos: [memo, ...current.memos] }));
-    try { await request("/api/memos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memo, todos: [] }) }); }
+    const extracted: Todo[] = body.split("\n").map((line) => line.match(/^\s*(?:-\s*\[\s?\]|todo:)\s*(.+)$/i)?.[1]?.trim()).filter(Boolean).map((todoTitle, index) => ({ id: uid(), title: todoTitle!, scope: "day", done: false, createdAt: new Date().toISOString(), sourceMemoId: memo.id, parentId: null, sortOrder: index }));
+    setData((current) => ({ ...current, memos: [memo, ...current.memos], todos: [...extracted, ...current.todos] }));
+    try { await request("/api/memos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memo, todos: extracted }) }); }
     catch (reason) { await reload(); throw reason; }
   };
 
@@ -139,10 +157,15 @@ export function useAppData(enabled: boolean) {
     await request("/api/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(completed) });
   };
 
+  const recordSession = async (session: WorkSession) => {
+    setData((current) => ({ ...current, sessions: [session, ...current.sessions] }));
+    await request("/api/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(session) });
+  };
+
   const deleteSession = async (id: string) => {
     setData((current) => ({ ...current, sessions: current.sessions.filter((session) => session.id !== id) }));
     await request(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
   };
 
-  return { data, activeSession, loading, error, reload, addTodo, patchTodo, deleteTodo, addMemo, patchMemo, deleteMemo, addRoutine, patchRoutine, deleteRoutine, startSession, stopSession, deleteSession };
+  return { data, activeSession, loading, error, reload, addTodo, patchTodo, deleteTodo, addMemo, patchMemo, deleteMemo, addRoutine, patchRoutine, deleteRoutine, startSession, stopSession, recordSession, deleteSession };
 }
