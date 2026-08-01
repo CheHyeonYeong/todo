@@ -103,7 +103,7 @@ export function ScheduleScreen({ store }: { store: Store }) {
 }
 
 const styles = StyleSheet.create({
-  page: { width: "100%", maxWidth: 880, alignSelf: "center", gap: 14, padding: 18, paddingBottom: 100 },
+  page: { width: "100%", maxWidth: 1180, alignSelf: "center", gap: 14, paddingHorizontal: 28, paddingTop: 22, paddingBottom: 100 },
   heading: { fontSize: 30, fontWeight: "800", color: "#17251e" }, muted: { marginTop: 3, color: "#748078" },
   sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   card: { gap: 11, padding: 15, borderWidth: 1, borderColor: "#dfe6df", borderRadius: 18, backgroundColor: "#fff" }, cardTitle: { fontSize: 17, fontWeight: "700", color: "#213128" },
