@@ -5,7 +5,7 @@ Todo 관리용 API 서버, React Native 클라이언트, Rust CLI/TUI를 한 저
 ## 구조
 
 - `client/`: Expo 기반 React Native 클라이언트
-- `server/server.js`: Node API 서버
+- `server/`: Node API 서버 (진입점 `server/server.js`, 바운디드 컨텍스트별 DDD 구조 — [ARCHITECTURE](server/ARCHITECTURE.md) · [CONTEXT-MAP](server/CONTEXT-MAP.md))
 - `tui/`: Rust CLI 및 TUI
 - `skills/`: AI 에이전트용 `todo-cli`, `verify` 스킬
 - `scripts/`: 배포 및 CLI 설치 스크립트
