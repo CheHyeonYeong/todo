@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TodoRouter } from "../../../contexts/planning/interfaces/http/todo-router.js";
-import { WorkspaceRouter } from "../../../contexts/workspace/interfaces/http/workspace-router.js";
+import { TodoRouter } from "../../../todo/interfaces/http/todo-router.js";
+import { WorkspaceRouter } from "../../../workspace/interfaces/http/workspace-router.js";
 import { ApiController } from "./api-controller.js";
 import { HealthRouter } from "./health-router.js";
 import { NodeHttpServer } from "./node-http-server.js";

@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { WorkspaceSnapshot } from "../../contexts/workspace/domain/workspace-snapshot.js";
+import { WorkspaceSnapshot } from "../../workspace/domain/workspace-snapshot.js";
 
 /**
  * 파일 모드에서는 모든 컨텍스트가 store.json 하나를 나눠 쓴다.

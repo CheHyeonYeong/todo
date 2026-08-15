@@ -12,48 +12,48 @@ import { HealthRouter } from "./shared/interfaces/http/health-router.js";
 import { NodeHttpServer } from "./shared/interfaces/http/node-http-server.js";
 import { StaticFileController } from "./shared/interfaces/http/static-file-controller.js";
 
-import { IdentityService } from "./contexts/identity/application/identity-service.js";
-import { SupabaseAuthAdapter } from "./contexts/identity/infrastructure/supabase-auth-adapter.js";
-import { SessionRouter } from "./contexts/identity/interfaces/http/session-router.js";
+import { IdentityService } from "./identity/application/identity-service.js";
+import { SupabaseAuthAdapter } from "./identity/infrastructure/supabase-auth-adapter.js";
+import { SessionRouter } from "./identity/interfaces/http/session-router.js";
 
-import { PlanningService } from "./contexts/planning/application/planning-service.js";
-import { FileTodoRepository } from "./contexts/planning/infrastructure/file-todo-repository.js";
-import { PostgresTodoRepository } from "./contexts/planning/infrastructure/postgres-todo-repository.js";
-import { todoSchema } from "./contexts/planning/infrastructure/todo-schema.js";
-import { TodoRouter } from "./contexts/planning/interfaces/http/todo-router.js";
+import { PlanningService } from "./todo/application/planning-service.js";
+import { FileTodoRepository } from "./todo/infrastructure/file-todo-repository.js";
+import { PostgresTodoRepository } from "./todo/infrastructure/postgres-todo-repository.js";
+import { todoSchema } from "./todo/infrastructure/todo-schema.js";
+import { TodoRouter } from "./todo/interfaces/http/todo-router.js";
 
-import { NotesService } from "./contexts/notes/application/notes-service.js";
-import { FileMemoRepository } from "./contexts/notes/infrastructure/file-memo-repository.js";
-import { PostgresMemoRepository } from "./contexts/notes/infrastructure/postgres-memo-repository.js";
-import { memoSchema } from "./contexts/notes/infrastructure/memo-schema.js";
-import { MemoRouter } from "./contexts/notes/interfaces/http/memo-router.js";
+import { NotesService } from "./notes/application/notes-service.js";
+import { FileMemoRepository } from "./notes/infrastructure/file-memo-repository.js";
+import { PostgresMemoRepository } from "./notes/infrastructure/postgres-memo-repository.js";
+import { memoSchema } from "./notes/infrastructure/memo-schema.js";
+import { MemoRouter } from "./notes/interfaces/http/memo-router.js";
 
-import { RoutineService } from "./contexts/routines/application/routine-service.js";
-import { RoutineMaterializer } from "./contexts/routines/domain/routine-materializer.js";
-import { FileRoutineRepository } from "./contexts/routines/infrastructure/file-routine-repository.js";
-import { PostgresRoutineRepository } from "./contexts/routines/infrastructure/postgres-routine-repository.js";
-import { routineSchema } from "./contexts/routines/infrastructure/routine-schema.js";
-import { RoutineRouter } from "./contexts/routines/interfaces/http/routine-router.js";
+import { RoutineService } from "./routines/application/routine-service.js";
+import { RoutineMaterializer } from "./routines/domain/routine-materializer.js";
+import { FileRoutineRepository } from "./routines/infrastructure/file-routine-repository.js";
+import { PostgresRoutineRepository } from "./routines/infrastructure/postgres-routine-repository.js";
+import { routineSchema } from "./routines/infrastructure/routine-schema.js";
+import { RoutineRouter } from "./routines/interfaces/http/routine-router.js";
 
-import { TimeTrackingService } from "./contexts/time-tracking/application/time-tracking-service.js";
-import { FileTimeSessionRepository } from "./contexts/time-tracking/infrastructure/file-session-repository.js";
-import { PostgresTimeSessionRepository } from "./contexts/time-tracking/infrastructure/postgres-session-repository.js";
-import { sessionSchema } from "./contexts/time-tracking/infrastructure/session-schema.js";
-import { TimeSessionRouter } from "./contexts/time-tracking/interfaces/http/time-session-router.js";
+import { TimeTrackingService } from "./time/application/time-tracking-service.js";
+import { FileTimeSessionRepository } from "./time/infrastructure/file-session-repository.js";
+import { PostgresTimeSessionRepository } from "./time/infrastructure/postgres-session-repository.js";
+import { sessionSchema } from "./time/infrastructure/session-schema.js";
+import { TimeSessionRouter } from "./time/interfaces/http/time-session-router.js";
 
-import { WorkspaceService } from "./contexts/workspace/application/workspace-service.js";
-import { FileWorkspaceRepository } from "./contexts/workspace/infrastructure/file-workspace-repository.js";
-import { PostgresWorkspaceRepository } from "./contexts/workspace/infrastructure/postgres-workspace-repository.js";
-import { WorkspaceRouter } from "./contexts/workspace/interfaces/http/workspace-router.js";
+import { WorkspaceService } from "./workspace/application/workspace-service.js";
+import { FileWorkspaceRepository } from "./workspace/infrastructure/file-workspace-repository.js";
+import { PostgresWorkspaceRepository } from "./workspace/infrastructure/postgres-workspace-repository.js";
+import { WorkspaceRouter } from "./workspace/interfaces/http/workspace-router.js";
 
-import { ArchiveService } from "./contexts/archiving/application/archive-service.js";
-import { ArchivePolicy } from "./contexts/archiving/domain/archive-policy.js";
-import { ArchiveScheduler } from "./contexts/archiving/infrastructure/archive-scheduler.js";
-import { FileArchiveJournal } from "./contexts/archiving/infrastructure/file-archive-journal.js";
-import { FileArchiveRepository } from "./contexts/archiving/infrastructure/file-archive-repository.js";
-import { PostgresArchiveRepository } from "./contexts/archiving/infrastructure/postgres-archive-repository.js";
-import { SmtpArchiveMailer } from "./contexts/archiving/infrastructure/smtp-archive-mailer.js";
-import { SupabaseUserDirectory } from "./contexts/archiving/infrastructure/supabase-user-directory.js";
+import { ArchiveService } from "./archiving/application/archive-service.js";
+import { ArchivePolicy } from "./archiving/domain/archive-policy.js";
+import { ArchiveScheduler } from "./archiving/infrastructure/archive-scheduler.js";
+import { FileArchiveJournal } from "./archiving/infrastructure/file-archive-journal.js";
+import { FileArchiveRepository } from "./archiving/infrastructure/file-archive-repository.js";
+import { PostgresArchiveRepository } from "./archiving/infrastructure/postgres-archive-repository.js";
+import { SmtpArchiveMailer } from "./archiving/infrastructure/smtp-archive-mailer.js";
+import { SupabaseUserDirectory } from "./archiving/infrastructure/supabase-user-directory.js";
 
 /**
  * 컴포지션 루트: 어떤 어댑터를 쓸지 정하는 유일한 자리.

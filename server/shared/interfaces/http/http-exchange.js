@@ -1,4 +1,4 @@
-import { AccessToken } from "../../../contexts/identity/domain/access-token.js";
+import { AccessToken } from "../../../identity/domain/access-token.js";
 
 /**
  * 표현 계층의 작업 공간. 라우터가 HTTP의 세부(헤더, 스트림, 상태 코드)를 다루는 유일한 통로다.

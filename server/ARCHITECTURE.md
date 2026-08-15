@@ -1,6 +1,6 @@
 # Server architecture
 
-서버는 **바운디드 컨텍스트별로 먼저 나누고, 그 안에서 계층을 나눈다.**
+서버는 **도메인별로 먼저 나누고, 그 안에서 계층을 나눈다.**
 디렉터리를 열었을 때 "이 코드가 무엇에 관한 것인지"가 먼저 보이고, "어떤 기술을 쓰는지"는 그다음이다.
 
 ```
@@ -8,14 +8,13 @@ server/
   server.js            프로세스 시작만
   composition-root.js  어떤 어댑터를 쓸지 정하는 유일한 자리
   shared/              공유 커널 + 기술 기반 (설정, 시계, 저장소 공통, HTTP 커널)
-  contexts/
-    identity/          누가 요청했는가
-    planning/          할 일과 하위 목표 (핵심 도메인)
-    notes/             메모, 그리고 메모에서 할 일 뽑기
-    routines/          반복 규칙 → 오늘의 할 일
-    time-tracking/     시간 기록
-    archiving/         오래된 완료 기록 내보내기
-    workspace/         위 전부를 한 번에 읽고 쓰는 통합 지점
+  todo/                할 일과 하위 목표 (핵심 도메인)
+  notes/               메모, 그리고 메모에서 할 일 뽑기
+  routines/            반복 규칙 → 오늘의 할 일
+  time/                시간 기록
+  identity/            누가 요청했는가
+  archiving/           오래된 완료 기록 내보내기
+  workspace/           위 전부를 한 번에 읽고 쓰는 통합 지점
 ```
 
 ## 계층과 의존 방향
@@ -47,8 +46,8 @@ interfaces/  →  application/  →  domain/
 
 | 판단 | 사는 곳 |
 | --- | --- |
-| 하위 목표는 한 단계까지만, 부모와 같은 범위 | `planning/domain/todo-tree.js` |
-| 하위 목표가 다 끝나면 부모도 끝난 것 | `planning/domain/todo-tree.js` |
+| 하위 목표는 한 단계까지만, 부모와 같은 범위 | `todo/domain/todo-tree.js` |
+| 하위 목표가 다 끝나면 부모도 끝난 것 | `todo/domain/todo-tree.js` |
 | 오늘 이 루틴이 도는가 | `routines/domain/routine.js` |
 | 무엇이 보관 대상인가 | `archiving/domain/archive-policy.js` |
 | 워크스페이스 전체의 정렬·트리 불변식 | `workspace/domain/workspace-snapshot.js` |

@@ -5,10 +5,10 @@
 | 컨텍스트 | 책임 | 소유한 API |
 | --- | --- | --- |
 | `identity` | 요청자가 누구인지 판단 | `GET /api/session` |
-| `planning` | 할 일과 하위 목표의 계획·순서 (**핵심 도메인**) | `/api/todos*` |
+| `todo` | 할 일과 하위 목표의 계획·순서 (**핵심 도메인**) | `/api/todos*` |
 | `notes` | 메모 보관, 메모에서 할 일 뽑기 | `/api/memos*` |
 | `routines` | 반복 규칙과 오늘의 발생 | `/api/routines*` |
-| `time-tracking` | 시간 기록 | `/api/sessions*` |
+| `time` | 시간 기록 | `/api/sessions*` |
 | `archiving` | 오래된 완료 기록 내보내기 (배치, HTTP 없음) | — |
 | `workspace` | 전체 스냅샷 동기화 | `/api/data` |
 
@@ -17,16 +17,16 @@
 ```
         identity ──(사용자 식별)──▶ 모든 컨텍스트
 
-        notes ──(고객-공급자)──▶ planning
+        notes ──(고객-공급자)──▶ todo
           "메모를 적으며 할 일을 함께 뽑는다" — 하나의 작업 단위
 
-        routines ──(고객-공급자)──▶ planning
+        routines ──(고객-공급자)──▶ todo
           "루틴이 오늘의 할 일을 만든다" — RoutineMaterializer 한 곳에 모임
 
-        workspace ──(통합)──▶ planning · notes · routines · time-tracking
+        workspace ──(통합)──▶ todo · notes · routines · time
           전체를 한 번에 읽고 쓰는 지점. 다른 컨텍스트의 모델을 조합한다.
 
-        archiving ──(하위 스트림)──▶ planning · time-tracking
+        archiving ──(하위 스트림)──▶ todo · time
           완료된 기록만 읽어 내보내고 지운다. 위쪽은 archiving을 모른다.
 ```
 
