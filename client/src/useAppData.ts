@@ -72,13 +72,18 @@ export function useAppData(enabled: boolean) {
   }, []);
 
   const addTodo = async (input: { title: string; scope: Scope; parentId?: string | null; dueDate?: string | null; category?: string | null }) => {
+    const parentId = input.parentId || null;
+    // sortOrder는 싣지 않는다. 서버가 다른 기기의 할 일까지 보고 최종 순서를 정한다.
     const todo: Todo = {
       id: uid(), title: input.title.trim(), scope: input.scope, done: false,
-      createdAt: new Date().toISOString(), parentId: input.parentId || null,
+      createdAt: new Date().toISOString(), parentId,
       dueDate: input.dueDate || null, category: input.category || null,
-      sortOrder: nextSortOrder(data.todos, input.scope, input.parentId || null),
     };
-    setData((current) => ({ ...current, todos: [...current.todos, todo] }));
+    // 화면에 바로 보여줄 임시 순서는 최신 목록에서 뽑는다. 다음 reload에서 서버 값으로 맞춰진다.
+    setData((current) => ({
+      ...current,
+      todos: [...current.todos, { ...todo, sortOrder: nextSortOrder(current.todos, input.scope, parentId) }],
+    }));
     try { await request("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(todo) }); }
     catch (reason) { await reload(); throw reason; }
   };
