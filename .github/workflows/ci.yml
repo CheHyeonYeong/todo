@@ -29,7 +29,7 @@ jobs:
         run: npm run test:server
 
   client:
-    name: client typecheck
+    name: client tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -45,6 +45,9 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Domain tests
+        run: npm test
 
       - name: Typecheck
         run: npm run typecheck
