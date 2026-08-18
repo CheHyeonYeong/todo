@@ -6,10 +6,21 @@
 ## 준비
 
 ```bash
-npm i                      # playwright-core 포함 (루트 devDependencies)
-npx playwright install chromium   # 크로미움 헤드리스 셸 캐시 (~/.cache/ms-playwright)
-cd client && npm run build && cd ..   # dist가 있어야 서버가 화면을 서빙한다
+npm i                                   # playwright-core 포함 (루트 devDependencies)
+npx playwright-core install chromium    # 크로미움 헤드리스 셸 내려받기
+cd client && npm run build && cd ..     # dist가 있어야 서버가 화면을 서빙한다
 ```
+
+크로미움 캐시 위치와 실행 파일 이름은 OS·아키텍처마다 다르다(`chrome-headless-shell-linux64`,
+`-mac-arm64`, `-win64/…​.exe`). `findChromium()`이 아래 순서로 알아서 찾으므로 직접 지정할 필요는 없다.
+
+| OS | 캐시 경로 |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\ms-playwright` |
+| macOS | `~/Library/Caches/ms-playwright` |
+| Linux | `$XDG_CACHE_HOME/ms-playwright` 또는 `~/.cache/ms-playwright` |
+
+`PLAYWRIGHT_BROWSERS_PATH`가 설정돼 있으면 그것부터 본다.
 
 ## 실행
 
@@ -28,3 +39,19 @@ npm run e2e
 집중 큐 제거 / 스코프별 자동 마감일 / 수정 모드 카테고리 / 하위 목표 추가 /
 지난 완료 숨김·펼치기 / 검색(할 일·메모) / 스코프 좌우 접기 / 삭제 되돌리기 /
 vim 메모 편집·저장 / 다크 모드 / 뽀모도로 작업 입력 / 콘솔 오류 없음
+
+워크스페이스는 한 번에 한 패널만 띄우므로, 메모·시간 항목을 검증하기 전에
+`selectPanel()`로 사이드바 내비게이션을 먼저 옮긴다.
+
+## 알려진 실패
+
+- **지난 완료 펼치기** — 앱 버그. "지난 완료 N개 보기"를 눌러도 항목이 안 나온다.
+  `TodoPanel.tsx`의 미리보기 상한(`scopePreviewCount`, 오늘=1칸)이 `showOldDone`보다 뒤에 걸리는데,
+  `sortTodos`가 완료 항목을 맨 뒤로 보내기 때문에 상한에 항상 잘린다.
+  테스트가 옳고 앱이 틀린 경우라 테스트는 그대로 둔다.
+
+## 단위 테스트
+
+`client`의 순수함수 테스트는 별도다: `cd client && npm test` (vitest).
+e2e는 브라우저·빌드가 필요해 CI에서 돌리지 않고, CI는 단위 테스트·타입 체크·빌드만 확인한다
+(`.github/workflows/client-ci.yml`).

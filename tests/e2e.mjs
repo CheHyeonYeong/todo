@@ -11,16 +11,52 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = Number(process.env.E2E_PORT || 34599);
 const BASE = `http://localhost:${PORT}`;
 
+/* 플랫폼마다 playwright 캐시 위치가 다르다. PLAYWRIGHT_BROWSERS_PATH가 있으면 그것부터 본다. */
+function chromiumCacheRoots() {
+  const roots = [];
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH) roots.push(process.env.PLAYWRIGHT_BROWSERS_PATH);
+  const home = os.homedir();
+  if (process.platform === "win32") {
+    roots.push(path.join(process.env.LOCALAPPDATA || path.join(home, "AppData/Local"), "ms-playwright"));
+  } else if (process.platform === "darwin") {
+    roots.push(path.join(home, "Library/Caches/ms-playwright"));
+  }
+  roots.push(path.join(process.env.XDG_CACHE_HOME || path.join(home, ".cache"), "ms-playwright"));
+  return roots.filter((dir) => fs.existsSync(dir));
+}
+
+/* 리비전 디렉터리 안의 실행 파일 이름도 플랫폼·아키텍처마다 다르므로(linux64 / mac-arm64 / win64)
+   경로를 가정하지 말고 훑어서 찾는다. */
+function findShellBinary(revisionDir) {
+  for (const entry of fs.readdirSync(revisionDir)) {
+    if (!entry.startsWith("chrome-headless-shell")) continue;
+    for (const name of ["chrome-headless-shell", "chrome-headless-shell.exe"]) {
+      const candidate = path.join(revisionDir, entry, name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
 function findChromium() {
   if (process.env.E2E_CHROMIUM) return process.env.E2E_CHROMIUM;
-  const cache = path.join(os.homedir(), ".cache/ms-playwright");
-  const shell = fs
-    .readdirSync(cache)
-    .filter((dir) => dir.startsWith("chromium_headless_shell"))
-    .sort()
-    .pop();
-  if (!shell) throw new Error("chromium_headless_shell이 없습니다. npx playwright install chromium 후 다시 시도하세요.");
-  return path.join(cache, shell, "chrome-headless-shell-linux64/chrome-headless-shell");
+  const roots = chromiumCacheRoots();
+  for (const cache of roots) {
+    const revisions = fs
+      .readdirSync(cache)
+      .filter((dir) => dir.startsWith("chromium_headless_shell"))
+      // 리비전은 숫자라 문자열 정렬하면 993이 1140보다 뒤로 간다. 숫자로 비교해 최신을 고른다.
+      .sort((a, b) => (Number(b.split("-").pop()) || 0) - (Number(a.split("-").pop()) || 0));
+    for (const revision of revisions) {
+      const binary = findShellBinary(path.join(cache, revision));
+      if (binary) return binary;
+    }
+  }
+  throw new Error(
+    `chromium_headless_shell을 찾지 못했습니다. npx playwright install chromium 후 다시 시도하세요.\n` +
+      `찾아본 경로: ${roots.length ? roots.join(", ") : "(캐시 디렉터리 없음)"}\n` +
+      `직접 지정하려면 E2E_CHROMIUM=<실행 파일 경로>`,
+  );
 }
 
 let failures = 0;
@@ -68,6 +104,12 @@ try {
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(`${BASE}/?api=${BASE}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(400);
+
+  /* 워크스페이스는 한 번에 한 패널만 띄운다(사이드바 내비게이션). 메모·시간 검증 전에는 먼저 옮겨야 한다. */
+  async function selectPanel(name) {
+    await page.getByRole("button", { name, exact: true }).click();
+    await page.waitForTimeout(300);
+  }
 
   // 1) 집중 큐가 없어야 한다
   check("집중 큐 제거됨", (await page.getByText("집중 큐").count()) === 0);
@@ -176,6 +218,7 @@ try {
   check("삭제 되돌리기 복원", data.todos.some((todo) => todo.title === "시안 검토"));
 
   // 9) 메모: vim 토글 + 기본 vim 편집 + Ctrl+Enter 저장
+  await selectPanel("메모");
   await page.getByRole("button", { name: "vim" }).click();
   const cm = page.locator(".cm-content").first();
   await cm.waitFor({ timeout: 5000 });
@@ -214,6 +257,7 @@ try {
   check("라이트 모드 복귀", await page.evaluate(() => !document.documentElement.classList.contains("dark")));
 
   // 12) 뽀모도로: 현재 작업 입력과 사이클 점 표시
+  await selectPanel("시간");
   check("뽀모도로 작업 입력", await page.getByPlaceholder("지금 뭘 하는 중? (집중 기록 이름)").isVisible());
 
   check("페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
