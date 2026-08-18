@@ -1,6 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "./domain/calendar";
+import {
+  isMomentNote,
+  momentNoteLabel,
+  momentNoteText,
+  sessionsCoveringHour,
+  sessionsStartedBetween,
+  totalDurationMs,
+} from "./domain/session";
+import { completionPatch } from "./domain/todo";
 import type { Scope, Todo } from "./types";
 import type { useAppData } from "./useAppData";
 
@@ -9,8 +19,6 @@ const scopeOptions: { value: Scope; label: string }[] = [
   { value: "day", label: "오늘" }, { value: "week", label: "이번 주" }, { value: "month", label: "이번 달" },
 ];
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
-function localDateKey(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
-function defaultDue(scope: Scope) { const date = new Date(); if (scope === "week") date.setDate(date.getDate() + ((7 - date.getDay()) % 7)); if (scope === "month") return localDateKey(new Date(date.getFullYear(), date.getMonth() + 1, 0)); return localDateKey(date); }
 
 function fail(reason: unknown) {
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
@@ -32,7 +40,7 @@ export function TodoScreen({ store }: { store: Store }) {
 
   const submit = async () => {
     if (!title.trim()) return;
-    try { await store.addTodo({ title, scope, category, dueDate: dueDate || defaultDue(scope) }); setTitle(""); setCategory(""); setDueDate(""); } catch (reason) { fail(reason); }
+    try { await store.addTodo({ title, scope, category, dueDate: dueDate || defaultDueDate(scope, new Date()) }); setTitle(""); setCategory(""); setDueDate(""); } catch (reason) { fail(reason); }
   };
 
   return <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
@@ -59,8 +67,8 @@ function TodoItem({ todo, store, subDraft, setSubDraft }: { todo: Todo; store: S
   const [category, setCategory] = useState(todo.category || "");
   const [dueDate, setDueDate] = useState(todo.dueDate || "");
   const children = store.data.todos.filter((item) => item.parentId === todo.id).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-  const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < localDateKey(new Date()));
-  const toggle = () => void store.patchTodo(todo.id, { done: !todo.done, completedAt: !todo.done ? new Date().toISOString() : null }).catch(fail);
+  const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < dateKey(new Date()));
+  const toggle = () => void store.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(fail);
   const remove = () => Alert.alert("할 일 삭제", `“${todo.title}”을 삭제할까요?`, [{ text: "취소", style: "cancel" }, { text: "삭제", style: "destructive", onPress: () => void store.deleteTodo(todo.id).catch(fail) }]);
   const save = async () => { try { await store.patchTodo(todo.id, { title: draft.trim() || todo.title, note: note.trim() || null, category: category.trim() || null, dueDate: dueDate.trim() || null }); setEditing(false); } catch (reason) { fail(reason); } };
   const addChild = async () => { if (!subDraft.trim()) return; try { await store.addTodo({ title: subDraft, scope: todo.scope, parentId: todo.id }); setSubDraft(""); setExpanded(true); } catch (reason) { fail(reason); } };
@@ -96,11 +104,11 @@ function TodoCalendar({ store }: { store: Store }) {
   const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: lastDate }, (_, index) => index + 1)];
   while (cells.length % 7) cells.push(null);
   const todayKey = new Date().toISOString().slice(0, 10);
-  const dateKey = (day: number) => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const dayKey = (day: number) => dayKeyOf(year, month, day);
   return <>
     <View style={styles.sectionHeader}><View><Text style={styles.cardTitle}>월간 일정</Text><Text style={styles.muted}>할 일의 마감일을 날짜별로 확인하세요.</Text></View><Pressable style={styles.todayButton} onPress={() => { const now = new Date(); setCursor(new Date(now.getFullYear(), now.getMonth(), 1)); }}><Text style={styles.secondaryText}>오늘</Text></Pressable></View>
     <Card><View style={styles.calendarHeader}><Pressable onPress={() => setCursor(new Date(year, month - 1, 1))}><Text style={styles.calendarArrow}>‹</Text></Pressable><Text style={styles.calendarTitle}>{year}년 {month + 1}월</Text><Pressable onPress={() => setCursor(new Date(year, month + 1, 1))}><Text style={styles.calendarArrow}>›</Text></Pressable></View>
-      <View style={styles.calendarGrid}>{weekdays.map((label, index) => <View key={label} style={styles.weekHeader}><Text style={[styles.weekHeaderText, index === 0 && styles.sunday, index === 6 && styles.saturday]}>{label}</Text></View>)}{cells.map((day, index) => { const key = day ? dateKey(day) : ""; const items = day ? store.data.todos.filter((todo) => todo.dueDate === key) : []; return <View key={`${index}-${day}`} style={[styles.calendarCell, key === todayKey && styles.calendarToday]}>{day && <><Text style={[styles.calendarDay, index % 7 === 0 && styles.sunday, index % 7 === 6 && styles.saturday]}>{day}</Text>{items.slice(0, 3).map((todo) => <Text key={todo.id} style={[styles.calendarEvent, todo.done && styles.done]} numberOfLines={1}>{todo.done ? "✓ " : ""}{todo.title}</Text>)}{items.length > 3 && <Text style={styles.more}>+{items.length - 3}</Text>}</>}</View>; })}</View>
+      <View style={styles.calendarGrid}>{weekdays.map((label, index) => <View key={label} style={styles.weekHeader}><Text style={[styles.weekHeaderText, index === 0 && styles.sunday, index === 6 && styles.saturday]}>{label}</Text></View>)}{cells.map((day, index) => { const key = day ? dayKey(day) : ""; const items = day ? store.data.todos.filter((todo) => todo.dueDate === key) : []; return <View key={`${index}-${day}`} style={[styles.calendarCell, key === todayKey && styles.calendarToday]}>{day && <><Text style={[styles.calendarDay, index % 7 === 0 && styles.sunday, index % 7 === 6 && styles.saturday]}>{day}</Text>{items.slice(0, 3).map((todo) => <Text key={todo.id} style={[styles.calendarEvent, todo.done && styles.done]} numberOfLines={1}>{todo.done ? "✓ " : ""}{todo.title}</Text>)}{items.length > 3 && <Text style={styles.more}>+{items.length - 3}</Text>}</>}</View>; })}</View>
     </Card>
     <Card><Text style={styles.cardTitle}>마감일 없는 할 일</Text>{store.data.todos.filter((todo) => !todo.dueDate && !todo.parentId && !todo.done).slice(0, 8).map((todo) => <View key={todo.id} style={styles.listRow}><Text style={styles.todoTitle}>• {todo.title}</Text><Text style={styles.chip}>{scopeOptions.find((item) => item.value === todo.scope)?.label}</Text></View>)}</Card>
   </>;
@@ -124,17 +132,18 @@ function SessionTracker({ store }: { store: Store }) {
   return <Card><Text style={styles.cardTitle}>작업 시간 기록</Text>{store.activeSession ? <><Text style={styles.sessionLabel}>{store.activeSession.label || "이름 없는 작업"}</Text><Text style={styles.muted}>{elapsed}분째 기록 중</Text><Pressable style={styles.stopButton} onPress={() => void store.stopSession().catch(fail)}><Text style={styles.primaryText}>기록 종료</Text></Pressable></> : <View style={styles.row}><TextInput style={[styles.input, styles.flex]} value={label} onChangeText={setLabel} placeholder="지금 할 작업" /><Pressable style={styles.primaryButton} onPress={() => { if (label.trim()) { void store.startSession(label); setLabel(""); } }}><Text style={styles.primaryText}>기록 시작</Text></Pressable></View>}</Card>;
 }
 
-function startOfWeek(date = new Date()) { const next = new Date(date); next.setHours(0, 0, 0, 0); next.setDate(next.getDate() - next.getDay()); return next; }
 function StudyPlanner({ store }: { store: Store }) {
-  const [weekOffset, setWeekOffset] = useState(0); const [momentNote, setMomentNote] = useState(""); const start = startOfWeek(); start.setDate(start.getDate() + weekOffset * 7);
+  const [weekOffset, setWeekOffset] = useState(0); const [momentNote, setMomentNote] = useState(""); const start = addDays(startOfWeek(new Date()), weekOffset * 7);
   const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); return date; });
   const hours = Array.from({ length: 18 }, (_, index) => index + 6);
-  const sessionAt = (date: Date, hour: number) => store.data.sessions.filter((session) => { const began = new Date(session.startedAt); const ended = new Date(session.endedAt); return began.toDateString() === date.toDateString() && began.getHours() <= hour && ended.getHours() >= hour; });
-  const weekSessions = store.data.sessions.filter((session) => { const time = new Date(session.startedAt).getTime(); return time >= days[0].getTime() && time < days[6].getTime() + 86400000; });
-  const total = weekSessions.reduce((sum, session) => sum + Math.max(0, new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()), 0);
-  const addMoment = () => { const body = momentNote.trim(); if (!body) return; const now = new Date(); void store.recordSession({ id: `${now.getTime()}`, label: `__moment_note__:${body}`, startedAt: now.toISOString(), endedAt: new Date(now.getTime() + 1000).toISOString() }).catch(fail); setMomentNote(""); };
-  const notes = weekSessions.filter((session) => session.label.startsWith("__moment_note__:"));
-  return <Card><View style={styles.sectionHeader}><View><Text style={styles.cardTitle}>주간 스터디 플래너</Text><Text style={styles.muted}>{start.getMonth() + 1}.{start.getDate()} – {days[6].getMonth() + 1}.{days[6].getDate()} · 총 {Math.round(total / 60000)}분</Text></View><View style={styles.row}><Pressable style={styles.plannerArrow} onPress={() => setWeekOffset((value) => value - 1)}><Text>‹</Text></Pressable><Pressable style={styles.todayButton} onPress={() => setWeekOffset(0)}><Text style={styles.secondaryText}>이번 주</Text></Pressable><Pressable style={styles.plannerArrow} onPress={() => setWeekOffset((value) => value + 1)}><Text>›</Text></Pressable></View></View><ScrollView horizontal showsHorizontalScrollIndicator><View style={styles.planner}><View style={styles.plannerHeader}><View style={styles.timeHeader}><Text style={styles.meta}>D-day</Text></View>{days.map((date, index) => <View key={date.toISOString()} style={styles.plannerDayHeader}><Text style={[styles.plannerDayName, index === 0 && styles.sunday, index === 6 && styles.saturday]}>{weekdays[index]}</Text><Text style={styles.meta}>{date.getMonth() + 1}/{date.getDate()}</Text></View>)}</View>{hours.map((hour) => <View key={hour} style={styles.plannerRow}><View style={styles.timeCell}><Text style={styles.timeLabel}>{hour > 12 ? hour - 12 : hour}</Text></View>{days.map((date) => { const sessions = sessionAt(date, hour).filter((session) => !session.label.startsWith("__moment_note__:")); return <View key={date.toISOString()} style={styles.plannerCell}>{sessions.slice(0, 1).map((session) => <View key={session.id} style={styles.studyBlock}><Text style={styles.studyText} numberOfLines={2}>{session.label || "공부"}</Text></View>)}</View>; })}</View>)}</View></ScrollView><View style={styles.row}><TextInput style={[styles.input, styles.flex]} value={momentNote} onChangeText={setMomentNote} placeholder="측정 없이 지금 시각에 메모" onSubmitEditing={addMoment} /><Pressable style={styles.miniButton} onPress={addMoment}><Text style={styles.primaryText}>+</Text></Pressable></View>{notes.map((note) => <View key={note.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.todoTitle}>{note.label.replace("__moment_note__:", "")}</Text><Text style={styles.meta}>{new Date(note.startedAt).toLocaleString()}</Text></View><Pressable onPress={() => void store.deleteSession(note.id).catch(fail)}><Text style={styles.danger}>삭제</Text></Pressable></View>)}</Card>;
+  const sessionAt = (date: Date, hour: number) => sessionsCoveringHour(store.data.sessions, date, hour);
+  // 마지막 날의 24시간 뒤까지. addDays가 아니라 고정 24시간인 것은 기존 동작 그대로다.
+  const weekEnd = new Date(days[6].getTime() + 86400000);
+  const weekSessions = sessionsStartedBetween(store.data.sessions, days[0], weekEnd);
+  const total = totalDurationMs(weekSessions);
+  const addMoment = () => { const body = momentNote.trim(); if (!body) return; const now = new Date(); void store.recordSession({ id: `${now.getTime()}`, label: momentNoteLabel(body), startedAt: now.toISOString(), endedAt: new Date(now.getTime() + 1000).toISOString() }).catch(fail); setMomentNote(""); };
+  const notes = weekSessions.filter(isMomentNote);
+  return <Card><View style={styles.sectionHeader}><View><Text style={styles.cardTitle}>주간 스터디 플래너</Text><Text style={styles.muted}>{start.getMonth() + 1}.{start.getDate()} – {days[6].getMonth() + 1}.{days[6].getDate()} · 총 {Math.round(total / 60000)}분</Text></View><View style={styles.row}><Pressable style={styles.plannerArrow} onPress={() => setWeekOffset((value) => value - 1)}><Text>‹</Text></Pressable><Pressable style={styles.todayButton} onPress={() => setWeekOffset(0)}><Text style={styles.secondaryText}>이번 주</Text></Pressable><Pressable style={styles.plannerArrow} onPress={() => setWeekOffset((value) => value + 1)}><Text>›</Text></Pressable></View></View><ScrollView horizontal showsHorizontalScrollIndicator><View style={styles.planner}><View style={styles.plannerHeader}><View style={styles.timeHeader}><Text style={styles.meta}>D-day</Text></View>{days.map((date, index) => <View key={date.toISOString()} style={styles.plannerDayHeader}><Text style={[styles.plannerDayName, index === 0 && styles.sunday, index === 6 && styles.saturday]}>{weekdays[index]}</Text><Text style={styles.meta}>{date.getMonth() + 1}/{date.getDate()}</Text></View>)}</View>{hours.map((hour) => <View key={hour} style={styles.plannerRow}><View style={styles.timeCell}><Text style={styles.timeLabel}>{hour > 12 ? hour - 12 : hour}</Text></View>{days.map((date) => { const sessions = sessionAt(date, hour).filter((session) => !isMomentNote(session)); return <View key={date.toISOString()} style={styles.plannerCell}>{sessions.slice(0, 1).map((session) => <View key={session.id} style={styles.studyBlock}><Text style={styles.studyText} numberOfLines={2}>{session.label || "공부"}</Text></View>)}</View>; })}</View>)}</View></ScrollView><View style={styles.row}><TextInput style={[styles.input, styles.flex]} value={momentNote} onChangeText={setMomentNote} placeholder="측정 없이 지금 시각에 메모" onSubmitEditing={addMoment} /><Pressable style={styles.miniButton} onPress={addMoment}><Text style={styles.primaryText}>+</Text></Pressable></View>{notes.map((note) => <View key={note.id} style={styles.listRow}><View style={styles.flex}><Text style={styles.todoTitle}>{momentNoteText(note)}</Text><Text style={styles.meta}>{new Date(note.startedAt).toLocaleString()}</Text></View><Pressable onPress={() => void store.deleteSession(note.id).catch(fail)}><Text style={styles.danger}>삭제</Text></Pressable></View>)}</Card>;
 }
 
 export function ScheduleScreen({ store }: { store: Store }) {

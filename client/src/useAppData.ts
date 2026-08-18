@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
+import { extractTags, extractTodoTitles } from "./domain/memo";
+import { applyTodoPatch, nextSortOrder } from "./domain/todo";
 import type { ActiveSession, AppData, Memo, Routine, Scope, Todo, WorkSession } from "./types";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
@@ -70,12 +72,11 @@ export function useAppData(enabled: boolean) {
   }, []);
 
   const addTodo = async (input: { title: string; scope: Scope; parentId?: string | null; dueDate?: string | null; category?: string | null }) => {
-    const siblings = data.todos.filter((todo) => todo.scope === input.scope && (todo.parentId || null) === (input.parentId || null));
     const todo: Todo = {
       id: uid(), title: input.title.trim(), scope: input.scope, done: false,
       createdAt: new Date().toISOString(), parentId: input.parentId || null,
       dueDate: input.dueDate || null, category: input.category || null,
-      sortOrder: Math.max(-1, ...siblings.map((item) => item.sortOrder ?? 0)) + 1,
+      sortOrder: nextSortOrder(data.todos, input.scope, input.parentId || null),
     };
     setData((current) => ({ ...current, todos: [...current.todos, todo] }));
     try { await request("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(todo) }); }
@@ -83,16 +84,7 @@ export function useAppData(enabled: boolean) {
   };
 
   const patchTodo = async (id: string, patch: Partial<Todo>) => {
-    setData((current) => {
-      let todos = current.todos.map((todo) => todo.id === id ? { ...todo, ...patch } : todo);
-      const selected = todos.find((todo) => todo.id === id);
-      if (selected?.parentId && typeof patch.done === "boolean") {
-        const siblings = todos.filter((todo) => todo.parentId === selected.parentId);
-        const parentDone = siblings.length > 0 && siblings.every((todo) => todo.done);
-        todos = todos.map((todo) => todo.id === selected.parentId ? { ...todo, done: parentDone, completedAt: parentDone ? new Date().toISOString() : null } : todo);
-      }
-      return { ...current, todos };
-    });
+    setData((current) => ({ ...current, todos: applyTodoPatch(current.todos, id, patch, new Date()) }));
     try { await request(`/api/todos/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }); }
     catch (reason) { await reload(); throw reason; }
   };
@@ -104,8 +96,11 @@ export function useAppData(enabled: boolean) {
   };
 
   const addMemo = async (title: string, body: string) => {
-    const memo: Memo = { id: uid(), title: title.trim(), body: body.trim(), createdAt: new Date().toISOString(), tags: [...body.matchAll(/#([^\s#]+)/g)].map((match) => match[1]) };
-    const extracted: Todo[] = body.split("\n").map((line) => line.match(/^\s*(?:-\s*\[\s?\]|todo:)\s*(.+)$/i)?.[1]?.trim()).filter(Boolean).map((todoTitle, index) => ({ id: uid(), title: todoTitle!, scope: "day", done: false, createdAt: new Date().toISOString(), sourceMemoId: memo.id, parentId: null, sortOrder: index }));
+    const memo: Memo = { id: uid(), title: title.trim(), body: body.trim(), createdAt: new Date().toISOString(), tags: extractTags(body) };
+    const extracted: Todo[] = extractTodoTitles(body).map((todoTitle, index) => ({
+      id: uid(), title: todoTitle, scope: "day", done: false,
+      createdAt: new Date().toISOString(), sourceMemoId: memo.id, parentId: null, sortOrder: index,
+    }));
     setData((current) => ({ ...current, memos: [memo, ...current.memos], todos: [...extracted, ...current.todos] }));
     try { await request("/api/memos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memo, todos: extracted }) }); }
     catch (reason) { await reload(); throw reason; }
