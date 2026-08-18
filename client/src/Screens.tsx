@@ -103,7 +103,7 @@ function TodoCalendar({ store }: { store: Store }) {
   const firstDay = new Date(year, month, 1).getDay(); const lastDate = new Date(year, month + 1, 0).getDate();
   const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: lastDate }, (_, index) => index + 1)];
   while (cells.length % 7) cells.push(null);
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = dateKey(new Date());
   const dayKey = (day: number) => dayKeyOf(year, month, day);
   return <>
     <View style={styles.sectionHeader}><View><Text style={styles.cardTitle}>월간 일정</Text><Text style={styles.muted}>할 일의 마감일을 날짜별로 확인하세요.</Text></View><Pressable style={styles.todayButton} onPress={() => { const now = new Date(); setCursor(new Date(now.getFullYear(), now.getMonth(), 1)); }}><Text style={styles.secondaryText}>오늘</Text></Pressable></View>
