@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { extractTags, extractTodoTitles } from "./memo";
+import { extractTags, extractTodoTitles, withDerivedTags } from "./memo";
 
 describe("extractTags", () => {
   test("# 뒤의 태그를 순서대로 모은다", () => {
@@ -10,10 +10,14 @@ describe("extractTags", () => {
     expect(extractTags("#todo-list #v2 #snake_case")).toEqual(["todo-list", "v2", "snake_case"]);
   });
 
-  test("구두점도 태그에 포함된다 (현재 동작)", () => {
-    // 옛 웹 클라이언트는 문자·숫자·_·-만 태그로 봤다. Expo 이관 중 바뀐 부분이라
-    // 의도가 확인되기 전까지는 지금 동작을 그대로 고정해둔다.
-    expect(extractTags("#작업, 정리")).toEqual(["작업,"]);
+  test("구두점에서 끊는다", () => {
+    expect(extractTags("#작업, 정리")).toEqual(["작업"]);
+    expect(extractTags("#회고. 끝")).toEqual(["회고"]);
+    expect(extractTags("(#기획)")).toEqual(["기획"]);
+  });
+
+  test("라틴이 아닌 글자도 태그가 된다", () => {
+    expect(extractTags("#기획 #プラン #план")).toEqual(["기획", "プラン", "план"]);
   });
 
   test("태그가 없으면 빈 배열이다", () => {
@@ -23,6 +27,25 @@ describe("extractTags", () => {
 
   test("중복은 그대로 남는다", () => {
     expect(extractTags("#a #a")).toEqual(["a", "a"]);
+  });
+});
+
+describe("withDerivedTags", () => {
+  test("본문이 바뀌면 태그를 다시 계산한다", () => {
+    expect(withDerivedTags({ body: "#새태그 내용" })).toEqual({ body: "#새태그 내용", tags: ["새태그"] });
+  });
+
+  test("본문에서 태그가 사라지면 태그도 비운다", () => {
+    expect(withDerivedTags({ body: "태그 없는 본문" })).toEqual({ body: "태그 없는 본문", tags: [] });
+  });
+
+  test("본문이 없는 패치는 그대로 둔다", () => {
+    const patch = { title: "제목만 변경" };
+    expect(withDerivedTags(patch)).toEqual(patch);
+  });
+
+  test("빈 본문도 본문 변경으로 본다", () => {
+    expect(withDerivedTags({ body: "" })).toEqual({ body: "", tags: [] });
   });
 });
 

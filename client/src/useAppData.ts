@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
-import { extractTags, extractTodoTitles } from "./domain/memo";
+import { extractTags, extractTodoTitles, withDerivedTags } from "./domain/memo";
 import { applyTodoPatch, nextSortOrder } from "./domain/todo";
 import type { ActiveSession, AppData, Memo, Routine, Scope, Todo, WorkSession } from "./types";
 
@@ -107,8 +107,9 @@ export function useAppData(enabled: boolean) {
   };
 
   const patchMemo = async (id: string, patch: Partial<Memo>) => {
-    setData((current) => ({ ...current, memos: current.memos.map((memo) => memo.id === id ? { ...memo, ...patch } : memo) }));
-    try { await request(`/api/memos/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }); }
+    const applied = withDerivedTags(patch);
+    setData((current) => ({ ...current, memos: current.memos.map((memo) => memo.id === id ? { ...memo, ...applied } : memo) }));
+    try { await request(`/api/memos/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(applied) }); }
     catch (reason) { await reload(); throw reason; }
   };
 
