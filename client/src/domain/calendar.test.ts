@@ -2,8 +2,7 @@ import { describe, expect, test } from "vitest";
 import { addDays, dateKey, dayKeyOf, defaultDueDate, endOfMonth, startOfWeek } from "./calendar";
 
 /** 로컬 시간으로 만든다. 날짜 함수가 getFullYear 등 로컬 API만 쓰므로 타임존과 무관하다. */
-const at = (year: number, month1: number, day: number, hour = 12) =>
-  new Date(year, month1 - 1, day, hour);
+const at = (year: number, month1: number, day: number, hour = 12) => new Date(year, month1 - 1, day, hour);
 
 describe("dateKey", () => {
   test("0을 채워 YYYY-MM-DD로 만든다", () => {

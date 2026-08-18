@@ -32,10 +32,7 @@ describe("nextSortOrder", () => {
   });
 
   test("부모가 다르면 별도로 센다", () => {
-    const todos = [
-      todo("root", { sortOrder: 5 }),
-      todo("child", { parentId: "root", sortOrder: 1 }),
-    ];
+    const todos = [todo("root", { sortOrder: 5 }), todo("child", { parentId: "root", sortOrder: 1 })];
     expect(nextSortOrder(todos, "day", "root")).toBe(2);
     expect(nextSortOrder(todos, "day", null)).toBe(6);
   });

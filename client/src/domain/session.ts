@@ -42,6 +42,8 @@ export function sessionsCoveringHour(sessions: WorkSession[], date: Date, hour: 
   return sessions.filter((session) => {
     const began = new Date(session.startedAt);
     const ended = new Date(session.endedAt);
-    return began.toDateString() === date.toDateString() && began.getHours() <= hour && ended.getHours() >= hour;
+    return (
+      began.toDateString() === date.toDateString() && began.getHours() <= hour && ended.getHours() >= hour
+    );
   });
 }
