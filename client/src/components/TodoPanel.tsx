@@ -918,11 +918,18 @@ export function TodoPanel() {
                     matchesSearch(todo) ||
                     scopeTodos.some((child) => child.parentId === todo.id && matchesSearch(child)),
                 );
-              const oldDoneCount = allItems.filter(completedBeforeToday).length;
-              const items = showOldDone ? allItems : allItems.filter((todo) => !completedBeforeToday(todo));
+              const oldDoneItems = allItems.filter(completedBeforeToday);
+              const oldDoneCount = oldDoneItems.length;
+              const items = allItems.filter((todo) => !completedBeforeToday(todo));
               const previewCount = scopePreviewCount[scope];
-              const shownItems =
-                expandedScopes[scope] || query.trim() || categoryFilter ? items : items.slice(0, previewCount);
+              /* 미리보기 상한은 평소 보이는 항목에만 건다. 지난 완료는 사용자가 직접 펼친 것이고
+                 sortTodos가 완료 항목을 맨 뒤로 보내므로, 함께 자르면 눌러도 아무것도 안 나온다. */
+              const shownItems = [
+                ...(expandedScopes[scope] || query.trim() || categoryFilter
+                  ? items
+                  : items.slice(0, previewCount)),
+                ...(showOldDone ? oldDoneItems : []),
+              ];
               const sectionCollapsed = !!collapsedScopes[scope];
               return (
                 <div
