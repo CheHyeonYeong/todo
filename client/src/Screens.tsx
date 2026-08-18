@@ -137,9 +137,8 @@ function StudyPlanner({ store }: { store: Store }) {
   const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); return date; });
   const hours = Array.from({ length: 18 }, (_, index) => index + 6);
   const sessionAt = (date: Date, hour: number) => sessionsCoveringHour(store.data.sessions, date, hour);
-  // 마지막 날의 24시간 뒤까지. addDays가 아니라 고정 24시간인 것은 기존 동작 그대로다.
-  const weekEnd = new Date(days[6].getTime() + 86400000);
-  const weekSessions = sessionsStartedBetween(store.data.sessions, days[0], weekEnd);
+  // 마지막 날의 다음 날 0시까지. 고정 24시간이면 서머타임이 있는 지역에서 한 시간이 새거나 겹친다.
+  const weekSessions = sessionsStartedBetween(store.data.sessions, days[0], addDays(days[6], 1));
   const total = totalDurationMs(weekSessions);
   const addMoment = () => { const body = momentNote.trim(); if (!body) return; const now = new Date(); void store.recordSession({ id: `${now.getTime()}`, label: momentNoteLabel(body), startedAt: now.toISOString(), endedAt: new Date(now.getTime() + 1000).toISOString() }).catch(fail); setMomentNote(""); };
   const notes = weekSessions.filter(isMomentNote);
