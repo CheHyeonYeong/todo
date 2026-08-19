@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { Todo } from "../../../types";
+import type { Todo } from "../types";
 import { applyTodoPatch, completionPatch, nextSortOrder } from "./todo";
 
 const now = new Date(2026, 7, 18, 10, 0);
