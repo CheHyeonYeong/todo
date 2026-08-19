@@ -39,13 +39,16 @@ async function sessionFromCallback(url: string) {
 }
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [checking, setChecking] = useState(true);
+  const e2e = process.env.EXPO_PUBLIC_E2E === "true";
+  const testSession = e2e ? ({ user: { email: "e2e@example.com" } } as Session) : null;
+  const [session, setSession] = useState<Session | null>(testSession);
+  const [checking, setChecking] = useState(!e2e);
   const [workspace, setWorkspace] = useState<Workspace>("todo");
   const { width } = useWindowDimensions();
   const desktop = Platform.OS === "web" && width >= 1100;
   const store = useAppData(Boolean(session));
   useEffect(() => {
+    if (e2e) return;
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setChecking(false);
@@ -55,7 +58,7 @@ export default function App() {
       setChecking(false);
     });
     return () => data.subscription.unsubscribe();
-  }, []);
+  }, [e2e]);
   const login = async () => {
     try {
       const redirectTo = Linking.createURL("auth/callback");

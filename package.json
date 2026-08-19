@@ -12,11 +12,15 @@
     "build": "echo static app: no build step required",
     "preview": "node server/server.js",
     "test:server": "node --test \"server/**/*.test.js\"",
+    "e2e": "node tests/e2e.mjs",
     "skills": "bash scripts/link-skills.sh",
     "postinstall": "node scripts/fetch-cli-binary.js"
   },
   "dependencies": {
     "nodemailer": "^9.0.3",
     "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.58.2"
   }
 }

@@ -52,9 +52,11 @@ cd client && npm run typecheck
 cd client && npm run format        # prettier 적용
 cd client && npm run format:check  # CI가 확인하는 것
 cd client && npm run build         # Expo 웹 export
+npm run e2e                  # Expo 웹 + 파일 모드 API 통합 스모크
 ```
 
-`.github/workflows/ci.yml`이 PR마다 위를 돌린다. 잡이 둘로 나뉘어 있어 어느 쪽이 깨졌는지 목록에서 바로 보인다.
+`.github/workflows/ci.yml`은 PR마다 서버, 클라이언트, 웹 통합 스모크를 별도 잡으로 돌린다.
+Expo 배포 빌드는 Vercel도 별도로 검증한다.
 
 ## 알려진 문제
 
@@ -64,7 +66,6 @@ cd client && npm run build         # Expo 웹 export
   벽시계 시각이라, 22시~2시 기록은 어느 칸에도 안 나온다. Expo 이관 전부터 있던 동작이라 그대로 뒀다.
 - **기존 메모는 옛 태그를 들고 있다.** 태그 정규식을 고쳤지만 저장된 값은 다음 수정 때까지 안 바뀐다.
   일괄 재계산은 마이그레이션이라 하지 않았다.
-- **통합 테스트가 없다.** Expo 재작성 때 `tests/e2e.mjs`가 삭제됐다. 지금 유일한 통합 검증은 Vercel 빌드다.
 - **완료된 할 일이 무한히 쌓인다.** 보관 기능(`server/archiving`)이 SMTP 설정을 요구해서,
   설정이 없으면 정리 수단이 아예 없다.
 - **actions 버전이 낡았다.** `@v4`가 Node 20 폐기 경고를 낸다. `release-cli.yml`도 같이 올려야 한다.
