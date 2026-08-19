@@ -1,8 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
-import { extractTags, extractTodoTitles, withDerivedTags } from "./domain/memo";
-import { applyTodoPatch, nextSortOrder } from "./domain/todo";
+import { extractTags, extractTodoTitles, withDerivedTags } from "./features/memos/domain/memo";
+import { applyTodoPatch, nextSortOrder } from "./features/planning/domain/todo";
 import type { ActiveSession, AppData, Memo, Routine, Scope, Todo, WorkSession } from "./types";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };

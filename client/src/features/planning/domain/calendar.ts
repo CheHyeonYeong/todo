@@ -1,6 +1,6 @@
 /* 날짜 계산. 전부 로컬 시간 기준이고, "지금"은 인자로 받는다.
    화면 코드가 new Date()를 직접 부르면 자정 경계를 테스트할 수 없다. */
-import type { Scope } from "../types";
+import type { Scope } from "../../../types";
 
 /** 저장소와 API가 쓰는 날짜 키 형식: YYYY-MM-DD (로컬 시간 기준) */
 export function dateKey(date: Date): string {
