@@ -84,7 +84,12 @@ export function useAppData(enabled: boolean) {
       ...current,
       todos: [...current.todos, { ...todo, sortOrder: nextSortOrder(current.todos, input.scope, parentId) }],
     }));
-    try { await request("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(todo) }); }
+    try {
+      const response = await request("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(todo) });
+      // 서버가 정한 순서로 임시값을 바꿔 끼운다. 응답을 못 읽으면 다음 reload까지 임시값을 그대로 쓴다.
+      const saved = (await response.json().catch(() => null)) as Todo | null;
+      if (saved?.id) setData((current) => ({ ...current, todos: current.todos.map((item) => item.id === saved.id ? { ...item, ...saved } : item) }));
+    }
     catch (reason) { await reload(); throw reason; }
   };
 
