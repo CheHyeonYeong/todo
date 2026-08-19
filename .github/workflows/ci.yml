@@ -1,0 +1,53 @@
+name: CI
+
+# 서버 도메인 테스트와 클라이언트 타입 체크를 PR마다 돌린다.
+# 두 잡으로 나눠 어느 쪽이 깨졌는지 목록에서 바로 보이게 한다.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  server:
+    name: server tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # postinstall이 CLI 바이너리를 내려받는데 테스트에는 필요 없다.
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Run domain tests
+        run: npm run test:server
+
+  client:
+    name: client tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Domain tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck

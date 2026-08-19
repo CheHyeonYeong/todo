@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
+import { extractTags, extractTodoTitles, withDerivedTags } from "./domain/memo";
+import { applyTodoPatch, nextSortOrder } from "./domain/todo";
 import type { ActiveSession, AppData, Memo, Routine, Scope, Todo, WorkSession } from "./types";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
@@ -70,29 +72,29 @@ export function useAppData(enabled: boolean) {
   }, []);
 
   const addTodo = async (input: { title: string; scope: Scope; parentId?: string | null; dueDate?: string | null; category?: string | null }) => {
-    const siblings = data.todos.filter((todo) => todo.scope === input.scope && (todo.parentId || null) === (input.parentId || null));
+    const parentId = input.parentId || null;
+    // sortOrder는 싣지 않는다. 서버가 다른 기기의 할 일까지 보고 최종 순서를 정한다.
     const todo: Todo = {
       id: uid(), title: input.title.trim(), scope: input.scope, done: false,
-      createdAt: new Date().toISOString(), parentId: input.parentId || null,
+      createdAt: new Date().toISOString(), parentId,
       dueDate: input.dueDate || null, category: input.category || null,
-      sortOrder: Math.max(-1, ...siblings.map((item) => item.sortOrder ?? 0)) + 1,
     };
-    setData((current) => ({ ...current, todos: [...current.todos, todo] }));
-    try { await request("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(todo) }); }
+    // 화면에 바로 보여줄 임시 순서는 최신 목록에서 뽑는다. 다음 reload에서 서버 값으로 맞춰진다.
+    setData((current) => ({
+      ...current,
+      todos: [...current.todos, { ...todo, sortOrder: nextSortOrder(current.todos, input.scope, parentId) }],
+    }));
+    try {
+      const response = await request("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(todo) });
+      // 서버가 정한 순서로 임시값을 바꿔 끼운다. 응답을 못 읽으면 다음 reload까지 임시값을 그대로 쓴다.
+      const saved = (await response.json().catch(() => null)) as Todo | null;
+      if (saved?.id) setData((current) => ({ ...current, todos: current.todos.map((item) => item.id === saved.id ? { ...item, ...saved } : item) }));
+    }
     catch (reason) { await reload(); throw reason; }
   };
 
   const patchTodo = async (id: string, patch: Partial<Todo>) => {
-    setData((current) => {
-      let todos = current.todos.map((todo) => todo.id === id ? { ...todo, ...patch } : todo);
-      const selected = todos.find((todo) => todo.id === id);
-      if (selected?.parentId && typeof patch.done === "boolean") {
-        const siblings = todos.filter((todo) => todo.parentId === selected.parentId);
-        const parentDone = siblings.length > 0 && siblings.every((todo) => todo.done);
-        todos = todos.map((todo) => todo.id === selected.parentId ? { ...todo, done: parentDone, completedAt: parentDone ? new Date().toISOString() : null } : todo);
-      }
-      return { ...current, todos };
-    });
+    setData((current) => ({ ...current, todos: applyTodoPatch(current.todos, id, patch, new Date()) }));
     try { await request(`/api/todos/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }); }
     catch (reason) { await reload(); throw reason; }
   };
@@ -104,16 +106,20 @@ export function useAppData(enabled: boolean) {
   };
 
   const addMemo = async (title: string, body: string) => {
-    const memo: Memo = { id: uid(), title: title.trim(), body: body.trim(), createdAt: new Date().toISOString(), tags: [...body.matchAll(/#([^\s#]+)/g)].map((match) => match[1]) };
-    const extracted: Todo[] = body.split("\n").map((line) => line.match(/^\s*(?:-\s*\[\s?\]|todo:)\s*(.+)$/i)?.[1]?.trim()).filter(Boolean).map((todoTitle, index) => ({ id: uid(), title: todoTitle!, scope: "day", done: false, createdAt: new Date().toISOString(), sourceMemoId: memo.id, parentId: null, sortOrder: index }));
+    const memo: Memo = { id: uid(), title: title.trim(), body: body.trim(), createdAt: new Date().toISOString(), tags: extractTags(body) };
+    const extracted: Todo[] = extractTodoTitles(body).map((todoTitle, index) => ({
+      id: uid(), title: todoTitle, scope: "day", done: false,
+      createdAt: new Date().toISOString(), sourceMemoId: memo.id, parentId: null, sortOrder: index,
+    }));
     setData((current) => ({ ...current, memos: [memo, ...current.memos], todos: [...extracted, ...current.todos] }));
     try { await request("/api/memos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memo, todos: extracted }) }); }
     catch (reason) { await reload(); throw reason; }
   };
 
   const patchMemo = async (id: string, patch: Partial<Memo>) => {
-    setData((current) => ({ ...current, memos: current.memos.map((memo) => memo.id === id ? { ...memo, ...patch } : memo) }));
-    try { await request(`/api/memos/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }); }
+    const applied = withDerivedTags(patch);
+    setData((current) => ({ ...current, memos: current.memos.map((memo) => memo.id === id ? { ...memo, ...applied } : memo) }));
+    try { await request(`/api/memos/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(applied) }); }
     catch (reason) { await reload(); throw reason; }
   };
 
