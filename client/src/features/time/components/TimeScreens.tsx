@@ -10,10 +10,10 @@ import {
   sessionsStartedBetween,
   totalDurationMs,
 } from "../domain/session";
-import type { useAppData } from "../../../useAppData";
+import type { useTimeTracking } from "../useTimeTracking";
 import { Card, fail, scopeOptions, styles, weekdays } from "../../shared";
 
-type Store = ReturnType<typeof useAppData>;
+type Store = ReturnType<typeof useTimeTracking>;
 
 type TimerMode = "focus" | "short" | "long";
 const timerDefaults: Record<TimerMode, number> = { focus: 25, short: 5, long: 15 };

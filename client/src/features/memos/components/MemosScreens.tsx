@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import type { useAppData } from "../../../useAppData";
+import type { useMemos } from "../useMemos";
 import { Card, fail, scopeOptions, styles, weekdays } from "../../shared";
 
-type Store = ReturnType<typeof useAppData>;
+type Store = ReturnType<typeof useMemos>;
 
 export function MemoScreen({ store }: { store: Store }) {
   const [title, setTitle] = useState("");

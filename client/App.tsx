@@ -16,7 +16,10 @@ import {
 } from "react-native";
 import { supabase } from "./src/api";
 import { MemoScreen, TimeScreen, TodoScreen } from "./src/Screens";
-import { useAppData } from "./src/useAppData";
+import { useMemos } from "./src/features/memos/useMemos";
+import { usePlanning } from "./src/features/planning/usePlanning";
+import { useTimeTracking } from "./src/features/time/useTimeTracking";
+import { useWorkspace } from "./src/workspace/useWorkspace";
 
 WebBrowser.maybeCompleteAuthSession();
 type Workspace = "todo" | "memo" | "time";
@@ -46,7 +49,10 @@ export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>("todo");
   const { width } = useWindowDimensions();
   const desktop = Platform.OS === "web" && width >= 1100;
-  const store = useAppData(Boolean(session));
+  const workspaceStore = useWorkspace(Boolean(session));
+  const planningStore = usePlanning(workspaceStore);
+  const memoStore = useMemos(workspaceStore);
+  const timeStore = useTimeTracking(workspaceStore);
   useEffect(() => {
     if (e2e) return;
     supabase.auth.getSession().then(({ data }) => {
@@ -149,7 +155,10 @@ export default function App() {
               </Text>
             </View>
             <View style={styles.topActions}>
-              <Pressable style={desktop && styles.topActionButton} onPress={() => void store.reload()}>
+              <Pressable
+                style={desktop && styles.topActionButton}
+                onPress={() => void workspaceStore.reload()}
+              >
                 <Text style={styles.refresh}>↻ 새로고침</Text>
               </Pressable>
               <Pressable onPress={() => void supabase.auth.signOut()}>
@@ -157,34 +166,34 @@ export default function App() {
               </Pressable>
             </View>
           </View>
-          {store.error && (
-            <Pressable style={styles.errorBar} onPress={() => void store.reload()}>
-              <Text style={styles.errorText}>{store.error} · 다시 시도</Text>
+          {workspaceStore.error && (
+            <Pressable style={styles.errorBar} onPress={() => void workspaceStore.reload()}>
+              <Text style={styles.errorText}>{workspaceStore.error} · 다시 시도</Text>
             </Pressable>
           )}
           <View style={[styles.content, desktop && styles.desktopContent]}>
-            {store.loading ? (
+            {workspaceStore.loading ? (
               <ActivityIndicator style={styles.loader} color="#176b47" />
             ) : desktop ? (
               <View style={styles.dashboard}>
                 <View style={styles.dashboardPrimary}>
                   <View style={[styles.dashboardPanel, styles.todoPanel]}>
-                    <TodoScreen store={store} />
+                    <TodoScreen store={planningStore} />
                   </View>
                   <View style={[styles.dashboardPanel, styles.memoPanel]}>
-                    <MemoScreen store={store} />
+                    <MemoScreen store={memoStore} />
                   </View>
                 </View>
                 <View style={[styles.dashboardPanel, styles.timePanel]}>
-                  <TimeScreen store={store} />
+                  <TimeScreen store={timeStore} />
                 </View>
               </View>
             ) : workspace === "todo" ? (
-              <TodoScreen store={store} />
+              <TodoScreen store={planningStore} />
             ) : workspace === "memo" ? (
-              <MemoScreen store={store} />
+              <MemoScreen store={memoStore} />
             ) : (
-              <TimeScreen store={store} />
+              <TimeScreen store={timeStore} />
             )}
           </View>
           {!desktop && navigation}

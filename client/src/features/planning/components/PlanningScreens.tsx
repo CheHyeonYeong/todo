@@ -4,10 +4,10 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { dateKey, dayKeyOf, defaultDueDate } from "../domain/calendar";
 import { completionPatch } from "../domain/todo";
 import type { Scope, Todo } from "../../../types";
-import type { useAppData } from "../../../useAppData";
+import type { usePlanning } from "../usePlanning";
 import { Card, fail, scopeOptions, styles, weekdays } from "../../shared";
 
-type Store = ReturnType<typeof useAppData>;
+type Store = ReturnType<typeof usePlanning>;
 
 export function TodoScreen({ store }: { store: Store }) {
   const [view, setView] = useState<"list" | "calendar">("list");
