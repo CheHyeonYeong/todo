@@ -1,5 +1,5 @@
 /* 메모 본문에서 파생되는 값. 저장할 때마다 본문에서 다시 계산한다. */
-import type { Memo } from "../types";
+import type { Memo } from "./types";
 
 /**
  * 본문의 #태그. 문자·숫자·밑줄·하이픈까지만 태그로 보고 구두점에서 끊는다.

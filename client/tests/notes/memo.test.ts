@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { extractTags, extractTodoTitles, withDerivedTags } from "./memo";
+import { extractTags, extractTodoTitles, withDerivedTags } from "../../src/notes/model/memoRules";
 
 describe("extractTags", () => {
   test("# 뒤의 태그를 순서대로 모은다", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { WorkSession } from "../types";
+import type { WorkSession } from "../../src/time/model/types";
 import {
   isMomentNote,
   momentNoteLabel,
@@ -8,7 +8,7 @@ import {
   sessionsCoveringHour,
   sessionsStartedBetween,
   totalDurationMs,
-} from "./session";
+} from "../../src/time/model/sessionRules";
 
 const session = (label: string, startedAt: Date, endedAt: Date): WorkSession => ({
   id: `${startedAt.getTime()}`,

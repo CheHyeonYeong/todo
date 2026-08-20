@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../domain/calendar";
+import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
 import {
   isMomentNote,
   momentNoteLabel,
@@ -9,9 +9,9 @@ import {
   sessionsCoveringHour,
   sessionsStartedBetween,
   totalDurationMs,
-} from "../../domain/session";
-import { completionPatch } from "../../domain/todo";
-import type { Scope, Todo } from "../../types";
+} from "../../time/model/sessionRules";
+import { completionPatch } from "../../todo/model/todoRules";
+import type { Scope, Todo } from "../../todo/model/types";
 import type { useAppData } from "../../useAppData";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";

@@ -1,11 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
-import { extractTags, extractTodoTitles, withDerivedTags } from "./domain/memo";
-import { applyTodoPatch, nextSortOrder } from "./domain/todo";
-import type { ActiveSession, AppData, Memo, Routine, Scope, Todo, WorkSession } from "./types";
+import { extractTags, extractTodoTitles, withDerivedTags } from "./notes/model/memoRules";
+import type { Memo } from "./notes/model/types";
+import type { ActiveSession, WorkSession } from "./time/model/types";
+import type { TodoDto } from "./todo/api/todoDto";
+import { applyTodoPatch, nextSortOrder } from "./todo/model/todoRules";
+import { toTodo, type Routine, type Scope, type Todo } from "./todo/model/types";
+import type { WorkspaceDto } from "./workspace/api/workspaceDto";
+import { toWorkspaceData, type WorkspaceData } from "./workspace/model/types";
 
-const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
+const EMPTY_DATA: WorkspaceData = { todos: [], memos: [], sessions: [], routines: [] };
 const ACTIVE_SESSION_KEY = "todo:active-session";
 const DATA_CACHE_KEY = "todo:data-cache";
 
@@ -23,7 +28,7 @@ async function request(path: string, init?: RequestInit) {
 }
 
 export function useAppData(enabled: boolean) {
-  const [data, setData] = useState<AppData>(EMPTY_DATA);
+  const [data, setData] = useState<WorkspaceData>(EMPTY_DATA);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +38,8 @@ export function useAppData(enabled: boolean) {
     setLoading(true);
     try {
       const response = await request("/api/data");
-      const incoming = (await response.json()) as Partial<AppData>;
-      setData({
-        todos: Array.isArray(incoming.todos) ? incoming.todos : [],
-        memos: Array.isArray(incoming.memos) ? incoming.memos : [],
-        sessions: Array.isArray(incoming.sessions) ? incoming.sessions : [],
-        routines: Array.isArray(incoming.routines) ? incoming.routines : [],
-      });
+      const incoming = (await response.json()) as Partial<WorkspaceDto>;
+      setData(toWorkspaceData(incoming));
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "데이터를 불러오지 못했습니다.");
@@ -54,7 +54,7 @@ export function useAppData(enabled: boolean) {
         .then((saved) => {
           if (!saved) return;
           try {
-            setData(JSON.parse(saved) as AppData);
+            setData(JSON.parse(saved) as WorkspaceData);
           } catch {
             void AsyncStorage.removeItem(DATA_CACHE_KEY);
           }
@@ -109,11 +109,11 @@ export function useAppData(enabled: boolean) {
         body: JSON.stringify(todo),
       });
       // 서버가 정한 순서로 임시값을 바꿔 끼운다. 응답을 못 읽으면 다음 reload까지 임시값을 그대로 쓴다.
-      const saved = (await response.json().catch(() => null)) as Todo | null;
+      const saved = (await response.json().catch(() => null)) as TodoDto | null;
       if (saved?.id)
         setData((current) => ({
           ...current,
-          todos: current.todos.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)),
+          todos: current.todos.map((item) => (item.id === saved.id ? { ...item, ...toTodo(saved) } : item)),
         }));
     } catch (reason) {
       await reload();
@@ -156,7 +156,7 @@ export function useAppData(enabled: boolean) {
       createdAt: new Date().toISOString(),
       tags: extractTags(body),
     };
-    const extracted: Todo[] = extractTodoTitles(body).map((todoTitle, index) => ({
+    const extracted: TodoDto[] = extractTodoTitles(body).map((todoTitle, index) => ({
       id: uid(),
       title: todoTitle,
       scope: "day",
@@ -169,7 +169,7 @@ export function useAppData(enabled: boolean) {
     setData((current) => ({
       ...current,
       memos: [memo, ...current.memos],
-      todos: [...extracted, ...current.todos],
+      todos: [...extracted.map(toTodo), ...current.todos],
     }));
     try {
       await request("/api/memos", {

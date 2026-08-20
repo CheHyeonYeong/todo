@@ -1,6 +1,6 @@
 /* 할 일의 규칙. 서버(server/todo/domain)에도 같은 규칙이 있고, 낙관적 갱신 때문에
    화면이 서버 응답보다 먼저 이 계산을 쓴다. 둘이 어긋나면 20초 뒤 화면이 되돌아간다. */
-import type { Scope, Todo } from "../types";
+import type { Scope, Todo } from "./types";
 
 /** 같은 칸(스코프+부모)의 맨 뒤. 형제가 없으면 0부터 시작한다. */
 export function nextSortOrder(todos: Todo[], scope: Scope, parentId: string | null): number {
