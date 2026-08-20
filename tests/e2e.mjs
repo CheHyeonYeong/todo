@@ -13,18 +13,24 @@ const dataFile = path.join(os.tmpdir(), `todo-e2e-${Date.now()}.json`);
 
 function findChromium() {
   if (process.env.E2E_CHROMIUM) return process.env.E2E_CHROMIUM;
-  const cache = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "ms-playwright");
+  const configured = chromium.executablePath();
+  if (existsSync(configured)) return configured;
+
+  const cache =
+    process.env.PLAYWRIGHT_BROWSERS_PATH ||
+    (process.platform === "win32"
+      ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "ms-playwright")
+      : path.join(os.homedir(), ".cache", "ms-playwright"));
   if (!existsSync(cache)) throw new Error("Playwright Chromium이 설치되지 않았습니다.");
-  const versions = readdirSync(cache).sort().reverse();
-  for (const version of versions) {
-    const relative = version.startsWith("chromium_headless_shell-")
-      ? ["chrome-headless-shell-win64", "chrome-headless-shell.exe"]
-      : version.startsWith("chromium-")
-        ? ["chrome-win", "chrome.exe"]
-        : null;
-    if (!relative) continue;
-    const executable = path.join(cache, version, ...relative);
-    if (existsSync(executable)) return executable;
+
+  const executableNames =
+    process.platform === "win32" ? ["chrome-headless-shell.exe", "chrome.exe"] : ["chrome-headless-shell", "chrome"];
+  for (const version of readdirSync(cache).sort().reverse()) {
+    const versionDir = path.join(cache, version);
+    for (const relative of readdirSync(versionDir, { recursive: true })) {
+      const executable = path.join(versionDir, String(relative));
+      if (executableNames.includes(path.basename(executable)) && existsSync(executable)) return executable;
+    }
   }
   throw new Error("Playwright Chromium 실행 파일을 찾지 못했습니다.");
 }
