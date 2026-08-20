@@ -1,26 +1,15 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
-import {
-  isMomentNote,
-  momentNoteLabel,
-  momentNoteText,
-  sessionsCoveringHour,
-  sessionsStartedBetween,
-  totalDurationMs,
-} from "../../time/model/sessionRules";
-import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { defaultDueDate } from "../../todo/model/calendar";
+import type { Scope } from "../../todo/model/types";
+import type { RoutineStore } from "../../routines/model/store";
+import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
-const weekdays = weekdayLabels;
+type Store = TodoStore & RoutineStore;
+const handleRequestError = showRequestError;
 const scopeOptions: { value: Scope; label: string }[] = [
   { value: "day", label: "오늘" },
   { value: "week", label: "이번 주" },
@@ -54,7 +43,7 @@ export function TodoScreen({ store }: { store: Store }) {
       setCategory("");
       setDueDate("");
     } catch (reason) {
-      fail(reason);
+      handleRequestError(reason);
     }
   };
 

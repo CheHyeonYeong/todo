@@ -1,31 +1,14 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
-import {
-  isMomentNote,
-  momentNoteLabel,
-  momentNoteText,
-  sessionsCoveringHour,
-  sessionsStartedBetween,
-  totalDurationMs,
-} from "../../time/model/sessionRules";
-import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import { useState } from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
+import type { RoutineStore } from "../../routines/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
 import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
+type Store = RoutineStore;
+const handleRequestError = showRequestError;
 const weekdays = weekdayLabels;
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: "day", label: "오늘" },
-  { value: "week", label: "이번 주" },
-  { value: "month", label: "이번 달" },
-];
 
 export function RoutineEditor({ store }: { store: Store }) {
   const [title, setTitle] = useState("");
@@ -37,7 +20,7 @@ export function RoutineEditor({ store }: { store: Store }) {
       await store.addRoutine(title, days, category);
       setTitle("");
     } catch (reason) {
-      fail(reason);
+      handleRequestError(reason);
     }
   };
   return (
@@ -67,12 +50,14 @@ export function RoutineEditor({ store }: { store: Store }) {
         <View key={routine.id} style={styles.listRow}>
           <Pressable
             style={styles.flex}
-            onPress={() => void store.patchRoutine(routine.id, { active: !routine.active }).catch(fail)}
+            onPress={() =>
+              void store.patchRoutine(routine.id, { active: !routine.active }).catch(handleRequestError)
+            }
           >
             <Text style={[styles.todoTitle, !routine.active && styles.done]}>{routine.title}</Text>
             <Text style={styles.meta}>{routine.weekdays.map((day) => weekdays[day]).join(" · ")}</Text>
           </Pressable>
-          <Pressable onPress={() => void store.deleteRoutine(routine.id).catch(fail)}>
+          <Pressable onPress={() => void store.deleteRoutine(routine.id).catch(handleRequestError)}>
             <Text style={styles.danger}>삭제</Text>
           </Pressable>
         </View>

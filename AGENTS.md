@@ -25,23 +25,41 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 
 ## 클라이언트 구조
 
-`client/src/domain/`에 비즈니스 규칙을 순수함수로 모아둔다. 화면 코드(`Screens.tsx`)와
-상태 훅(`useAppData.ts`)은 이 함수들을 부르기만 한다.
+`client/src/`는 프런트엔드 기능 컨텍스트를 최상위로 둔다: `notes/`, `routines/`, `time/`,
+`todo/`, `workspace/`. 공통 기반만 `shared/`에 두고 앱 조립은 `useAppData.ts`가 담당한다.
+
+각 컨텍스트 안의 역할은 다음과 같다.
+
+| 디렉터리 | 역할 |
+| --- | --- |
+| `api/` | 서버 응답 그대로의 wire DTO. 컴포넌트에서 직접 사용하지 않는다. |
+| `model/types.ts` | 화면과 비즈니스 규칙이 사용하는 프런트엔드 모델 및 DTO 변환 함수 |
+| `model/*Rules.ts` | React와 무관한 순수 비즈니스 규칙 |
+| `hooks/` | 해당 기능의 API 명령과 낙관적 상태 갱신 |
+| `components/` | 기능 화면과 지역 스타일 |
+
+`workspace/hooks/useWorkspaceData.ts`는 단일 스냅샷 로딩·캐시를 소유한다. 최상위
+`useAppData.ts`는 이를 기능 훅들과 조립만 하며 비즈니스 로직을 직접 구현하지 않는다.
+화면 prop은 `model/store.ts`의 좁은 기능별 타입을 사용한다. 서버 DTO 전체나
+`ReturnType<typeof useAppData>`를 화면에 노출하지 않는다.
+
+순수 규칙과 테스트 위치:
 
 | 모듈 | 규칙 |
 | --- | --- |
-| `calendar.ts` | 날짜 키, 주·월 경계, 스코프별 기본 마감일 |
-| `session.ts` | 순간 메모 판별, 소요 시간, 시각대 겹침 |
-| `todo.ts` | 정렬 순서, 완료 시각, 부모 완료 전파 |
-| `memo.ts` | 태그·할 일 파싱, 본문에서 파생되는 값 |
+| `todo/model/calendar.ts` | 날짜 키, 주·월 경계, 스코프별 기본 마감일 |
+| `time/model/sessionRules.ts` | 순간 메모 판별, 소요 시간, 시각대 겹침 |
+| `todo/model/todoRules.ts` | 정렬 순서, 완료 시각, 부모 완료 전파 |
+| `notes/model/memoRules.ts` | 태그·할 일 파싱, 본문에서 파생되는 값 |
+| `client/tests/<context>/` | 컨텍스트별 순수 규칙 테스트 |
 
 지켜야 할 규칙 두 가지:
 
-- **`domain/`은 순수하게 둔다.** `new Date()`를 안에서 부르지 말고 "지금"을 인자로 받는다.
+- **`model/*Rules.ts`는 순수하게 둔다.** `new Date()`를 안에서 부르지 말고 "지금"을 인자로 받는다.
   자정 경계를 테스트할 수 없게 되는 순간 이 폴더의 존재 이유가 사라진다.
-- **규칙을 화면 코드에 다시 인라인하지 않는다.** 새 규칙이 생기면 `domain/`에 함수로 넣고 테스트를 붙인다.
+- **규칙을 화면 코드에 다시 인라인하지 않는다.** 새 규칙이 생기면 해당 컨텍스트의 `model/`에 함수로 넣고 테스트를 붙인다.
 
-`domain/`은 react-native를 import하지 않으므로 node 환경에서 그대로 테스트된다.
+순수 규칙 모듈은 react-native를 import하지 않으므로 node 환경에서 그대로 테스트된다.
 
 ## 검사 명령
 

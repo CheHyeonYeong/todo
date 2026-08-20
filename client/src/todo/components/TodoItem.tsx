@@ -1,31 +1,15 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
-import {
-  isMomentNote,
-  momentNoteLabel,
-  momentNoteText,
-  sessionsCoveringHour,
-  sessionsStartedBetween,
-  totalDurationMs,
-} from "../../time/model/sessionRules";
+import { useMemo, useState } from "react";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
+import { dateKey } from "../../todo/model/calendar";
 import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import type { Todo } from "../../todo/model/types";
+import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
-const weekdays = weekdayLabels;
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: "day", label: "오늘" },
-  { value: "week", label: "이번 주" },
-  { value: "month", label: "이번 달" },
-];
+type Store = TodoStore;
+const handleRequestError = showRequestError;
 
 export function TodoItem({
   todo,
@@ -52,11 +36,16 @@ export function TodoItem({
     [store.data.todos, todo.id],
   );
   const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < dateKey(new Date()));
-  const toggle = () => void store.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(fail);
+  const toggle = () =>
+    void store.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(handleRequestError);
   const remove = () =>
     Alert.alert("할 일 삭제", `“${todo.title}”을 삭제할까요?`, [
       { text: "취소", style: "cancel" },
-      { text: "삭제", style: "destructive", onPress: () => void store.deleteTodo(todo.id).catch(fail) },
+      {
+        text: "삭제",
+        style: "destructive",
+        onPress: () => void store.deleteTodo(todo.id).catch(handleRequestError),
+      },
     ]);
   const save = async () => {
     try {
@@ -68,7 +57,7 @@ export function TodoItem({
       });
       setEditing(false);
     } catch (reason) {
-      fail(reason);
+      handleRequestError(reason);
     }
   };
   const addChild = async () => {
@@ -78,7 +67,7 @@ export function TodoItem({
       setSubDraft("");
       setExpanded(true);
     } catch (reason) {
-      fail(reason);
+      handleRequestError(reason);
     }
   };
   const toggleExpanded = () => setExpanded((value) => !value);
@@ -156,13 +145,13 @@ export function TodoItem({
                       done: !child.done,
                       completedAt: !child.done ? new Date().toISOString() : null,
                     })
-                    .catch(fail)
+                    .catch(handleRequestError)
                 }
               >
                 <Text style={styles.check}>{child.done ? "✓" : ""}</Text>
               </Pressable>
               <Text style={[styles.flex, child.done && styles.done]}>{child.title}</Text>
-              <Pressable onPress={() => void store.deleteTodo(child.id).catch(fail)}>
+              <Pressable onPress={() => void store.deleteTodo(child.id).catch(handleRequestError)}>
                 <Text style={styles.danger}>×</Text>
               </Pressable>
             </View>

@@ -1,31 +1,12 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
-import {
-  isMomentNote,
-  momentNoteLabel,
-  momentNoteText,
-  sessionsCoveringHour,
-  sessionsStartedBetween,
-  totalDurationMs,
-} from "../../time/model/sessionRules";
-import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import type { MemoStore } from "../../notes/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
-const weekdays = weekdayLabels;
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: "day", label: "오늘" },
-  { value: "week", label: "이번 주" },
-  { value: "month", label: "이번 달" },
-];
+type Store = MemoStore;
+const handleRequestError = showRequestError;
 
 export function MemoScreen({ store }: { store: Store }) {
   const [title, setTitle] = useState("");
@@ -51,7 +32,7 @@ export function MemoScreen({ store }: { store: Store }) {
       else await store.addMemo(title, body);
       clear();
     } catch (reason) {
-      fail(reason);
+      handleRequestError(reason);
     }
   };
   const visible = [...store.data.memos]
@@ -122,7 +103,7 @@ export function MemoScreen({ store }: { store: Store }) {
                     {
                       text: "삭제",
                       style: "destructive",
-                      onPress: () => void store.deleteMemo(memo.id).catch(fail),
+                      onPress: () => void store.deleteMemo(memo.id).catch(handleRequestError),
                     },
                   ])
                 }

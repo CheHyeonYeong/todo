@@ -1,31 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
-import {
-  isMomentNote,
-  momentNoteLabel,
-  momentNoteText,
-  sessionsCoveringHour,
-  sessionsStartedBetween,
-  totalDurationMs,
-} from "../../time/model/sessionRules";
-import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import type { TimeStore } from "../../time/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
-const weekdays = weekdayLabels;
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: "day", label: "오늘" },
-  { value: "week", label: "이번 주" },
-  { value: "month", label: "이번 달" },
-];
+type Store = TimeStore;
+const handleRequestError = showRequestError;
 import { SessionTracker } from "./SessionTracker";
 import { StudyPlanner } from "./StudyPlanner";
 
@@ -74,7 +56,7 @@ export function TimeScreen({ store }: { store: Store }) {
                 startedAt: new Date(startedAt.current).toISOString(),
                 endedAt: new Date(endedAt).toISOString(),
               })
-              .catch(fail);
+              .catch(handleRequestError);
           startedAt.current = null;
           if (mode === "focus") {
             const nextCount = focusCount + 1;
@@ -124,7 +106,7 @@ export function TimeScreen({ store }: { store: Store }) {
             startedAt: new Date(startedAt.current).toISOString(),
             endedAt: new Date().toISOString(),
           })
-          .catch(fail);
+          .catch(handleRequestError);
       startedAt.current = null;
     } else {
       startedAt.current = Date.now();

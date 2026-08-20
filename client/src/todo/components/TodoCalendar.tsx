@@ -1,25 +1,13 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
-import {
-  isMomentNote,
-  momentNoteLabel,
-  momentNoteText,
-  sessionsCoveringHour,
-  sessionsStartedBetween,
-  totalDurationMs,
-} from "../../time/model/sessionRules";
-import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import { useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { dateKey, dayKeyOf } from "../../todo/model/calendar";
+import type { Scope } from "../../todo/model/types";
+import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
-import { showRequestError } from "../../shared/ui/showRequestError";
 import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
+type Store = TodoStore;
 const weekdays = weekdayLabels;
 const scopeOptions: { value: Scope; label: string }[] = [
   { value: "day", label: "오늘" },

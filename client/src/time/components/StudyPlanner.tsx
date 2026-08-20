@@ -1,7 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { addDays, startOfWeek } from "../../todo/model/calendar";
 import {
   isMomentNote,
   momentNoteLabel,
@@ -10,22 +9,15 @@ import {
   sessionsStartedBetween,
   totalDurationMs,
 } from "../../time/model/sessionRules";
-import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import type { TimeStore } from "../../time/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
 import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
+type Store = TimeStore;
+const handleRequestError = showRequestError;
 const weekdays = weekdayLabels;
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: "day", label: "오늘" },
-  { value: "week", label: "이번 주" },
-  { value: "month", label: "이번 달" },
-];
 
 export function StudyPlanner({ store }: { store: Store }) {
   const [weekOffset, setWeekOffset] = useState(0);
@@ -59,7 +51,7 @@ export function StudyPlanner({ store }: { store: Store }) {
         startedAt: now.toISOString(),
         endedAt: new Date(now.getTime() + 1000).toISOString(),
       })
-      .catch(fail);
+      .catch(handleRequestError);
     setMomentNote("");
   };
   const notes = useMemo(() => weekSessions.filter(isMomentNote), [weekSessions]);
@@ -149,7 +141,7 @@ export function StudyPlanner({ store }: { store: Store }) {
             <Text style={styles.todoTitle}>{momentNoteText(note)}</Text>
             <Text style={styles.meta}>{new Date(note.startedAt).toLocaleString()}</Text>
           </View>
-          <Pressable onPress={() => void store.deleteSession(note.id).catch(fail)}>
+          <Pressable onPress={() => void store.deleteSession(note.id).catch(handleRequestError)}>
             <Text style={styles.danger}>삭제</Text>
           </Pressable>
         </View>

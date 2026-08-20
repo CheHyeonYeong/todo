@@ -1,6 +1,7 @@
 import { toMemo, type Memo } from "../../notes/model/types";
+import { toRoutine, type Routine } from "../../routines/model/types";
 import { toWorkSession, type WorkSession } from "../../time/model/types";
-import { toRoutine, toTodo, type Routine, type Todo } from "../../todo/model/types";
+import { toTodo, type Todo } from "../../todo/model/types";
 import type { WorkspaceDto } from "../api/workspaceDto";
 
 export interface WorkspaceData {

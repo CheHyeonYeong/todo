@@ -1,31 +1,12 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { addDays, dateKey, dayKeyOf, defaultDueDate, startOfWeek } from "../../todo/model/calendar";
-import {
-  isMomentNote,
-  momentNoteLabel,
-  momentNoteText,
-  sessionsCoveringHour,
-  sessionsStartedBetween,
-  totalDurationMs,
-} from "../../time/model/sessionRules";
-import { completionPatch } from "../../todo/model/todoRules";
-import type { Scope, Todo } from "../../todo/model/types";
-import type { useAppData } from "../../useAppData";
+import { useMemo } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import type { ScheduleStore } from "../../workspace/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
-type Store = ReturnType<typeof useAppData>;
-const fail = showRequestError;
-const weekdays = weekdayLabels;
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: "day", label: "오늘" },
-  { value: "week", label: "이번 주" },
-  { value: "month", label: "이번 달" },
-];
+type Store = ScheduleStore;
+const handleRequestError = showRequestError;
 
 export function ScheduleScreen({ store }: { store: Store }) {
   const grouped = useMemo(() => {
@@ -82,7 +63,7 @@ export function ScheduleScreen({ store }: { store: Store }) {
                       분
                     </Text>
                   </View>
-                  <Pressable onPress={() => void store.deleteSession(session.id).catch(fail)}>
+                  <Pressable onPress={() => void store.deleteSession(session.id).catch(handleRequestError)}>
                     <Text style={styles.danger}>삭제</Text>
                   </Pressable>
                 </View>

@@ -15,12 +15,3 @@ export interface TodoDto {
   routineId?: string | null;
   sortOrder?: number;
 }
-
-export interface RoutineDto {
-  id: string;
-  title: string;
-  weekdays: number[];
-  category?: string | null;
-  active: boolean;
-  createdAt: string;
-}
