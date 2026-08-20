@@ -38,7 +38,7 @@ export function useWorkspaceData(enabled: boolean) {
       .then((saved) => {
         if (!saved) return;
         try {
-          setData(JSON.parse(saved) as WorkspaceData);
+          setData(toWorkspaceData(JSON.parse(saved) as Partial<WorkspaceDto>));
         } catch {
           void AsyncStorage.removeItem(DATA_CACHE_KEY);
         }
