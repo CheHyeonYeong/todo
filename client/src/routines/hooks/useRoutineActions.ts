@@ -1,13 +1,12 @@
 import { request } from "../../shared/api/request";
 import { uid } from "../../shared/id/uid";
 import type { SetWorkspaceData } from "../../workspace/hooks/useWorkspaceData";
-import type { Routine } from "../model/types";
-
-export type RoutineActions = ReturnType<typeof useRoutineActions>;
+import type { RoutineDto } from "../api/routineDto";
+import { toRoutine, type Routine } from "../model/types";
 
 export function useRoutineActions(setData: SetWorkspaceData, reload: () => Promise<void>) {
   const addRoutine = async (title: string, weekdays: number[], category?: string) => {
-    const routine: Routine = {
+    const routine: RoutineDto = {
       id: uid(),
       title: title.trim(),
       weekdays,
@@ -15,7 +14,7 @@ export function useRoutineActions(setData: SetWorkspaceData, reload: () => Promi
       active: true,
       createdAt: new Date().toISOString(),
     };
-    setData((current) => ({ ...current, routines: [...current.routines, routine] }));
+    setData((current) => ({ ...current, routines: [...current.routines, toRoutine(routine)] }));
     try {
       await request("/api/routines", {
         method: "POST",

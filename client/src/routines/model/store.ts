@@ -1,4 +1,8 @@
-import type { WorkspaceData } from "../../workspace/model/types";
-import type { RoutineActions } from "../hooks/useRoutineActions";
+import type { Routine } from "./types";
 
-export type RoutineStore = RoutineActions & { data: Pick<WorkspaceData, "routines"> };
+export interface RoutineStore {
+  data: { routines: Routine[] };
+  addRoutine(title: string, weekdays: number[], category?: string): Promise<void>;
+  patchRoutine(id: string, patch: Partial<Routine>): Promise<void>;
+  deleteRoutine(id: string): Promise<void>;
+}

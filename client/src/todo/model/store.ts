@@ -1,4 +1,14 @@
-import type { WorkspaceData } from "../../workspace/model/types";
-import type { TodoActions } from "../hooks/useTodoActions";
+import type { Scope, Todo } from "./types";
 
-export type TodoStore = TodoActions & { data: Pick<WorkspaceData, "todos"> };
+export interface TodoStore {
+  data: { todos: Todo[] };
+  addTodo(input: {
+    title: string;
+    scope: Scope;
+    parentId?: string | null;
+    dueDate?: string | null;
+    category?: string | null;
+  }): Promise<void>;
+  patchTodo(id: string, patch: Partial<Todo>): Promise<void>;
+  deleteTodo(id: string): Promise<void>;
+}

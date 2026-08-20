@@ -6,8 +6,6 @@ import type { SetWorkspaceData } from "../../workspace/hooks/useWorkspaceData";
 import { extractTags, extractTodoTitles, withDerivedTags } from "../model/memoRules";
 import type { Memo } from "../model/types";
 
-export type MemoActions = ReturnType<typeof useMemoActions>;
-
 export function useMemoActions(setData: SetWorkspaceData, reload: () => Promise<void>) {
   const addMemo = async (title: string, body: string) => {
     const memo: Memo = {

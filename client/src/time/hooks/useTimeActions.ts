@@ -7,8 +7,6 @@ import type { ActiveSession, WorkSession } from "../model/types";
 
 const ACTIVE_SESSION_KEY = "todo:active-session";
 
-export type TimeActions = ReturnType<typeof useTimeActions>;
-
 export function useTimeActions(setData: SetWorkspaceData) {
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
 

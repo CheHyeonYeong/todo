@@ -16,5 +16,13 @@ export interface MemoDraft {
 }
 
 export function toMemo(dto: MemoDto): Memo {
-  return { ...dto, tags: [...dto.tags] };
+  return {
+    id: dto.id,
+    title: dto.title,
+    body: dto.body,
+    createdAt: dto.createdAt,
+    tags: [...dto.tags],
+    starred: dto.starred,
+    sortOrder: dto.sortOrder,
+  };
 }

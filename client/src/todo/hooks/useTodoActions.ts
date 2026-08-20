@@ -5,8 +5,6 @@ import type { TodoDto } from "../api/todoDto";
 import { applyTodoPatch, nextSortOrder } from "../model/todoRules";
 import { toTodo, type Scope, type Todo } from "../model/types";
 
-export type TodoActions = ReturnType<typeof useTodoActions>;
-
 export function useTodoActions(setData: SetWorkspaceData, reload: () => Promise<void>) {
   const addTodo = async (input: {
     title: string;

@@ -25,8 +25,9 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 
 ## 클라이언트 구조
 
-`client/src/`는 프런트엔드 기능 컨텍스트를 최상위로 둔다: `notes/`, `routines/`, `time/`,
-`todo/`, `workspace/`. 공통 기반만 `shared/`에 두고 앱 조립은 `useAppData.ts`가 담당한다.
+`client/src/`는 프런트엔드 기능 컨텍스트를 최상위로 둔다: `application/`, `identity/`, `notes/`,
+`routines/`, `time/`, `todo/`, `workspace/`. 공통 기반만 `shared/`에 두고 데이터 조립은
+`useAppData.ts`, 화면 조립은 `application/`이 담당한다.
 
 각 컨텍스트 안의 역할은 다음과 같다.
 
@@ -37,6 +38,11 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 | `model/*Rules.ts` | React와 무관한 순수 비즈니스 규칙 |
 | `hooks/` | 해당 기능의 API 명령과 낙관적 상태 갱신 |
 | `components/` | 기능 화면과 지역 스타일 |
+
+`App.tsx`는 인증 상태와 앱 셸만 조립한다. 로그인 생명주기는 `identity/`, 내비게이션과
+반응형 레이아웃은 `application/`이 소유한다. Expo Router가 예약한 `src/app/`은 사용하지 않는다.
+프런트엔드 `App.tsx` 및 `src/**/*.ts(x)` 파일은
+200줄을 넘기지 않으며 `npm run check:lines`로 검사한다.
 
 `workspace/hooks/useWorkspaceData.ts`는 단일 스냅샷 로딩·캐시를 소유한다. 최상위
 `useAppData.ts`는 이를 기능 훅들과 조립만 하며 비즈니스 로직을 직접 구현하지 않는다.
@@ -67,6 +73,7 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 npm run test:server          # 서버 도메인 테스트 (node --test)
 cd client && npm test        # 클라이언트 도메인 테스트 (vitest)
 cd client && npm run typecheck
+cd client && npm run check:lines    # 프런트엔드 소스 파일 200줄 제한
 cd client && npm run format        # prettier 적용
 cd client && npm run format:check  # CI가 확인하는 것
 cd client && npm run build         # Expo 웹 export

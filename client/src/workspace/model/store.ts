@@ -1,6 +1,6 @@
-import type { TimeActions } from "../../time/hooks/useTimeActions";
-import type { WorkspaceData } from "./types";
+import type { WorkSession } from "../../time/model/types";
 
-export type ScheduleStore = Pick<TimeActions, "deleteSession"> & {
-  data: Pick<WorkspaceData, "sessions">;
-};
+export interface ScheduleStore {
+  data: { sessions: WorkSession[] };
+  deleteSession(id: string): Promise<void>;
+}

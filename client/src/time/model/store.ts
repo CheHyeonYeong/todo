@@ -1,4 +1,12 @@
-import type { WorkspaceData } from "../../workspace/model/types";
-import type { TimeActions } from "../hooks/useTimeActions";
+import type { Memo } from "../../notes/model/types";
+import type { Todo } from "../../todo/model/types";
+import type { ActiveSession, WorkSession } from "./types";
 
-export type TimeStore = TimeActions & { data: Pick<WorkspaceData, "sessions" | "todos" | "memos"> };
+export interface TimeStore {
+  data: { sessions: WorkSession[]; todos: Todo[]; memos: Memo[] };
+  activeSession: ActiveSession | null;
+  startSession(label: string): Promise<void>;
+  stopSession(): Promise<void>;
+  recordSession(session: WorkSession): Promise<void>;
+  deleteSession(id: string): Promise<void>;
+}

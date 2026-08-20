@@ -52,6 +52,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Source line limit
+        run: npm run check:lines
+
       - name: Format
         run: npm run format:check
 

@@ -1,7 +1,19 @@
 import type { RoutineDto } from "../api/routineDto";
 
-export type Routine = RoutineDto;
+export interface Routine {
+  id: string;
+  title: string;
+  weekdays: number[];
+  category?: string | null;
+  active: boolean;
+}
 
 export function toRoutine(dto: RoutineDto): Routine {
-  return { ...dto };
+  return {
+    id: dto.id,
+    title: dto.title,
+    weekdays: [...dto.weekdays],
+    category: dto.category,
+    active: dto.active,
+  };
 }

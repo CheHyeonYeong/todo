@@ -1,4 +1,8 @@
-import type { WorkspaceData } from "../../workspace/model/types";
-import type { MemoActions } from "../hooks/useMemoActions";
+import type { Memo } from "./types";
 
-export type MemoStore = MemoActions & { data: Pick<WorkspaceData, "memos"> };
+export interface MemoStore {
+  data: { memos: Memo[] };
+  addMemo(title: string, body: string): Promise<void>;
+  patchMemo(id: string, patch: Partial<Memo>): Promise<void>;
+  deleteMemo(id: string): Promise<void>;
+}
