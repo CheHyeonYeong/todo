@@ -6,7 +6,6 @@ import { showRequestError } from "../../shared/ui/showRequestError";
 import { styles } from "./styles";
 
 type Store = MemoStore;
-const handleRequestError = showRequestError;
 
 export function MemoScreen({ store }: { store: Store }) {
   const [title, setTitle] = useState("");
@@ -32,7 +31,7 @@ export function MemoScreen({ store }: { store: Store }) {
       else await store.addMemo(title, body);
       clear();
     } catch (reason) {
-      handleRequestError(reason);
+      showRequestError(reason);
     }
   };
   const visible = [...store.data.memos]
@@ -103,7 +102,7 @@ export function MemoScreen({ store }: { store: Store }) {
                     {
                       text: "삭제",
                       style: "destructive",
-                      onPress: () => void store.deleteMemo(memo.id).catch(handleRequestError),
+                      onPress: () => void store.deleteMemo(memo.id).catch(showRequestError),
                     },
                   ])
                 }

@@ -6,7 +6,6 @@ import { showRequestError } from "../../shared/ui/showRequestError";
 import { styles } from "./styles";
 
 type Store = ScheduleStore;
-const handleRequestError = showRequestError;
 
 export function ScheduleScreen({ store }: { store: Store }) {
   const grouped = useMemo(() => {
@@ -63,7 +62,7 @@ export function ScheduleScreen({ store }: { store: Store }) {
                       분
                     </Text>
                   </View>
-                  <Pressable onPress={() => void store.deleteSession(session.id).catch(handleRequestError)}>
+                  <Pressable onPress={() => void store.deleteSession(session.id).catch(showRequestError)}>
                     <Text style={styles.danger}>삭제</Text>
                   </Pressable>
                 </View>

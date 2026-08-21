@@ -13,10 +13,9 @@ import type { TimeStore } from "../../time/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
 import { weekdayLabels } from "../../shared/date/weekdayLabels";
-import { styles } from "./styles";
+import { styles } from "./StudyPlanner.styles";
 
 type Store = TimeStore;
-const handleRequestError = showRequestError;
 const weekdays = weekdayLabels;
 
 export function StudyPlanner({ store }: { store: Store }) {
@@ -51,7 +50,7 @@ export function StudyPlanner({ store }: { store: Store }) {
         startedAt: now.toISOString(),
         endedAt: new Date(now.getTime() + 1000).toISOString(),
       })
-      .catch(handleRequestError);
+      .catch(showRequestError);
     setMomentNote("");
   };
   const notes = useMemo(() => weekSessions.filter(isMomentNote), [weekSessions]);
@@ -141,7 +140,7 @@ export function StudyPlanner({ store }: { store: Store }) {
             <Text style={styles.todoTitle}>{momentNoteText(note)}</Text>
             <Text style={styles.meta}>{new Date(note.startedAt).toLocaleString()}</Text>
           </View>
-          <Pressable onPress={() => void store.deleteSession(note.id).catch(handleRequestError)}>
+          <Pressable onPress={() => void store.deleteSession(note.id).catch(showRequestError)}>
             <Text style={styles.danger}>삭제</Text>
           </Pressable>
         </View>

@@ -3,10 +3,9 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import type { TimeStore } from "../../time/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { styles } from "./styles";
+import { styles } from "./SessionTracker.styles";
 
 type Store = TimeStore;
-const handleRequestError = showRequestError;
 
 export function SessionTracker({ store }: { store: Store }) {
   const [label, setLabel] = useState("");
@@ -28,7 +27,7 @@ export function SessionTracker({ store }: { store: Store }) {
           <Text style={styles.muted}>{elapsed}분째 기록 중</Text>
           <Pressable
             style={styles.stopButton}
-            onPress={() => void store.stopSession().catch(handleRequestError)}
+            onPress={() => void store.stopSession().catch(showRequestError)}
           >
             <Text style={styles.primaryText}>기록 종료</Text>
           </Pressable>

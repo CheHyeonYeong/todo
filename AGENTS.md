@@ -37,12 +37,13 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 | `model/types.ts` | 화면과 비즈니스 규칙이 사용하는 프런트엔드 모델 및 DTO 변환 함수 |
 | `model/*Rules.ts` | React와 무관한 순수 비즈니스 규칙 |
 | `hooks/` | 해당 기능의 API 명령과 낙관적 상태 갱신 |
-| `components/` | 기능 화면과 지역 스타일 |
+| `components/` | 기능 화면과 컴포넌트별 `*.styles.ts` |
 
 `App.tsx`는 인증 상태와 앱 셸만 조립한다. 로그인 생명주기는 `identity/`, 내비게이션과
 반응형 레이아웃은 `application/`이 소유한다. Expo Router가 예약한 `src/app/`은 사용하지 않는다.
 프런트엔드 `App.tsx` 및 `src/**/*.ts(x)` 파일은
 200줄을 넘기지 않으며 `npm run check:lines`로 검사한다.
+여러 컴포넌트의 스타일을 하나의 큰 파일에 모으지 않는다.
 
 `workspace/hooks/useWorkspaceData.ts`는 단일 스냅샷 로딩·캐시를 소유한다. 최상위
 `useAppData.ts`는 이를 기능 훅들과 조립만 하며 비즈니스 로직을 직접 구현하지 않는다.

@@ -6,8 +6,6 @@ export interface Memo {
   body: string;
   createdAt: string;
   tags: string[];
-  starred?: boolean;
-  sortOrder?: number;
 }
 
 export interface MemoDraft {
@@ -22,7 +20,5 @@ export function toMemo(dto: MemoDto): Memo {
     body: dto.body,
     createdAt: dto.createdAt,
     tags: [...dto.tags],
-    starred: dto.starred,
-    sortOrder: dto.sortOrder,
   };
 }

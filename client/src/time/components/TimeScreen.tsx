@@ -4,10 +4,9 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-nativ
 import type { TimeStore } from "../../time/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { styles } from "./styles";
+import { styles } from "./TimeScreen.styles";
 
 type Store = TimeStore;
-const handleRequestError = showRequestError;
 import { SessionTracker } from "./SessionTracker";
 import { StudyPlanner } from "./StudyPlanner";
 
@@ -56,7 +55,7 @@ export function TimeScreen({ store }: { store: Store }) {
                 startedAt: new Date(startedAt.current).toISOString(),
                 endedAt: new Date(endedAt).toISOString(),
               })
-              .catch(handleRequestError);
+              .catch(showRequestError);
           startedAt.current = null;
           if (mode === "focus") {
             const nextCount = focusCount + 1;
@@ -106,7 +105,7 @@ export function TimeScreen({ store }: { store: Store }) {
             startedAt: new Date(startedAt.current).toISOString(),
             endedAt: new Date().toISOString(),
           })
-          .catch(handleRequestError);
+          .catch(showRequestError);
       startedAt.current = null;
     } else {
       startedAt.current = Date.now();

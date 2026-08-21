@@ -6,10 +6,9 @@ import type { RoutineStore } from "../../routines/model/store";
 import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { styles } from "./styles";
+import { styles } from "./TodoScreen.styles";
 
 type Store = TodoStore & RoutineStore;
-const handleRequestError = showRequestError;
 const scopeOptions: { value: Scope; label: string }[] = [
   { value: "day", label: "오늘" },
   { value: "week", label: "이번 주" },
@@ -43,7 +42,7 @@ export function TodoScreen({ store }: { store: Store }) {
       setCategory("");
       setDueDate("");
     } catch (reason) {
-      handleRequestError(reason);
+      showRequestError(reason);
     }
   };
 

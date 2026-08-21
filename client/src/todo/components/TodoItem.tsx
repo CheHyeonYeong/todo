@@ -6,10 +6,9 @@ import type { Todo } from "../../todo/model/types";
 import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
 import { showRequestError } from "../../shared/ui/showRequestError";
-import { styles } from "./styles";
+import { styles } from "./TodoItem.styles";
 
 type Store = TodoStore;
-const handleRequestError = showRequestError;
 
 export function TodoItem({
   todo,
@@ -37,14 +36,14 @@ export function TodoItem({
   );
   const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < dateKey(new Date()));
   const toggle = () =>
-    void store.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(handleRequestError);
+    void store.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(showRequestError);
   const remove = () =>
     Alert.alert("할 일 삭제", `“${todo.title}”을 삭제할까요?`, [
       { text: "취소", style: "cancel" },
       {
         text: "삭제",
         style: "destructive",
-        onPress: () => void store.deleteTodo(todo.id).catch(handleRequestError),
+        onPress: () => void store.deleteTodo(todo.id).catch(showRequestError),
       },
     ]);
   const save = async () => {
@@ -57,7 +56,7 @@ export function TodoItem({
       });
       setEditing(false);
     } catch (reason) {
-      handleRequestError(reason);
+      showRequestError(reason);
     }
   };
   const addChild = async () => {
@@ -67,7 +66,7 @@ export function TodoItem({
       setSubDraft("");
       setExpanded(true);
     } catch (reason) {
-      handleRequestError(reason);
+      showRequestError(reason);
     }
   };
   const toggleExpanded = () => setExpanded((value) => !value);
@@ -145,13 +144,13 @@ export function TodoItem({
                       done: !child.done,
                       completedAt: !child.done ? new Date().toISOString() : null,
                     })
-                    .catch(handleRequestError)
+                    .catch(showRequestError)
                 }
               >
                 <Text style={styles.check}>{child.done ? "✓" : ""}</Text>
               </Pressable>
               <Text style={[styles.flex, child.done && styles.done]}>{child.title}</Text>
-              <Pressable onPress={() => void store.deleteTodo(child.id).catch(handleRequestError)}>
+              <Pressable onPress={() => void store.deleteTodo(child.id).catch(showRequestError)}>
                 <Text style={styles.danger}>×</Text>
               </Pressable>
             </View>

@@ -5,7 +5,7 @@ import type { Scope } from "../../todo/model/types";
 import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
 import { weekdayLabels } from "../../shared/date/weekdayLabels";
-import { styles } from "./styles";
+import { styles } from "./TodoCalendar.styles";
 
 type Store = TodoStore;
 const weekdays = weekdayLabels;

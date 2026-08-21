@@ -15,7 +15,16 @@ describe("toWorkspaceData", () => {
           sourceMemoId: "memo-1",
         },
       ],
-      memos: [{ id: "memo-1", body: "본문", createdAt: "2026-01-01T00:00:00Z", tags: ["태그"] }],
+      memos: [
+        {
+          id: "memo-1",
+          body: "본문",
+          createdAt: "2026-01-01T00:00:00Z",
+          tags: ["태그"],
+          starred: true,
+          sortOrder: 3,
+        },
+      ],
       sessions: [
         {
           id: "session-1",
@@ -39,6 +48,8 @@ describe("toWorkspaceData", () => {
 
     expect(model.todos[0]).not.toHaveProperty("sourceMemoId");
     expect(model.routines[0]).not.toHaveProperty("createdAt");
+    expect(model.memos[0]).not.toHaveProperty("starred");
+    expect(model.memos[0]).not.toHaveProperty("sortOrder");
     expect(model.sessions[0]).toEqual(dto.sessions[0]);
     dto.memos[0].tags.push("변경");
     dto.routines[0].weekdays.push(5);

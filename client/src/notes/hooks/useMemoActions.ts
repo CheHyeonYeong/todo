@@ -3,12 +3,13 @@ import { uid } from "../../shared/id/uid";
 import type { TodoDto } from "../../todo/api/todoDto";
 import { toTodo } from "../../todo/model/types";
 import type { SetWorkspaceData } from "../../workspace/hooks/useWorkspaceData";
+import type { MemoDto } from "../api/memoDto";
 import { extractTags, extractTodoTitles, withDerivedTags } from "../model/memoRules";
-import type { Memo } from "../model/types";
+import { toMemo, type Memo } from "../model/types";
 
 export function useMemoActions(setData: SetWorkspaceData, reload: () => Promise<void>) {
   const addMemo = async (title: string, body: string) => {
-    const memo: Memo = {
+    const memo: MemoDto = {
       id: uid(),
       title: title.trim(),
       body: body.trim(),
@@ -27,7 +28,7 @@ export function useMemoActions(setData: SetWorkspaceData, reload: () => Promise<
     }));
     setData((current) => ({
       ...current,
-      memos: [memo, ...current.memos],
+      memos: [toMemo(memo), ...current.memos],
       todos: [...extracted.map(toTodo), ...current.todos],
     }));
     try {

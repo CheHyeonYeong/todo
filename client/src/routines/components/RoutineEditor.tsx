@@ -7,7 +7,6 @@ import { weekdayLabels } from "../../shared/date/weekdayLabels";
 import { styles } from "./styles";
 
 type Store = RoutineStore;
-const handleRequestError = showRequestError;
 const weekdays = weekdayLabels;
 
 export function RoutineEditor({ store }: { store: Store }) {
@@ -20,7 +19,7 @@ export function RoutineEditor({ store }: { store: Store }) {
       await store.addRoutine(title, days, category);
       setTitle("");
     } catch (reason) {
-      handleRequestError(reason);
+      showRequestError(reason);
     }
   };
   return (
@@ -51,13 +50,13 @@ export function RoutineEditor({ store }: { store: Store }) {
           <Pressable
             style={styles.flex}
             onPress={() =>
-              void store.patchRoutine(routine.id, { active: !routine.active }).catch(handleRequestError)
+              void store.patchRoutine(routine.id, { active: !routine.active }).catch(showRequestError)
             }
           >
             <Text style={[styles.todoTitle, !routine.active && styles.done]}>{routine.title}</Text>
             <Text style={styles.meta}>{routine.weekdays.map((day) => weekdays[day]).join(" · ")}</Text>
           </Pressable>
-          <Pressable onPress={() => void store.deleteRoutine(routine.id).catch(handleRequestError)}>
+          <Pressable onPress={() => void store.deleteRoutine(routine.id).catch(showRequestError)}>
             <Text style={styles.danger}>삭제</Text>
           </Pressable>
         </View>
