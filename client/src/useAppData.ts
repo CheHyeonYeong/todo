@@ -4,12 +4,12 @@ import { useTimeActions } from "./time/hooks/useTimeActions";
 import { useTodoActions } from "./todo/hooks/useTodoActions";
 import { useWorkspaceData } from "./workspace/hooks/useWorkspaceData";
 
-export function useAppData(enabled: boolean) {
-  const workspace = useWorkspaceData(enabled);
+export function useAppData(userId: string | null) {
+  const workspace = useWorkspaceData(userId);
   const todo = useTodoActions(workspace.setData, workspace.reload);
   const notes = useMemoActions(workspace.setData, workspace.reload);
   const routines = useRoutineActions(workspace.setData, workspace.reload);
-  const time = useTimeActions(workspace.setData);
+  const time = useTimeActions(userId, workspace.setData);
 
   return {
     data: workspace.data,

@@ -5,7 +5,7 @@ import { useAppData } from "./src/useAppData";
 
 export default function App() {
   const auth = useAuthSession();
-  const store = useAppData(Boolean(auth.session));
+  const store = useAppData(auth.session?.user.id ?? null);
 
   return (
     <AuthGate auth={auth}>

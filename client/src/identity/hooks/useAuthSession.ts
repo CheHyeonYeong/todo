@@ -20,7 +20,7 @@ async function sessionFromCallback(url: string) {
 
 export function useAuthSession() {
   const e2e = process.env.EXPO_PUBLIC_E2E === "true";
-  const testSession = e2e ? ({ user: { email: "e2e@example.com" } } as Session) : null;
+  const testSession = e2e ? ({ user: { id: "e2e-user", email: "e2e@example.com" } } as Session) : null;
   const [session, setSession] = useState<Session | null>(testSession);
   const [checking, setChecking] = useState(!e2e);
 
