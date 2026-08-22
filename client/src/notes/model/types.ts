@@ -8,11 +8,6 @@ export interface Memo {
   tags: string[];
 }
 
-export interface MemoDraft {
-  title: string;
-  body: string;
-}
-
 export function toMemo(dto: MemoDto): Memo {
   return {
     id: dto.id,
