@@ -54,7 +54,7 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 
 | 모듈 | 규칙 |
 | --- | --- |
-| `todo/model/calendar.ts` | 날짜 키, 주·월 경계, 스코프별 기본 마감일 |
+| `todo/model/calendar.ts` | 날짜 키, 주·월 경계, 월간 격자, 스코프별 기본 마감일 |
 | `time/model/sessionRules.ts` | 순간 메모 판별, 소요 시간, 시각대 겹침 |
 | `todo/model/todoRules.ts` | 정렬 순서, 완료 시각, 부모 완료 전파 |
 | `notes/model/memoRules.ts` | 태그·할 일 파싱, 본문에서 파생되는 값 |
@@ -95,6 +95,12 @@ Expo 배포 빌드는 Vercel도 별도로 검증한다.
 - **완료된 할 일이 무한히 쌓인다.** 보관 기능(`server/archiving`)이 SMTP 설정을 요구해서,
   설정이 없으면 정리 수단이 아예 없다.
 - **actions 버전이 낡았다.** `@v4`가 Node 20 폐기 경고를 낸다. `release-cli.yml`도 같이 올려야 한다.
+- **`ScheduleScreen`이 어디에도 배선돼 있지 않다.** `application/model/navigation.ts`의 `tabs`에
+  `schedule`이 없어 도달 경로가 없다. Expo 이관 전 `Screens.tsx` 때부터 그랬다. 살릴 때 고칠 곳은
+  `navigation.ts`와 `AppShell` 뿐이고, `useAppData` 반환값이 이미 `ScheduleStore`를 만족한다.
+- **`ScheduleScreen`은 순간 메모를 걸러내지 않는다.** 배선하는 순간 `__moment_note__:` 접두사가 붙은
+  1초짜리 기록이 "1분"짜리 작업으로 목록에 뜬다. `StudyPlanner`처럼 `isMomentNote`로 빼거나
+  `momentNoteText`로 접두사를 벗겨야 한다.
 
 ## 개발 시 참고
 
