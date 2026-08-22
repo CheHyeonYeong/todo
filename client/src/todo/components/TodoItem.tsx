@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { dateKey } from "../../todo/model/calendar";
-import { completionPatch } from "../../todo/model/todoRules";
+import { bySortOrder, completionPatch } from "../../todo/model/todoRules";
 import type { Todo } from "../../todo/model/types";
 import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
@@ -28,10 +28,7 @@ export function TodoItem({
   const [category, setCategory] = useState(todo.category || "");
   const [dueDate, setDueDate] = useState(todo.dueDate || "");
   const children = useMemo(
-    () =>
-      store.data.todos
-        .filter((item) => item.parentId === todo.id)
-        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+    () => store.data.todos.filter((item) => item.parentId === todo.id).sort(bySortOrder),
     [store.data.todos, todo.id],
   );
   const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < dateKey(new Date()));

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { defaultDueDate } from "../../todo/model/calendar";
+import { bySortOrder } from "../../todo/model/todoRules";
 import type { Scope } from "../../todo/model/types";
 import type { RoutineStore } from "../../routines/model/store";
 import type { TodoStore } from "../../todo/model/store";
@@ -27,10 +28,7 @@ export function TodoScreen({ store }: { store: Store }) {
   const [subDrafts, setSubDrafts] = useState<Record<string, string>>({});
   const [showRoutines, setShowRoutines] = useState(false);
   const roots = useMemo(
-    () =>
-      store.data.todos
-        .filter((todo) => todo.scope === scope && !todo.parentId)
-        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+    () => store.data.todos.filter((todo) => todo.scope === scope && !todo.parentId).sort(bySortOrder),
     [scope, store.data.todos],
   );
 

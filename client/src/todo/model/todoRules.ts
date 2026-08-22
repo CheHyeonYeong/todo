@@ -8,6 +8,15 @@ export function nextSortOrder(todos: Todo[], scope: Scope, parentId: string | nu
   return Math.max(-1, ...siblings.map((todo) => todo.sortOrder ?? 0)) + 1;
 }
 
+/**
+ * 형제를 화면에 늘어놓는 순서.
+ * 서버는 sortOrder 값만 0부터 다시 매기고 배열 순서는 그대로 두므로(workspace-snapshot.js
+ * normalizeOrder), /api/data가 준 배열을 그대로 그리면 순서가 틀린다. 화면이 직접 정렬해야 한다.
+ */
+export function bySortOrder(a: Todo, b: Todo): number {
+  return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+}
+
 /** 완료로 바꿀 때만 시각을 남기고, 되돌리면 지운다. */
 export function completionPatch(done: boolean, now: Date): Pick<Todo, "done" | "completedAt"> {
   return { done, completedAt: done ? now.toISOString() : null };

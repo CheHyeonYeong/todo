@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Todo } from "../../src/todo/model/types";
-import { applyTodoPatch, completionPatch, nextSortOrder } from "../../src/todo/model/todoRules";
+import { applyTodoPatch, bySortOrder, completionPatch, nextSortOrder } from "../../src/todo/model/todoRules";
 
 const now = new Date(2026, 7, 18, 10, 0);
 
@@ -39,6 +39,27 @@ describe("nextSortOrder", () => {
 
   test("sortOrder가 없는 항목은 0으로 친다", () => {
     expect(nextSortOrder([todo("a")], "day", null)).toBe(1);
+  });
+});
+
+describe("bySortOrder", () => {
+  const ids = (todos: Todo[]) => todos.map((item) => item.id);
+
+  test("오름차순으로 늘어놓는다", () => {
+    const todos = [todo("c", { sortOrder: 2 }), todo("a", { sortOrder: 0 }), todo("b", { sortOrder: 1 })];
+    expect(ids([...todos].sort(bySortOrder))).toEqual(["a", "b", "c"]);
+  });
+
+  test("sortOrder가 없는 항목은 0으로 쳐서 앞에 온다", () => {
+    const todos = [todo("first", { sortOrder: 5 }), todo("none")];
+    expect(ids([...todos].sort(bySortOrder))).toEqual(["none", "first"]);
+  });
+
+  test("sortOrder가 같으면 들어온 순서를 지킨다", () => {
+    // 메모에서 뽑은 할 일이 기존 할 일과 값이 겹칠 수 있다. 서버가 createdAt으로 다시 매길 때까지
+    // 화면은 배열 순서를 그대로 유지해야 항목이 튀지 않는다.
+    const todos = [todo("x", { sortOrder: 1 }), todo("y", { sortOrder: 1 }), todo("z", { sortOrder: 1 })];
+    expect(ids([...todos].sort(bySortOrder))).toEqual(["x", "y", "z"]);
   });
 });
 
