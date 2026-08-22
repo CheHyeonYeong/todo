@@ -68,6 +68,75 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 
 순수 규칙 모듈은 react-native를 import하지 않으므로 node 환경에서 그대로 테스트된다.
 
+### 공통 모듈(`shared/`) 승격 기준
+
+`shared/`는 "종류가 같아서" 모으는 곳이 아니다. **주인이 될 기능이 하나로 정해지지 않는 것만** 올린다.
+`Card`를 todo가 가질 이유도 notes가 가질 이유도 없으니 `shared/ui/`에 있는 것이고,
+`uid`는 네 컨텍스트가 각자 새 항목을 만들 때 쓰니 `shared/id/`에 있는 것이다.
+
+판정은 한 문장으로 끝난다. **"이걸 소유할 기능이 하나로 정해지나?"** 정해지면 그 컨텍스트의
+`model/`이나 `hooks/`에 두고, 안 정해지면 `shared/`로 올린다. 소비자가 여러 곳이어도 주인이
+분명하면 올리지 않는다 — `time/model/sessionRules.ts`는 `workspace/`도 쓰지만 시간 기능 것이다.
+
+현재 `shared/`는 여섯 모듈, 도합 50줄이 안 되고 전부 두 개 이상의 컨텍스트가 쓴다.
+
+| 모듈 | 쓰는 컨텍스트 수 |
+| --- | --- |
+| `ui/Card.tsx` | 5 (notes, routines, time, todo, workspace) |
+| `ui/showRequestError.ts` | 5 |
+| `api/request.ts` | 5 |
+| `id/uid.ts` | 4 (notes, routines, time, todo) |
+| `date/weekdayLabels.ts` | 3 (routines, time, todo) |
+| `storage/userStorageKeys.ts` | 2 (time, workspace) |
+
+**한 컨텍스트만 쓰는 것이 `shared/`에 들어오는 순간 이 폴더는 잡동사니 서랍이 된다.**
+새로 넣기 전에 소비자를 세어볼 것.
+
+#### 알려진 비대칭: `todo/model/calendar.ts`
+
+지금 이 기준이 한 군데서 어긋나 있다. `calendar.ts`의 날짜 연산은 할 일과 무관한 범용 함수인데
+`todo/` 안에 있고, 시간 기능이 거기로 손을 뻗는다.
+
+```tsx
+// src/time/components/StudyPlanner.tsx:3 — 시간 기능이 할 일 폴더를 참조한다
+import { addDays, startOfWeek } from "../../todo/model/calendar";
+```
+
+같은 성격의 것이 둘로 갈려 있다는 점이 특히 어색하다. 요일 라벨은 세 컨텍스트가 쓴다고
+`shared/date/`로 올렸는데, 정작 날짜 계산은 두 컨텍스트가 쓰면서 `todo/`에 남아 있다.
+그래서 `shared/date/`를 열면 요일 라벨 다섯 줄만 있다.
+
+**지금 옮기지 않는 이유:** 외부 소비자가 `StudyPlanner` 하나뿐이고 함수 두 개다. 옮기면 규칙 표,
+테스트 경로, import 다섯 곳이 같이 움직이는데 얻는 게 그만큼 안 된다.
+
+**옮기는 시점:** 세 번째 컨텍스트가 `calendar`를 import하는 순간. 그때는 "할 일 것을 빌려 쓴다"는
+설명이 더 이상 통하지 않는다.
+
+**옮길 때 할 일:**
+
+- 범용 여섯 개(`dateKey`, `dayKeyOf`, `startOfWeek`, `addDays`, `endOfMonth`, `monthGrid`)를
+  `shared/date/calendar.ts`로 옮긴다. 이들은 `Scope`를 모르므로 그대로 떨어진다.
+- `defaultDueDate`만 `todo/model/`에 남긴다. 스코프별 기본 마감일은 할 일 규칙이고
+  `todo/model/types`의 `Scope`에 의존한다.
+- 테스트도 `tests/shared/calendar.test.ts`와 `tests/todo/`로 나눈다.
+- import를 고칠 곳은 `TodoCalendar`, `TodoScreen`, `TodoItem`, `StudyPlanner` 넷이다.
+- 위 순수 규칙 표의 `calendar.ts` 행도 같이 갱신한다.
+
+#### 정당한 컨텍스트 간 의존 (고치지 말 것)
+
+컨텍스트끼리 참조한다고 전부 잘못된 건 아니다. 아래는 기능 자체의 관계라 그대로 둔다.
+
+- `notes → todo` — 메모 본문에서 할 일을 뽑아내는 기능이라 `useMemoActions`가 `TodoDto`를 만든다.
+- `workspace → 전부` — 워크스페이스는 스냅샷 집계 컨텍스트다. 모든 모델을 알아야 한다.
+- `application → 각 화면` — 앱 셸이 화면을 조립하는 자리다.
+- `time → notes/todo 의 model/types` — `TimeStore` 계약이 `data.todos`, `data.memos`를 포함한다.
+
+컨텍스트가 어디에 손을 뻗는지 확인하려면:
+
+```bash
+cd client && grep -rhoP 'from "\.\./\.\./\K[a-z]+' src/<컨텍스트> | sort -u
+```
+
 ## 검사 명령
 
 ```bash
