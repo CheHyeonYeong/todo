@@ -5,6 +5,7 @@ import {
   dayKeyOf,
   defaultDueDate,
   endOfMonth,
+  monthGrid,
   startOfWeek,
 } from "../../src/todo/model/calendar";
 
@@ -78,6 +79,46 @@ describe("endOfMonth", () => {
   test("2월은 윤년 여부를 따른다", () => {
     expect(dateKey(endOfMonth(at(2024, 2, 10)))).toBe("2024-02-29");
     expect(dateKey(endOfMonth(at(2025, 2, 10)))).toBe("2025-02-28");
+  });
+});
+
+describe("monthGrid", () => {
+  // month는 0-based다. 2026년 8월 → monthGrid(2026, 7)
+  test("길이는 언제나 7의 배수다", () => {
+    for (let month = 0; month < 12; month += 1) {
+      expect(monthGrid(2026, month).length % 7).toBe(0);
+    }
+  });
+
+  test("1일을 그 달 1일의 요일 자리에 놓는다", () => {
+    // 2026-08-01은 토요일 → 앞의 여섯 칸이 비고 일곱 번째가 1일
+    const cells = monthGrid(2026, 7);
+    expect(cells.slice(0, 6)).toEqual([null, null, null, null, null, null]);
+    expect(cells[6]).toBe(1);
+    expect(cells.length).toBe(42);
+  });
+
+  test("1일이 일요일이면 앞을 밀지 않는다", () => {
+    // 2026-02-01은 일요일이고 28일까지라 정확히 4주다. 뒤에도 채울 칸이 없다.
+    const cells = monthGrid(2026, 1);
+    expect(cells.length).toBe(28);
+    expect(cells[0]).toBe(1);
+    expect(cells[27]).toBe(28);
+  });
+
+  test("윤년 2월은 29일까지 담는다", () => {
+    const cells = monthGrid(2024, 1);
+    expect(cells.filter((cell) => cell !== null)).toEqual(
+      Array.from({ length: 29 }, (_, index) => index + 1),
+    );
+    expect(monthGrid(2025, 1).filter((cell) => cell !== null).length).toBe(28);
+  });
+
+  test("날짜 칸 사이에 빈 칸이 끼지 않는다", () => {
+    const cells = monthGrid(2026, 7);
+    const days = cells.filter((cell) => cell !== null);
+    const firstDay = cells.indexOf(1);
+    expect(cells.slice(firstDay, firstDay + days.length)).toEqual(days);
   });
 });
 

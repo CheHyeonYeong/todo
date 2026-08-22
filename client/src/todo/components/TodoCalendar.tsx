@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { dateKey, dayKeyOf } from "../../todo/model/calendar";
+import { dateKey, dayKeyOf, monthGrid } from "../../todo/model/calendar";
 import type { Scope } from "../../todo/model/types";
 import type { TodoStore } from "../../todo/model/store";
 import { Card } from "../../shared/ui/Card";
@@ -22,13 +22,7 @@ export function TodoCalendar({ store }: { store: Store }) {
   });
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const lastDate = new Date(year, month + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: lastDate }, (_, index) => index + 1),
-  ];
-  while (cells.length % 7) cells.push(null);
+  const cells = monthGrid(year, month);
   const todayKey = dateKey(new Date());
   const dayKey = (day: number) => dayKeyOf(year, month, day);
   return (

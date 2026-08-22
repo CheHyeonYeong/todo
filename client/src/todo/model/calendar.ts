@@ -34,6 +34,19 @@ export function endOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0);
 }
 
+/**
+ * 월간 달력 격자(month는 0-based). 1일의 요일만큼 앞을 null로 밀고,
+ * 마지막 줄이 차도록 뒤도 null로 채워 길이를 항상 7의 배수로 맞춘다.
+ */
+export function monthGrid(year: number, month: number): (number | null)[] {
+  const first = new Date(year, month, 1);
+  const cells: (number | null)[] = [
+    ...Array<null>(first.getDay()).fill(null),
+    ...Array.from({ length: endOfMonth(first).getDate() }, (_, index) => index + 1),
+  ];
+  return [...cells, ...Array<null>((7 - (cells.length % 7)) % 7).fill(null)];
+}
+
 /** 스코프별 기본 마감일. 오늘 / 돌아오는 일요일 / 이번 달 말일. */
 export function defaultDueDate(scope: Scope, today: Date): string {
   if (scope === "month") return dateKey(endOfMonth(today));
