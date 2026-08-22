@@ -29,6 +29,9 @@ export function useWorkspaceData(userId: string | null) {
       setError(null);
     } catch (reason) {
       if (currentUserId.current !== userId) return;
+      // 실패해도 주인은 확정한다. 비워두면 아래 게이트가 이후의 낙관적 갱신까지 전부 삼켜서
+      // 사용자가 추가한 할 일이 서버에 저장되고도 화면에 영영 안 나타난다.
+      setDataOwnerId(userId);
       setError(reason instanceof Error ? reason.message : "데이터를 불러오지 못했습니다.");
     } finally {
       if (currentUserId.current === userId) setLoading(false);
