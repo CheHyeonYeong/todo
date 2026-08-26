@@ -13,23 +13,14 @@ function fail(reason: unknown) {
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 }
 
-export function TodoItem({
-  todo,
-  store,
-  subDraft,
-  setSubDraft,
-}: {
-  todo: Todo;
-  store: Store;
-  subDraft: string;
-  setSubDraft: (value: string) => void;
-}) {
+export function TodoItem({ todo, store }: { todo: Todo; store: Store }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(todo.title);
   const [note, setNote] = useState(todo.note || "");
   const [category, setCategory] = useState(todo.category || "");
   const [dueDate, setDueDate] = useState(todo.dueDate || "");
+  const [subDraft, setSubDraft] = useState("");
   const children = useMemo(
     () =>
       store.data.todos

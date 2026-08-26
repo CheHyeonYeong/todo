@@ -25,7 +25,6 @@ export function TodoScreen({ store }: { store: Store }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [subDrafts, setSubDrafts] = useState<Record<string, string>>({});
   const [showRoutines, setShowRoutines] = useState(false);
   const roots = useMemo(
     () =>
@@ -125,13 +124,7 @@ export function TodoScreen({ store }: { store: Store }) {
           </Card>
           {!roots.length && <Text style={styles.empty}>아직 할 일이 없어요.</Text>}
           {roots.map((todo) => (
-            <TodoItem
-              key={todo.id}
-              todo={todo}
-              store={store}
-              subDraft={subDrafts[todo.id] || ""}
-              setSubDraft={(value) => setSubDrafts((current) => ({ ...current, [todo.id]: value }))}
-            />
+            <TodoItem key={todo.id} todo={todo} store={store} />
           ))}
         </>
       )}
