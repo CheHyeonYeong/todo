@@ -15,7 +15,8 @@ import {
   View,
 } from "react-native";
 import { supabase } from "./src/api";
-import { MemoScreen, TimeScreen, TodoScreen } from "./src/Screens";
+import { MemoScreen, TimeScreen } from "./src/Screens";
+import { TodoScreen } from "./src/todo/components/TodoScreen";
 import { useAppData } from "./src/useAppData";
 
 WebBrowser.maybeCompleteAuthSession();
