@@ -75,6 +75,12 @@ export function TodoItem({
       fail(reason);
     }
   };
+  const toggleDetails = () => setExpanded((value) => !value);
+  const startEditing = () => setEditing(true);
+  const toggleEditing = () => setEditing((value) => !value);
+  const toggleChild = (child: Todo) =>
+    void store.patchTodo(child.id, completionPatch(!child.done, new Date())).catch(fail);
+  const deleteChild = (childId: string) => void store.deleteTodo(childId).catch(fail);
 
   return (
     <Card>
@@ -82,11 +88,7 @@ export function TodoItem({
         <Pressable style={[styles.checkbox, todo.done && styles.checkboxDone]} onPress={toggle}>
           <Text style={styles.check}>{todo.done ? "✓" : ""}</Text>
         </Pressable>
-        <Pressable
-          style={styles.flex}
-          onPress={() => setExpanded((value) => !value)}
-          onLongPress={() => setEditing(true)}
-        >
+        <Pressable style={styles.flex} onPress={toggleDetails} onLongPress={startEditing}>
           <Text style={[styles.todoTitle, todo.done && styles.done]}>{todo.title}</Text>
           <View style={styles.metaRow}>
             {todo.category ? <Text style={styles.chip}>{todo.category}</Text> : null}
@@ -104,7 +106,7 @@ export function TodoItem({
             ) : null}
           </View>
         </Pressable>
-        <Pressable onPress={() => setEditing((value) => !value)}>
+        <Pressable onPress={toggleEditing}>
           <Text style={styles.action}>편집</Text>
         </Pressable>
         <Pressable onPress={remove}>
@@ -146,19 +148,12 @@ export function TodoItem({
             <View key={child.id} style={styles.subRow}>
               <Pressable
                 style={[styles.smallCheck, child.done && styles.checkboxDone]}
-                onPress={() =>
-                  void store
-                    .patchTodo(child.id, {
-                      done: !child.done,
-                      completedAt: !child.done ? new Date().toISOString() : null,
-                    })
-                    .catch(fail)
-                }
+                onPress={() => toggleChild(child)}
               >
                 <Text style={styles.check}>{child.done ? "✓" : ""}</Text>
               </Pressable>
               <Text style={[styles.flex, child.done && styles.done]}>{child.title}</Text>
-              <Pressable onPress={() => void store.deleteTodo(child.id).catch(fail)}>
+              <Pressable onPress={() => deleteChild(child.id)}>
                 <Text style={styles.danger}>×</Text>
               </Pressable>
             </View>
