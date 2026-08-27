@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Scope } from "../../types";
 import type { useAppData } from "../../useAppData";
-import { dateKey, dayKeyOf } from "../model/calendar";
+import { dayKeyOf } from "../model/calendar";
 import { Card } from "../../shared/ui/Card";
 import { styles } from "./TodoCalendar.styles";
 
@@ -28,34 +28,36 @@ export function TodoCalendar({ store }: { store: Store }) {
     ...Array.from({ length: lastDate }, (_, index) => index + 1),
   ];
   while (cells.length % 7) cells.push(null);
-  const todayKey = dateKey(new Date());
+  const todayKey = new Date().toISOString().slice(0, 10);
   const dayKey = (day: number) => dayKeyOf(year, month, day);
+  const showCurrentMonth = () => {
+    const now = new Date();
+    setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
+  };
+  const showPreviousMonth = () => setCursor(new Date(year, month - 1, 1));
+  const showNextMonth = () => setCursor(new Date(year, month + 1, 1));
   return (
     <>
       <View style={styles.sectionHeader}>
         <View>
           <Text style={styles.cardTitle}>월간 일정</Text>
-          <Text style={styles.muted}>할 일의 마감일을 날짜별로 확인하세요.</Text>
+          <Text style={styles.muted}>
+            할 일의 마감일을 날짜별로 확인하세요.
+          </Text>
         </View>
-        <Pressable
-          style={styles.todayButton}
-          onPress={() => {
-            const now = new Date();
-            setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
-          }}
-        >
+        <Pressable style={styles.todayButton} onPress={showCurrentMonth}>
           <Text style={styles.secondaryText}>오늘</Text>
         </Pressable>
       </View>
       <Card>
         <View style={styles.calendarHeader}>
-          <Pressable onPress={() => setCursor(new Date(year, month - 1, 1))}>
+          <Pressable onPress={showPreviousMonth}>
             <Text style={styles.calendarArrow}>‹</Text>
           </Pressable>
           <Text style={styles.calendarTitle}>
             {year}년 {month + 1}월
           </Text>
-          <Pressable onPress={() => setCursor(new Date(year, month + 1, 1))}>
+          <Pressable onPress={showNextMonth}>
             <Text style={styles.calendarArrow}>›</Text>
           </Pressable>
         </View>
@@ -63,7 +65,11 @@ export function TodoCalendar({ store }: { store: Store }) {
           {weekdays.map((label, index) => (
             <View key={label} style={styles.weekHeader}>
               <Text
-                style={[styles.weekHeaderText, index === 0 && styles.sunday, index === 6 && styles.saturday]}
+                style={[
+                  styles.weekHeaderText,
+                  index === 0 && styles.sunday,
+                  index === 6 && styles.saturday,
+                ]}
               >
                 {label}
               </Text>
@@ -71,11 +77,16 @@ export function TodoCalendar({ store }: { store: Store }) {
           ))}
           {cells.map((day, index) => {
             const key = day ? dayKey(day) : "";
-            const items = day ? store.data.todos.filter((todo) => todo.dueDate === key) : [];
+            const items = day
+              ? store.data.todos.filter((todo) => todo.dueDate === key)
+              : [];
             return (
               <View
                 key={`${index}-${day}`}
-                style={[styles.calendarCell, key === todayKey && styles.calendarToday]}
+                style={[
+                  styles.calendarCell,
+                  key === todayKey && styles.calendarToday,
+                ]}
               >
                 {day && (
                   <>
@@ -98,7 +109,9 @@ export function TodoCalendar({ store }: { store: Store }) {
                         {todo.title}
                       </Text>
                     ))}
-                    {items.length > 3 && <Text style={styles.more}>+{items.length - 3}</Text>}
+                    {items.length > 3 && (
+                      <Text style={styles.more}>+{items.length - 3}</Text>
+                    )}
                   </>
                 )}
               </View>
@@ -114,7 +127,9 @@ export function TodoCalendar({ store }: { store: Store }) {
           .map((todo) => (
             <View key={todo.id} style={styles.listRow}>
               <Text style={styles.todoTitle}>• {todo.title}</Text>
-              <Text style={styles.chip}>{scopeOptions.find((item) => item.value === todo.scope)?.label}</Text>
+              <Text style={styles.chip}>
+                {scopeOptions.find((item) => item.value === todo.scope)?.label}
+              </Text>
             </View>
           ))}
       </Card>
