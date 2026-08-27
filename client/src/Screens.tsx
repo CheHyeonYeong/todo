@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { elapsedMinutes, startOfWeek } from "./time/model/sessionRules";
 import type { Scope, Todo } from "./types";
 import type { useAppData } from "./useAppData";
 
@@ -120,13 +121,12 @@ export function TimeScreen({ store }: { store: Store }) {
 function SessionTracker({ store }: { store: Store }) {
   const [label, setLabel] = useState(""); const [, tick] = useState(0);
   useEffect(() => { if (!store.activeSession) return; const id = setInterval(() => tick((value) => value + 1), 30000); return () => clearInterval(id); }, [store.activeSession]);
-  const elapsed = store.activeSession ? Math.floor((Date.now() - new Date(store.activeSession.startedAt).getTime()) / 60000) : 0;
+  const elapsed = store.activeSession ? elapsedMinutes(store.activeSession.startedAt, new Date()) : 0;
   return <Card><Text style={styles.cardTitle}>작업 시간 기록</Text>{store.activeSession ? <><Text style={styles.sessionLabel}>{store.activeSession.label || "이름 없는 작업"}</Text><Text style={styles.muted}>{elapsed}분째 기록 중</Text><Pressable style={styles.stopButton} onPress={() => void store.stopSession().catch(fail)}><Text style={styles.primaryText}>기록 종료</Text></Pressable></> : <View style={styles.row}><TextInput style={[styles.input, styles.flex]} value={label} onChangeText={setLabel} placeholder="지금 할 작업" /><Pressable style={styles.primaryButton} onPress={() => { if (label.trim()) { void store.startSession(label); setLabel(""); } }}><Text style={styles.primaryText}>기록 시작</Text></Pressable></View>}</Card>;
 }
 
-function startOfWeek(date = new Date()) { const next = new Date(date); next.setHours(0, 0, 0, 0); next.setDate(next.getDate() - next.getDay()); return next; }
 function StudyPlanner({ store }: { store: Store }) {
-  const [weekOffset, setWeekOffset] = useState(0); const [momentNote, setMomentNote] = useState(""); const start = startOfWeek(); start.setDate(start.getDate() + weekOffset * 7);
+  const [weekOffset, setWeekOffset] = useState(0); const [momentNote, setMomentNote] = useState(""); const start = startOfWeek(new Date()); start.setDate(start.getDate() + weekOffset * 7);
   const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); return date; });
   const hours = Array.from({ length: 18 }, (_, index) => index + 6);
   const sessionAt = (date: Date, hour: number) => store.data.sessions.filter((session) => { const began = new Date(session.startedAt); const ended = new Date(session.endedAt); return began.toDateString() === date.toDateString() && began.getHours() <= hour && ended.getHours() >= hour; });
