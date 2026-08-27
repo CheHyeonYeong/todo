@@ -10,9 +10,7 @@ export function dayKeyOf(year: number, month: number, day: number) {
 
 export function defaultDueDate(scope: Scope, now: Date) {
   const date = new Date(now);
-  if (scope === "week")
-    date.setDate(date.getDate() + ((7 - date.getDay()) % 7));
-  if (scope === "month")
-    return dateKey(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+  if (scope === "week") date.setDate(date.getDate() + ((7 - date.getDay()) % 7));
+  if (scope === "month") return dateKey(new Date(date.getFullYear(), date.getMonth() + 1, 0));
   return dateKey(date);
 }

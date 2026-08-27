@@ -41,9 +41,7 @@ export function TodoCalendar({ store }: { store: Store }) {
       <View style={styles.sectionHeader}>
         <View>
           <Text style={styles.cardTitle}>월간 일정</Text>
-          <Text style={styles.muted}>
-            할 일의 마감일을 날짜별로 확인하세요.
-          </Text>
+          <Text style={styles.muted}>할 일의 마감일을 날짜별로 확인하세요.</Text>
         </View>
         <Pressable style={styles.todayButton} onPress={showCurrentMonth}>
           <Text style={styles.secondaryText}>오늘</Text>
@@ -65,11 +63,7 @@ export function TodoCalendar({ store }: { store: Store }) {
           {weekdays.map((label, index) => (
             <View key={label} style={styles.weekHeader}>
               <Text
-                style={[
-                  styles.weekHeaderText,
-                  index === 0 && styles.sunday,
-                  index === 6 && styles.saturday,
-                ]}
+                style={[styles.weekHeaderText, index === 0 && styles.sunday, index === 6 && styles.saturday]}
               >
                 {label}
               </Text>
@@ -77,16 +71,11 @@ export function TodoCalendar({ store }: { store: Store }) {
           ))}
           {cells.map((day, index) => {
             const key = day ? dayKey(day) : "";
-            const items = day
-              ? store.data.todos.filter((todo) => todo.dueDate === key)
-              : [];
+            const items = day ? store.data.todos.filter((todo) => todo.dueDate === key) : [];
             return (
               <View
                 key={`${index}-${day}`}
-                style={[
-                  styles.calendarCell,
-                  key === todayKey && styles.calendarToday,
-                ]}
+                style={[styles.calendarCell, key === todayKey && styles.calendarToday]}
               >
                 {day && (
                   <>
@@ -109,9 +98,7 @@ export function TodoCalendar({ store }: { store: Store }) {
                         {todo.title}
                       </Text>
                     ))}
-                    {items.length > 3 && (
-                      <Text style={styles.more}>+{items.length - 3}</Text>
-                    )}
+                    {items.length > 3 && <Text style={styles.more}>+{items.length - 3}</Text>}
                   </>
                 )}
               </View>
@@ -127,9 +114,7 @@ export function TodoCalendar({ store }: { store: Store }) {
           .map((todo) => (
             <View key={todo.id} style={styles.listRow}>
               <Text style={styles.todoTitle}>• {todo.title}</Text>
-              <Text style={styles.chip}>
-                {scopeOptions.find((item) => item.value === todo.scope)?.label}
-              </Text>
+              <Text style={styles.chip}>{scopeOptions.find((item) => item.value === todo.scope)?.label}</Text>
             </View>
           ))}
       </Card>
