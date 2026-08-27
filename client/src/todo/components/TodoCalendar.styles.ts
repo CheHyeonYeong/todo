@@ -1,7 +1,12 @@
 ﻿import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   cardTitle: { fontSize: 17, fontWeight: "700", color: "#213128" },
   muted: { marginTop: 3, color: "#748078" },
   todayButton: {
@@ -50,7 +55,12 @@ export const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   calendarToday: { backgroundColor: "#eef8f1" },
-  calendarDay: { marginBottom: 6, fontSize: 12, fontWeight: "700", color: "#3b4840" },
+  calendarDay: {
+    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#3b4840",
+  },
   calendarEvent: {
     marginBottom: 3,
     paddingHorizontal: 4,

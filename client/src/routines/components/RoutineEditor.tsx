@@ -7,14 +7,17 @@ import { styles } from "./RoutineEditor.styles";
 type Store = ReturnType<typeof useAppData>;
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 function fail(reason: unknown) {
-  Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
+  Alert.alert(
+    "저장 오류",
+    reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.",
+  );
 }
 
 export function RoutineEditor({ store }: { store: Store }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const submit = async () => {
+  const submitRoutine = async () => {
     if (!title.trim() || !days.length) return;
     try {
       await store.addRoutine(title, days, category);
@@ -23,39 +26,69 @@ export function RoutineEditor({ store }: { store: Store }) {
       fail(reason);
     }
   };
+  const toggleWeekday = (day: number) =>
+    setDays((current) =>
+      current.includes(day)
+        ? current.filter((value) => value !== day)
+        : [...current, day],
+    );
+  const toggleRoutine = (routineId: string, active: boolean) =>
+    void store.patchRoutine(routineId, { active: !active }).catch(fail);
+  const deleteRoutine = (routineId: string) =>
+    void store.deleteRoutine(routineId).catch(fail);
   return (
     <Card>
       <Text style={styles.cardTitle}>반복 루틴</Text>
-      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="루틴 이름" />
-      <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="카테고리" />
+      <TextInput
+        style={styles.input}
+        value={title}
+        onChangeText={setTitle}
+        placeholder="루틴 이름"
+      />
+      <TextInput
+        style={styles.input}
+        value={category}
+        onChangeText={setCategory}
+        placeholder="카테고리"
+      />
       <View style={styles.weekdays}>
         {weekdays.map((label, index) => (
           <Pressable
             key={label}
             style={[styles.day, days.includes(index) && styles.dayActive]}
-            onPress={() =>
-              setDays((current) =>
-                current.includes(index) ? current.filter((day) => day !== index) : [...current, index],
-              )
-            }
+            onPress={() => toggleWeekday(index)}
           >
-            <Text style={[styles.dayText, days.includes(index) && styles.primaryText]}>{label}</Text>
+            <Text
+              style={[
+                styles.dayText,
+                days.includes(index) && styles.primaryText,
+              ]}
+            >
+              {label}
+            </Text>
           </Pressable>
         ))}
       </View>
-      <Pressable style={styles.secondaryButton} onPress={() => void submit()}>
+      <Pressable
+        style={styles.secondaryButton}
+        onPress={() => void submitRoutine()}
+      >
         <Text style={styles.secondaryText}>루틴 추가</Text>
       </Pressable>
       {store.data.routines.map((routine) => (
         <View key={routine.id} style={styles.listRow}>
           <Pressable
             style={styles.flex}
-            onPress={() => void store.patchRoutine(routine.id, { active: !routine.active }).catch(fail)}
+            onPress={() => toggleRoutine(routine.id, routine.active)}
           >
-            <Text style={[styles.todoTitle, !routine.active && styles.done]}>{routine.title}</Text>
-            <Text style={styles.meta}>{routine.weekdays.map((day) => weekdays[day]).join(" · ")}</Text>
+            <Text style={[styles.todoTitle, !routine.active && styles.done]}>
+              {routine.title}
+            </Text>
+            <Text style={styles.meta}>
+              {routine.weekdays.map((day) => weekdays[day]).join(" · ")}
+            </Text>
           </Pressable>
-          <Pressable onPress={() => void store.deleteRoutine(routine.id).catch(fail)}>
+          <Pressable onPress={() => deleteRoutine(routine.id)}>
             <Text style={styles.danger}>삭제</Text>
           </Pressable>
         </View>

@@ -16,7 +16,13 @@ export const styles = StyleSheet.create({
   flex: { flex: 1 },
   todoTitle: { fontSize: 15, fontWeight: "600", color: "#26372d" },
   done: { color: "#9aa49e", textDecorationLine: "line-through" },
-  metaRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 5 },
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 5,
+  },
   chip: {
     overflow: "hidden",
     paddingHorizontal: 8,
