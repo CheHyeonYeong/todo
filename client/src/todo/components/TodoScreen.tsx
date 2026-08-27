@@ -1,12 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { Scope } from "../../types";
 import type { useAppData } from "../../useAppData";
 import { defaultDueDate } from "../model/calendar";
@@ -23,10 +16,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
   { value: "month", label: "이번 달" },
 ];
 function fail(reason: unknown) {
-  Alert.alert(
-    "저장 오류",
-    reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.",
-  );
+  Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 }
 
 export function TodoScreen({ store }: { store: Store }) {
@@ -67,16 +57,11 @@ export function TodoScreen({ store }: { store: Store }) {
   const updateSubDraft = (todoId: string, value: string) =>
     setSubDrafts((current) => ({ ...current, [todoId]: value }));
   return (
-    <ScrollView
-      contentContainerStyle={styles.page}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <View style={styles.sectionHeader}>
         <View>
           <Text style={styles.heading}>할 일</Text>
-          <Text style={styles.muted}>
-            목록과 캘린더로 일정을 함께 관리하세요.
-          </Text>
+          <Text style={styles.muted}>목록과 캘린더로 일정을 함께 관리하세요.</Text>
         </View>
         <Pressable style={styles.ghostButton} onPress={toggleRoutineEditor}>
           <Text style={styles.ghostText}>↻ 루틴</Text>
@@ -87,30 +72,13 @@ export function TodoScreen({ store }: { store: Store }) {
           style={[styles.segmentItem, view === "list" && styles.segmentActive]}
           onPress={showTodoList}
         >
-          <Text
-            style={[
-              styles.segmentText,
-              view === "list" && styles.segmentTextActive,
-            ]}
-          >
-            목록
-          </Text>
+          <Text style={[styles.segmentText, view === "list" && styles.segmentTextActive]}>목록</Text>
         </Pressable>
         <Pressable
-          style={[
-            styles.segmentItem,
-            view === "calendar" && styles.segmentActive,
-          ]}
+          style={[styles.segmentItem, view === "calendar" && styles.segmentActive]}
           onPress={showTodoCalendar}
         >
-          <Text
-            style={[
-              styles.segmentText,
-              view === "calendar" && styles.segmentTextActive,
-            ]}
-          >
-            캘린더
-          </Text>
+          <Text style={[styles.segmentText, view === "calendar" && styles.segmentTextActive]}>캘린더</Text>
         </Pressable>
       </View>
       {view === "calendar" ? (
@@ -121,18 +89,10 @@ export function TodoScreen({ store }: { store: Store }) {
             {scopeOptions.map((item) => (
               <Pressable
                 key={item.value}
-                style={[
-                  styles.segmentItem,
-                  scope === item.value && styles.segmentActive,
-                ]}
+                style={[styles.segmentItem, scope === item.value && styles.segmentActive]}
                 onPress={() => selectScope(item.value)}
               >
-                <Text
-                  style={[
-                    styles.segmentText,
-                    scope === item.value && styles.segmentTextActive,
-                  ]}
-                >
+                <Text style={[styles.segmentText, scope === item.value && styles.segmentTextActive]}>
                   {item.label}
                 </Text>
               </Pressable>
@@ -169,9 +129,7 @@ export function TodoScreen({ store }: { store: Store }) {
               <Text style={styles.primaryText}>추가</Text>
             </Pressable>
           </Card>
-          {!roots.length && (
-            <Text style={styles.empty}>아직 할 일이 없어요.</Text>
-          )}
+          {!roots.length && <Text style={styles.empty}>아직 할 일이 없어요.</Text>}
           {roots.map((todo) => (
             <TodoItem
               key={todo.id}
