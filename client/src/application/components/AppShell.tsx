@@ -10,7 +10,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { MemoScreen, TimeScreen } from "../../Screens";
+import { TimeScreen } from "../../Screens";
+import { MemoScreen } from "../../notes/components/MemoScreen";
 import { TodoScreen } from "../../todo/components/TodoScreen";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
