@@ -108,6 +108,7 @@ export function AppShell({
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <View style={desktop ? styles.desktopShell : styles.mobileShell}>
+        {desktop && navigation}
         <View style={styles.mainColumn}>
           <View style={[styles.topbar, desktop && styles.desktopTopbar]}>
             <View>
