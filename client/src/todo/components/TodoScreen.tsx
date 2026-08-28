@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { Scope } from "../../types";
 import type { useAppData } from "../../useAppData";
-import { defaultDueDate } from "../model/calendar";
+import { defaultDueDate } from "../../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import { RoutineEditor } from "../../routines/components/RoutineEditor";
 import { TodoCalendar } from "./TodoCalendar";

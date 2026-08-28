@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Scope } from "../../types";
 import type { useAppData } from "../../useAppData";
-import { dayKeyOf } from "../model/calendar";
+import { dayKeyOf } from "../../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import { styles } from "./TodoCalendar.styles";
 
