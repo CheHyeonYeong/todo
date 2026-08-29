@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
-import { extractTags, extractTodoTitles, withDerivedTags } from "./domain/memo";
+import { useMemos } from "./notes/hooks/useMemos";
 import { useRoutines } from "./routines/hooks/useRoutines";
 import { useTodos } from "./todo/hooks/useTodos";
-import type { ActiveSession, AppData, Memo, Todo, WorkSession } from "./types";
+import type { ActiveSession, AppData, WorkSession } from "./types";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
 const ACTIVE_SESSION_KEY = "todo:active-session";
@@ -87,69 +87,7 @@ export function useAppData(enabled: boolean) {
     request,
     createId: uid,
   });
-
-  const addMemo = async (title: string, body: string) => {
-    const memo: Memo = {
-      id: uid(),
-      title: title.trim(),
-      body: body.trim(),
-      createdAt: new Date().toISOString(),
-      tags: extractTags(body),
-    };
-    const extracted: Todo[] = extractTodoTitles(body).map((todoTitle, index) => ({
-      id: uid(),
-      title: todoTitle,
-      scope: "day",
-      done: false,
-      createdAt: new Date().toISOString(),
-      sourceMemoId: memo.id,
-      parentId: null,
-      sortOrder: index,
-    }));
-    setData((current) => ({
-      ...current,
-      memos: [memo, ...current.memos],
-      todos: [...extracted, ...current.todos],
-    }));
-    try {
-      await request("/api/memos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memo, todos: extracted }),
-      });
-    } catch (reason) {
-      await reload();
-      throw reason;
-    }
-  };
-
-  const patchMemo = async (id: string, patch: Partial<Memo>) => {
-    const applied = withDerivedTags(patch);
-    setData((current) => ({
-      ...current,
-      memos: current.memos.map((memo) => (memo.id === id ? { ...memo, ...applied } : memo)),
-    }));
-    try {
-      await request(`/api/memos/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(applied),
-      });
-    } catch (reason) {
-      await reload();
-      throw reason;
-    }
-  };
-
-  const deleteMemo = async (id: string) => {
-    setData((current) => ({ ...current, memos: current.memos.filter((memo) => memo.id !== id) }));
-    try {
-      await request(`/api/memos/${encodeURIComponent(id)}`, { method: "DELETE" });
-    } catch (reason) {
-      await reload();
-      throw reason;
-    }
-  };
+  const memoState = useMemos({ memos: data.memos, setData, reload, request, createId: uid });
 
   const startSession = async (label: string) => {
     const next: ActiveSession = { id: uid(), label: label.trim(), startedAt: new Date().toISOString() };
@@ -191,9 +129,7 @@ export function useAppData(enabled: boolean) {
     error,
     reload,
     ...todoState,
-    addMemo,
-    patchMemo,
-    deleteMemo,
+    ...memoState,
     ...routineState,
     startSession,
     stopSession,
