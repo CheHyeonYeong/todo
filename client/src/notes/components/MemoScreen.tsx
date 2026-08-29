@@ -7,9 +7,6 @@ import { styles } from "./MemoScreen.styles";
 const fail = (reason: unknown) =>
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 
-const confirm = (message: string) =>
-  Platform.OS === "web" && typeof window !== "undefined" ? window.confirm(message) : true;
-
 export function MemoScreen({
   memos,
   onAddMemo,
@@ -67,7 +64,7 @@ export function MemoScreen({
   };
   const confirmDeleteMemo = (id: string) =>
     Platform.OS === "web"
-      ? confirm("이 메모를 삭제할까요?") && void deleteMemo(id).catch(fail)
+      ? void deleteMemo(id).catch(fail)
       : Alert.alert("메모 삭제", "이 메모를 삭제할까요?", [
           { text: "취소" },
           { text: "삭제", style: "destructive", onPress: () => void deleteMemo(id).catch(fail) },
