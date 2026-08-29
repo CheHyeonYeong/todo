@@ -11,9 +11,7 @@ import {
   View,
 } from "react-native";
 import { MemoScreen, TimeScreen } from "../../Screens";
-import { useRoutineActions } from "../../routines/hooks/useRoutineActions";
 import { TodoScreen } from "../../todo/components/TodoScreen";
-import { useTodoActions } from "../../todo/hooks/useTodoActions";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
 
