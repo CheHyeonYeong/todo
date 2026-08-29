@@ -4,9 +4,9 @@ import { useAuthSession } from "./src/identity/hooks/useAuthSession";
 import { useAppData } from "./src/useAppData";
 
 export default function App() {
-  const { session, checking, login, logout } = useAuthSession();
-  const store = useAppData(Boolean(session));
+  const { session, isCheckingSession, signInWithGoogle, signOut } = useAuthSession();
+  const workspaceData = useAppData(Boolean(session));
 
-  if (!session) return <AuthGate checking={checking} onLogin={login} />;
-  return <AppShell session={session} store={store} onLogout={logout} />;
+  if (!session) return <AuthGate isCheckingSession={isCheckingSession} onSignIn={signInWithGoogle} />;
+  return <AppShell session={session} workspaceData={workspaceData} onSignOut={signOut} />;
 }

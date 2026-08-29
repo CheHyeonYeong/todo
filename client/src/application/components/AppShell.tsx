@@ -14,7 +14,7 @@ import { MemoScreen, TimeScreen, TodoScreen } from "../../Screens";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
 
-type Store = ReturnType<typeof useAppData>;
+type WorkspaceData = ReturnType<typeof useAppData>;
 type Workspace = "todo" | "memo" | "time";
 
 const tabs: { key: Workspace; label: string; icon: string }[] = [
@@ -25,19 +25,19 @@ const tabs: { key: Workspace; label: string; icon: string }[] = [
 
 export function AppShell({
   session,
-  store,
-  onLogout,
+  workspaceData,
+  onSignOut,
 }: {
   session: Session;
-  store: Store;
-  onLogout: () => Promise<unknown>;
+  workspaceData: WorkspaceData;
+  onSignOut: () => Promise<unknown>;
 }) {
   const [workspace, setWorkspace] = useState<Workspace>("todo");
   const { width } = useWindowDimensions();
   const desktop = Platform.OS === "web" && width >= 1100;
   const selectedTab = tabs.find((tab) => tab.key === workspace);
   const selectWorkspace = (next: Workspace) => setWorkspace(next);
-  const reloadWorkspace = () => void store.reload();
+  const reloadWorkspace = () => void workspaceData.reload();
 
   const navigation = (
     <View style={desktop ? styles.desktopNav : styles.nav}>
@@ -72,7 +72,7 @@ export function AppShell({
           <Text style={styles.desktopEmail} numberOfLines={1}>
             {session.user.email}
           </Text>
-          <Pressable onPress={() => void onLogout()}>
+          <Pressable onPress={() => void onSignOut()}>
             <Text style={styles.logout}>로그아웃</Text>
           </Pressable>
         </View>
@@ -80,28 +80,28 @@ export function AppShell({
     </View>
   );
 
-  const content = store.loading ? (
+  const content = workspaceData.loading ? (
     <ActivityIndicator style={styles.loader} color="#176b47" />
   ) : desktop ? (
     <View style={styles.dashboard}>
       <View style={styles.dashboardPrimary}>
         <View style={[styles.dashboardPanel, styles.todoPanel]}>
-          <TodoScreen store={store} />
+          <TodoScreen store={workspaceData} />
         </View>
         <View style={[styles.dashboardPanel, styles.memoPanel]}>
-          <MemoScreen store={store} />
+          <MemoScreen store={workspaceData} />
         </View>
       </View>
       <View style={[styles.dashboardPanel, styles.timePanel]}>
-        <TimeScreen store={store} />
+        <TimeScreen store={workspaceData} />
       </View>
     </View>
   ) : workspace === "todo" ? (
-    <TodoScreen store={store} />
+    <TodoScreen store={workspaceData} />
   ) : workspace === "memo" ? (
-    <MemoScreen store={store} />
+    <MemoScreen store={workspaceData} />
   ) : (
-    <TimeScreen store={store} />
+    <TimeScreen store={workspaceData} />
   );
 
   return (
@@ -123,14 +123,14 @@ export function AppShell({
               <Pressable style={desktop && styles.topActionButton} onPress={reloadWorkspace}>
                 <Text style={styles.refresh}>↻ 새로고침</Text>
               </Pressable>
-              <Pressable onPress={() => void onLogout()}>
+              <Pressable onPress={() => void onSignOut()}>
                 <Text style={styles.logout}>로그아웃</Text>
               </Pressable>
             </View>
           </View>
-          {store.error && (
+          {workspaceData.error && (
             <Pressable style={styles.errorBar} onPress={reloadWorkspace}>
-              <Text style={styles.errorText}>{store.error} · 다시 시도</Text>
+              <Text style={styles.errorText}>{workspaceData.error} · 다시 시도</Text>
             </Pressable>
           )}
           <View style={[styles.content, desktop && styles.desktopContent]}>{content}</View>

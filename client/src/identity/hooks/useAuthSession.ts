@@ -23,21 +23,21 @@ async function sessionFromCallback(url: string) {
 
 export function useAuthSession() {
   const [session, setSession] = useState<Session | null>(null);
-  const [checking, setChecking] = useState(true);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      setChecking(false);
+      setIsCheckingSession(false);
     });
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next);
-      setChecking(false);
+      setIsCheckingSession(false);
     });
     return () => data.subscription.unsubscribe();
   }, []);
 
-  const login = async () => {
+  const signInWithGoogle = async () => {
     try {
       const redirectTo = Linking.createURL("auth/callback");
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -54,5 +54,7 @@ export function useAuthSession() {
     }
   };
 
-  return { session, checking, login, logout: () => supabase.auth.signOut() };
+  const signOut = () => supabase.auth.signOut();
+
+  return { session, isCheckingSession, signInWithGoogle, signOut };
 }
