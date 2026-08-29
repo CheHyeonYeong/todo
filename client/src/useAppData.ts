@@ -1,26 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch } from "./api";
 import { extractTags, extractTodoTitles, withDerivedTags } from "./domain/memo";
-import { applyTodoPatch, nextSortOrder } from "./domain/todo";
-import type { ActiveSession, AppData, Memo, Routine, Scope, Todo, WorkSession } from "./types";
+import { useRoutineActions } from "./routines/hooks/useRoutineActions";
+import { useTodoActions } from "./todo/hooks/useTodoActions";
+import type { ActiveSession, AppData, Memo, Todo, WorkSession } from "./types";
+import { request, uid } from "./workspace/data";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
 const ACTIVE_SESSION_KEY = "todo:active-session";
 const DATA_CACHE_KEY = "todo:data-cache";
-
-export function uid() {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
-    const random = Math.floor(Math.random() * 16);
-    return (char === "x" ? random : (random & 0x3) | 0x8).toString(16);
-  });
-}
-
-async function request(path: string, init?: RequestInit) {
-  const response = await apiFetch(path, init);
-  if (!response.ok) throw new Error(`요청 실패 (${response.status})`);
-  return response;
-}
 
 export function useAppData(enabled: boolean) {
   const [data, setData] = useState<AppData>(EMPTY_DATA);
@@ -78,75 +66,8 @@ export function useAppData(enabled: boolean) {
     });
   }, []);
 
-  const addTodo = async (input: {
-    title: string;
-    scope: Scope;
-    parentId?: string | null;
-    dueDate?: string | null;
-    category?: string | null;
-  }) => {
-    const parentId = input.parentId || null;
-    // sortOrder는 싣지 않는다. 서버가 다른 기기의 할 일까지 보고 최종 순서를 정한다.
-    const todo: Todo = {
-      id: uid(),
-      title: input.title.trim(),
-      scope: input.scope,
-      done: false,
-      createdAt: new Date().toISOString(),
-      parentId,
-      dueDate: input.dueDate || null,
-      category: input.category || null,
-    };
-    // 화면에 바로 보여줄 임시 순서는 최신 목록에서 뽑는다. 다음 reload에서 서버 값으로 맞춰진다.
-    setData((current) => ({
-      ...current,
-      todos: [...current.todos, { ...todo, sortOrder: nextSortOrder(current.todos, input.scope, parentId) }],
-    }));
-    try {
-      const response = await request("/api/todos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(todo),
-      });
-      // 서버가 정한 순서로 임시값을 바꿔 끼운다. 응답을 못 읽으면 다음 reload까지 임시값을 그대로 쓴다.
-      const saved = (await response.json().catch(() => null)) as Todo | null;
-      if (saved?.id)
-        setData((current) => ({
-          ...current,
-          todos: current.todos.map((item) => (item.id === saved.id ? { ...item, ...saved } : item)),
-        }));
-    } catch (reason) {
-      await reload();
-      throw reason;
-    }
-  };
-
-  const patchTodo = async (id: string, patch: Partial<Todo>) => {
-    setData((current) => ({ ...current, todos: applyTodoPatch(current.todos, id, patch, new Date()) }));
-    try {
-      await request(`/api/todos/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-    } catch (reason) {
-      await reload();
-      throw reason;
-    }
-  };
-
-  const deleteTodo = async (id: string) => {
-    setData((current) => ({
-      ...current,
-      todos: current.todos.filter((todo) => todo.id !== id && todo.parentId !== id),
-    }));
-    try {
-      await request(`/api/todos/${encodeURIComponent(id)}`, { method: "DELETE" });
-    } catch (reason) {
-      await reload();
-      throw reason;
-    }
-  };
+  const todoActions = useTodoActions({ todos: data.todos, setData, reload });
+  const routineActions = useRoutineActions({ routines: data.routines, setData, reload });
 
   const addMemo = async (title: string, body: string) => {
     const memo: Memo = {
@@ -211,43 +132,6 @@ export function useAppData(enabled: boolean) {
     }
   };
 
-  const addRoutine = async (title: string, weekdays: number[], category?: string) => {
-    const routine: Routine = {
-      id: uid(),
-      title: title.trim(),
-      weekdays,
-      category: category?.trim() || null,
-      active: true,
-      createdAt: new Date().toISOString(),
-    };
-    setData((current) => ({ ...current, routines: [...current.routines, routine] }));
-    try {
-      await request("/api/routines", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(routine),
-      });
-      await reload();
-    } catch (reason) {
-      await reload();
-      throw reason;
-    }
-  };
-
-  const patchRoutine = async (id: string, patch: Partial<Routine>) => {
-    await request(`/api/routines/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    await reload();
-  };
-
-  const deleteRoutine = async (id: string) => {
-    await request(`/api/routines/${encodeURIComponent(id)}`, { method: "DELETE" });
-    await reload();
-  };
-
   const startSession = async (label: string) => {
     const next: ActiveSession = { id: uid(), label: label.trim(), startedAt: new Date().toISOString() };
     setActiveSession(next);
@@ -287,15 +171,11 @@ export function useAppData(enabled: boolean) {
     loading,
     error,
     reload,
-    addTodo,
-    patchTodo,
-    deleteTodo,
+    ...todoActions,
     addMemo,
     patchMemo,
     deleteMemo,
-    addRoutine,
-    patchRoutine,
-    deleteRoutine,
+    ...routineActions,
     startSession,
     stopSession,
     recordSession,

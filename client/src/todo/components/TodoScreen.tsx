@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { Scope } from "../../types";
-import { defaultDueDate } from "../../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import { RoutineEditor } from "../../routines/components/RoutineEditor";
 import type { RoutineActions } from "../../routines/hooks/useRoutineActions";
@@ -43,11 +42,11 @@ export function TodoScreen({
   const submitTodo = async () => {
     if (!title.trim()) return;
     try {
-      await todoActions.addTodo({
+      await todoActions.addTodoWithDefaultDueDate({
         title,
         scope,
         category,
-        dueDate: dueDate || defaultDueDate(scope, new Date()),
+        dueDate: dueDate || null,
       });
       setTitle("");
       setCategory("");

@@ -11,9 +11,7 @@ import {
   View,
 } from "react-native";
 import { MemoScreen, TimeScreen } from "../../Screens";
-import { useRoutineActions } from "../../routines/hooks/useRoutineActions";
 import { TodoScreen } from "../../todo/components/TodoScreen";
-import { useTodoActions } from "../../todo/hooks/useTodoActions";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
 
@@ -41,8 +39,20 @@ export function AppShell({
   const selectedTab = tabs.find((tab) => tab.key === workspace);
   const selectWorkspace = (next: Workspace) => setWorkspace(next);
   const reloadWorkspace = () => void store.reload();
-  const todoActions = useTodoActions(store);
-  const routineActions = useRoutineActions(store);
+  const todoActions = {
+    todos: store.data.todos,
+    addTodo: store.addTodo,
+    addTodoWithDefaultDueDate: store.addTodoWithDefaultDueDate,
+    patchTodo: store.patchTodo,
+    deleteTodo: store.deleteTodo,
+    toggleTodo: store.toggleTodo,
+  };
+  const routineActions = {
+    routines: store.data.routines,
+    addRoutine: store.addRoutine,
+    patchRoutine: store.patchRoutine,
+    deleteRoutine: store.deleteRoutine,
+  };
 
   const navigation = (
     <View style={desktop ? styles.desktopNav : styles.nav}>

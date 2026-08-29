@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { Todo } from "../../types";
 import { dateKey } from "../../domain/calendar";
-import { completionPatch } from "../../domain/todo";
 import { Card } from "../../shared/ui/Card";
 import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoItem.styles";
@@ -36,13 +35,11 @@ export function TodoItem({
     [todoActions.todos, todo.id],
   );
   const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < dateKey(new Date()));
-  const toggleTodo = () =>
-    void todoActions.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(fail);
+  const toggleTodo = () => todoActions.toggleTodo(todo);
   const toggleDetails = () => setExpanded((value) => !value);
   const startEditing = () => setEditing(true);
   const toggleEditing = () => setEditing((value) => !value);
-  const toggleChild = (child: Todo) =>
-    void todoActions.patchTodo(child.id, completionPatch(!child.done, new Date())).catch(fail);
+  const toggleChild = (child: Todo) => todoActions.toggleTodo(child);
   const deleteChild = (childId: string) => void todoActions.deleteTodo(childId).catch(fail);
   const remove = () =>
     Alert.alert("할 일 삭제", `“${todo.title}”을 삭제할까요?`, [
