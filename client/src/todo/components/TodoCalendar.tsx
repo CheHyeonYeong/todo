@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import type { Scope } from "../../types";
+import type { Scope, Todo } from "../../types";
 import { dateKey, dayKeyOf, monthGridDays, nextMonth, previousMonth, startOfMonth } from "../domain/calendar";
 import { Card } from "../../shared/ui/Card";
-import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoCalendar.styles";
 
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
@@ -13,7 +12,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
   { value: "month", label: "이번 달" },
 ];
 
-export function TodoCalendar({ today, todos }: { today: Date; todos: TodoActions["todos"] }) {
+export function TodoCalendar({ today, todos }: { today: Date; todos: Todo[] }) {
   const [cursor, setCursor] = useState(() => startOfMonth(today));
   const { year, month, cells } = monthGridDays(cursor);
   const todayKey = dateKey(today);

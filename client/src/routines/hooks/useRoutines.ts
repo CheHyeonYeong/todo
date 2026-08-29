@@ -6,14 +6,14 @@ type ReloadWorkspace = () => Promise<void>;
 type WorkspaceRequest = (path: string, init?: RequestInit) => Promise<Response>;
 type CreateId = () => string;
 
-export type RoutineActions = {
+export type UseRoutinesResult = {
   routines: Routine[];
   addRoutine: (title: string, weekdays: number[], category?: string) => Promise<void>;
   patchRoutine: (id: string, patch: Partial<Routine>) => Promise<void>;
   deleteRoutine: (id: string) => Promise<void>;
 };
 
-export function useRoutineActions({
+export function useRoutines({
   routines,
   setData,
   reload,
@@ -25,7 +25,7 @@ export function useRoutineActions({
   reload: ReloadWorkspace;
   request: WorkspaceRequest;
   createId: CreateId;
-}): RoutineActions {
+}): UseRoutinesResult {
   const addRoutine = async (title: string, weekdays: number[], category?: string) => {
     const routine: Routine = {
       id: createId(),

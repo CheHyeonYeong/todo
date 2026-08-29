@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import type { Scope } from "../../types";
+import type { Routine, Scope, Todo } from "../../types";
 import { Card } from "../../shared/ui/Card";
 import { RoutineEditor } from "../../routines/components/RoutineEditor";
-import type { RoutineActions } from "../../routines/hooks/useRoutineActions";
-import type { TodoActions } from "../hooks/useTodoActions";
+import type { TodoInput } from "../hooks/useTodos";
 import { TodoCalendar } from "./TodoCalendar";
 import { TodoItem } from "./TodoItem";
 import { styles } from "./TodoScreen.styles";
@@ -19,11 +18,29 @@ function fail(reason: unknown) {
 }
 
 export function TodoScreen({
-  todoActions,
-  routineActions,
+  todos,
+  today,
+  routines,
+  onAddTodo,
+  onAddTodoWithDefaultDueDate,
+  onPatchTodo,
+  onDeleteTodo,
+  onToggleTodo,
+  onAddRoutine,
+  onPatchRoutine,
+  onDeleteRoutine,
 }: {
-  todoActions: TodoActions;
-  routineActions: RoutineActions;
+  todos: Todo[];
+  today: Date;
+  routines: Routine[];
+  onAddTodo: (input: TodoInput) => Promise<void>;
+  onAddTodoWithDefaultDueDate: (input: Omit<TodoInput, "parentId">) => Promise<void>;
+  onPatchTodo: (id: string, patch: Partial<Todo>) => Promise<void>;
+  onDeleteTodo: (id: string) => Promise<void>;
+  onToggleTodo: (todo: Todo) => void;
+  onAddRoutine: (title: string, weekdays: number[], category?: string) => Promise<void>;
+  onPatchRoutine: (id: string, patch: Partial<Routine>) => Promise<void>;
+  onDeleteRoutine: (id: string) => Promise<void>;
 }) {
   const [view, setView] = useState<"list" | "calendar">("list");
   const [scope, setScope] = useState<Scope>("day");
@@ -34,15 +51,15 @@ export function TodoScreen({
   const [showRoutines, setShowRoutines] = useState(false);
   const roots = useMemo(
     () =>
-      todoActions.todos
+      todos
         .filter((todo) => todo.scope === scope && !todo.parentId)
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-    [scope, todoActions.todos],
+    [scope, todos],
   );
   const submitTodo = async () => {
     if (!title.trim()) return;
     try {
-      await todoActions.addTodoWithDefaultDueDate({
+      await onAddTodoWithDefaultDueDate({
         title,
         scope,
         category,
@@ -87,7 +104,7 @@ export function TodoScreen({
         </Pressable>
       </View>
       {view === "calendar" ? (
-        <TodoCalendar today={todoActions.today} todos={todoActions.todos} />
+        <TodoCalendar today={today} todos={todos} />
       ) : (
         <>
           <View style={styles.segment}>
@@ -103,7 +120,14 @@ export function TodoScreen({
               </Pressable>
             ))}
           </View>
-          {showRoutines && <RoutineEditor routineActions={routineActions} />}
+          {showRoutines && (
+            <RoutineEditor
+              routines={routines}
+              onAddRoutine={onAddRoutine}
+              onPatchRoutine={onPatchRoutine}
+              onDeleteRoutine={onDeleteRoutine}
+            />
+          )}
           <Card>
             <TextInput
               style={styles.input}
@@ -139,8 +163,12 @@ export function TodoScreen({
             <TodoItem
               key={todo.id}
               todo={todo}
-              todoActions={todoActions}
-              today={todoActions.today}
+              todos={todos}
+              today={today}
+              onAddTodo={onAddTodo}
+              onPatchTodo={onPatchTodo}
+              onDeleteTodo={onDeleteTodo}
+              onToggleTodo={onToggleTodo}
               subDraft={subDrafts[todo.id] || ""}
               setSubDraft={(value) => updateSubDraft(todo.id, value)}
             />

@@ -39,8 +39,6 @@ export function AppShell({
   const selectedTab = tabs.find((tab) => tab.key === workspace);
   const selectWorkspace = (next: Workspace) => setWorkspace(next);
   const reloadWorkspace = () => void workspaceData.reload();
-  const todoActions = useTodoActions(workspaceData);
-  const routineActions = useRoutineActions(workspaceData);
 
   const navigation = (
     <View style={desktop ? styles.desktopNav : styles.nav}>
@@ -89,7 +87,19 @@ export function AppShell({
     <View style={styles.dashboard}>
       <View style={styles.dashboardPrimary}>
         <View style={[styles.dashboardPanel, styles.todoPanel]}>
-          <TodoScreen todoActions={todoActions} routineActions={routineActions} />
+          <TodoScreen
+            todos={workspaceData.data.todos}
+            today={workspaceData.today}
+            routines={workspaceData.data.routines}
+            onAddTodo={workspaceData.addTodo}
+            onAddTodoWithDefaultDueDate={workspaceData.addTodoWithDefaultDueDate}
+            onPatchTodo={workspaceData.patchTodo}
+            onDeleteTodo={workspaceData.deleteTodo}
+            onToggleTodo={workspaceData.toggleTodo}
+            onAddRoutine={workspaceData.addRoutine}
+            onPatchRoutine={workspaceData.patchRoutine}
+            onDeleteRoutine={workspaceData.deleteRoutine}
+          />
         </View>
         <View style={[styles.dashboardPanel, styles.memoPanel]}>
           <MemoScreen store={workspaceData} />
@@ -100,7 +110,19 @@ export function AppShell({
       </View>
     </View>
   ) : workspace === "todo" ? (
-    <TodoScreen todoActions={todoActions} routineActions={routineActions} />
+    <TodoScreen
+      todos={workspaceData.data.todos}
+      today={workspaceData.today}
+      routines={workspaceData.data.routines}
+      onAddTodo={workspaceData.addTodo}
+      onAddTodoWithDefaultDueDate={workspaceData.addTodoWithDefaultDueDate}
+      onPatchTodo={workspaceData.patchTodo}
+      onDeleteTodo={workspaceData.deleteTodo}
+      onToggleTodo={workspaceData.toggleTodo}
+      onAddRoutine={workspaceData.addRoutine}
+      onPatchRoutine={workspaceData.patchRoutine}
+      onDeleteRoutine={workspaceData.deleteRoutine}
+    />
   ) : workspace === "memo" ? (
     <MemoScreen store={workspaceData} />
   ) : (

@@ -8,7 +8,7 @@ type ReloadWorkspace = () => Promise<void>;
 type WorkspaceRequest = (path: string, init?: RequestInit) => Promise<Response>;
 type CreateId = () => string;
 
-type TodoInput = {
+export type TodoInput = {
   title: string;
   scope: Scope;
   parentId?: string | null;
@@ -16,7 +16,7 @@ type TodoInput = {
   category?: string | null;
 };
 
-export type TodoActions = {
+export type UseTodosResult = {
   todos: Todo[];
   today: Date;
   addTodo: (input: TodoInput) => Promise<void>;
@@ -26,7 +26,7 @@ export type TodoActions = {
   toggleTodo: (todo: Todo) => void;
 };
 
-export function useTodoActions({
+export function useTodos({
   todos,
   setData,
   reload,
@@ -38,7 +38,7 @@ export function useTodoActions({
   reload: ReloadWorkspace;
   request: WorkspaceRequest;
   createId: CreateId;
-}): TodoActions {
+}): UseTodosResult {
   const today = new Date();
 
   const addTodo = async (input: TodoInput) => {

@@ -2,8 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
 import { extractTags, extractTodoTitles, withDerivedTags } from "./domain/memo";
-import { useRoutineActions } from "./routines/hooks/useRoutineActions";
-import { useTodoActions } from "./todo/hooks/useTodoActions";
+import { useRoutines } from "./routines/hooks/useRoutines";
+import { useTodos } from "./todo/hooks/useTodos";
 import type { ActiveSession, AppData, Memo, Todo, WorkSession } from "./types";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
@@ -79,8 +79,8 @@ export function useAppData(enabled: boolean) {
     });
   }, []);
 
-  const todoActions = useTodoActions({ todos: data.todos, setData, reload, request, createId: uid });
-  const routineActions = useRoutineActions({
+  const todoState = useTodos({ todos: data.todos, setData, reload, request, createId: uid });
+  const routineState = useRoutines({
     routines: data.routines,
     setData,
     reload,
@@ -190,11 +190,11 @@ export function useAppData(enabled: boolean) {
     loading,
     error,
     reload,
-    ...todoActions,
+    ...todoState,
     addMemo,
     patchMemo,
     deleteMemo,
-    ...routineActions,
+    ...routineState,
     startSession,
     stopSession,
     recordSession,
