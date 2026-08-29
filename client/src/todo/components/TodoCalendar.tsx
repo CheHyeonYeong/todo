@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Scope } from "../../types";
-import { dayKeyOf } from "../../domain/calendar";
+import { dateKey, dayKeyOf } from "../../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoCalendar.styles";
@@ -27,7 +27,7 @@ export function TodoCalendar({ todos }: { todos: TodoActions["todos"] }) {
     ...Array.from({ length: lastDate }, (_, index) => index + 1),
   ];
   while (cells.length % 7) cells.push(null);
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = dateKey(new Date());
   const dayKey = (day: number) => dayKeyOf(year, month, day);
   const showCurrentMonth = () => {
     const now = new Date();
