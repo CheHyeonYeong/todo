@@ -10,6 +10,9 @@ function fail(reason: unknown) {
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 }
 
+const confirmOnWeb = (message: string) =>
+  Platform.OS === "web" && typeof window !== "undefined" ? window.confirm(message) : true;
+
 export function TodoItem({
   todo,
   todos,
@@ -54,7 +57,7 @@ export function TodoItem({
   const deleteTodo = () => void onDeleteTodo(todo.id).catch(fail);
   const remove = () => {
     if (Platform.OS === "web") {
-      deleteTodo();
+      if (confirmOnWeb(`“${todo.title}”을 삭제할까요?`)) deleteTodo();
       return;
     }
     Alert.alert("할 일 삭제", `“${todo.title}”을 삭제할까요?`, [
