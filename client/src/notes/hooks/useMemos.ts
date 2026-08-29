@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { extractTags, extractTodoTitles, withDerivedTags } from "../../domain/memo";
+import { extractTags, extractTodoTitles, withDerivedTags } from "../domain/memo";
 import type { AppData, Memo, Todo } from "../../types";
 
 type SetWorkspaceData = Dispatch<SetStateAction<AppData>>;
