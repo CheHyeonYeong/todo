@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Scope } from "../../types";
-import type { useAppData } from "../../useAppData";
 import { dayKeyOf } from "../../domain/calendar";
 import { Card } from "../../shared/ui/Card";
+import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoCalendar.styles";
 
-type Store = ReturnType<typeof useAppData>;
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 const scopeOptions: { value: Scope; label: string }[] = [
   { value: "day", label: "오늘" },
@@ -14,7 +13,7 @@ const scopeOptions: { value: Scope; label: string }[] = [
   { value: "month", label: "이번 달" },
 ];
 
-export function TodoCalendar({ store }: { store: Store }) {
+export function TodoCalendar({ todos }: { todos: TodoActions["todos"] }) {
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -71,7 +70,7 @@ export function TodoCalendar({ store }: { store: Store }) {
           ))}
           {cells.map((day, index) => {
             const key = day ? dayKey(day) : "";
-            const items = day ? store.data.todos.filter((todo) => todo.dueDate === key) : [];
+            const items = day ? todos.filter((todo) => todo.dueDate === key) : [];
             return (
               <View
                 key={`${index}-${day}`}
@@ -108,7 +107,7 @@ export function TodoCalendar({ store }: { store: Store }) {
       </Card>
       <Card>
         <Text style={styles.cardTitle}>마감일 없는 할 일</Text>
-        {store.data.todos
+        {todos
           .filter((todo) => !todo.dueDate && !todo.parentId && !todo.done)
           .slice(0, 8)
           .map((todo) => (
