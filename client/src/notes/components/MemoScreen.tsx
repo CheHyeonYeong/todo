@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Card } from "../../shared/ui/Card";
 import type { Memo } from "../../types";
 import { styles } from "./MemoScreen.styles";
@@ -122,7 +122,9 @@ export function MemoScreen({
                 </View>
               </View>
             </Pressable>
-            <Button title="삭제" color="#a43d35" onPress={() => confirmDeleteMemo(memo.id)} />
+            <Pressable onPress={() => confirmDeleteMemo(memo.id)}>
+              <Text style={styles.danger}>삭제</Text>
+            </Pressable>
           </View>
         </Card>
       ))}
