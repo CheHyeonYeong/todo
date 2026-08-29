@@ -2,7 +2,7 @@ import type { Session } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import { supabase } from "../../api";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -26,6 +26,13 @@ export function useAuthSession() {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      void sessionFromCallback(window.location.href)
+        .then(() => {
+          window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
+        })
+        .catch(() => undefined);
+    }
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setIsCheckingSession(false);
@@ -46,6 +53,11 @@ export function useAuthSession() {
       });
       if (error) throw error;
       if (!data.url) throw new Error("로그인 URL을 만들지 못했습니다.");
+
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.location.assign(data.url);
+        return;
+      }
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type === "success") await sessionFromCallback(result.url);
