@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Card } from "../../shared/ui/Card";
 import type { MemoActions } from "../hooks/useMemoActions";
+import { styles } from "./MemoScreen.styles";
 
 const fail = (reason: unknown) =>
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
@@ -117,65 +118,3 @@ export function MemoScreen({ memoActions }: { memoActions: MemoActions }) {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  page: {
-    width: "100%",
-    maxWidth: 1180,
-    alignSelf: "center",
-    gap: 14,
-    paddingHorizontal: 28,
-    paddingTop: 22,
-    paddingBottom: 100,
-  },
-  heading: { fontSize: 30, fontWeight: "800", color: "#17251e" },
-  muted: { marginTop: 3, color: "#748078" },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  cardTitle: { fontSize: 17, fontWeight: "700", color: "#213128" },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  flex: { flex: 1 },
-  input: {
-    minHeight: 46,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#d9e1da",
-    borderRadius: 12,
-    backgroundColor: "#fbfcfb",
-    color: "#17251e",
-  },
-  memoInput: { minHeight: 150, textAlignVertical: "top" },
-  primaryButton: {
-    minHeight: 46,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-    borderRadius: 12,
-    backgroundColor: "#176b47",
-  },
-  primaryText: { fontWeight: "700", color: "#fff" },
-  secondaryButton: {
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: "#bad0c1",
-    borderRadius: 12,
-    backgroundColor: "#eef6f1",
-  },
-  secondaryText: { fontWeight: "700", color: "#176b47" },
-  memoBody: { marginTop: 5, lineHeight: 20, color: "#59665e" },
-  metaRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 5 },
-  chip: {
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
-    backgroundColor: "#eaf4ed",
-    fontSize: 11,
-    color: "#256543",
-  },
-  danger: { color: "#a43d35" },
-  empty: { paddingVertical: 45, textAlign: "center", color: "#8a958e" },
-});
