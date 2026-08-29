@@ -43,23 +43,6 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 
 `domain/`은 react-native를 import하지 않으므로 node 환경에서 그대로 테스트된다.
 
-## 프론트엔드 리팩토링 기준
-
-프론트엔드 리팩토링은 파일을 화면별로 찢는 작업이 아니라 기능 도메인의 책임을 명확히 분리하는 작업이다.
-아래 기준은 클라이언트 리팩토링 PR을 작성하거나 리뷰할 때 기본 판단 기준으로 쓴다.
-
-- PR은 기능 단위로 쪼갠다. 병합을 기다릴 필요가 없으면 stack PR로 올리되, 각 PR의 base/head 관계가 리뷰 가능한 순서를 가져야 한다.
-- 리팩토링 PR에 동작 변경, UI 정책 변경, CI 정책 변경을 섞지 않는다. 기능 변경이나 정책 추가가 필요하면 별도 PR로 분리한다.
-- 화면 컴포넌트는 렌더링과 화면 내부의 지역 상태에 집중한다. 네트워크 요청, 캐시 소유권, mutation 흐름은 feature hook 또는 상위 composition hook에 둔다.
-- 화면과 하위 컴포넌트에 전체 `useAppData` store를 그대로 넘기지 않는다. 해당 기능에 필요한 상태와 액션만 담은 props나 feature hook contract를 넘긴다.
-- `domain/`에 있는 규칙을 화면 코드나 feature hook에 다시 인라인하지 않는다. 새 규칙이 필요하면 domain 순수 함수와 테스트로 추가한다.
-- feature 스타일 파일에는 해당 feature가 실제로 쓰는 스타일만 둔다. Todo/Memo/Time/Schedule 스타일을 한 파일에 섞지 않는다.
-- 전역 스타일, 테마, 아이콘 정책, CI 정책, AGENTS.md 변경은 사용자 합의 없이 추가하지 않는다.
-- 서버 DTO와 id 계약을 클라이언트에서 임의로 바꾸지 않는다. 서버 UUID/id를 줄이거나 새 uid로 대체하지 않는다.
-- 날짜/요일 계산은 사용자가 보는 로컬 날짜 기준인지 UTC 기준인지 의도를 확인하고, 근거 없이 UTC를 도입하지 않는다.
-- 테스트는 변경 범위에 맞춘 unit/domain/component 검증을 우선한다. e2e나 smoke test 추가는 별도 합의가 있을 때만 한다.
-- PR 본문과 리뷰 설명은 한국어로 작성하고, 변경 목적/범위/검증/남은 작업을 간결하게 적는다.
-
 ## 검사 명령
 
 ```bash
