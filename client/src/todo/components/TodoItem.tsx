@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { Todo } from "../../types";
 import { isOverdueDateKey } from "../domain/calendar";
 import { Card } from "../../shared/ui/Card";
@@ -9,9 +9,6 @@ import { styles } from "./TodoItem.styles";
 function fail(reason: unknown) {
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 }
-
-const confirmOnWeb = (message: string) =>
-  Platform.OS === "web" && typeof window !== "undefined" ? window.confirm(message) : true;
 
 export function TodoItem({
   todo,
@@ -54,21 +51,15 @@ export function TodoItem({
   const toggleEditing = () => setEditing((value) => !value);
   const toggleChild = (child: Todo) => onToggleTodo(child);
   const deleteChild = (childId: string) => void onDeleteTodo(childId).catch(fail);
-  const deleteTodo = () => void onDeleteTodo(todo.id).catch(fail);
-  const remove = () => {
-    if (Platform.OS === "web") {
-      if (confirmOnWeb(`“${todo.title}”을 삭제할까요?`)) deleteTodo();
-      return;
-    }
+  const remove = () =>
     Alert.alert("할 일 삭제", `“${todo.title}”을 삭제할까요?`, [
       { text: "취소", style: "cancel" },
       {
         text: "삭제",
         style: "destructive",
-        onPress: deleteTodo,
+        onPress: () => void onDeleteTodo(todo.id).catch(fail),
       },
     ]);
-  };
   const save = async () => {
     try {
       await onPatchTodo(todo.id, {
@@ -109,7 +100,7 @@ export function TodoItem({
             {todo.category ? <Text style={styles.chip}>{todo.category}</Text> : null}
             {todo.dueDate ? (
               <Text style={[styles.meta, overdue && styles.overdue]}>
-                {overdue ? "마감 지남 " : "마감일 "}
+                {overdue ? "지연 " : "마감 "}
                 {todo.dueDate}
               </Text>
             ) : null}
