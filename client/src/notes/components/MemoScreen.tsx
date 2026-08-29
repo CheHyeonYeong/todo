@@ -1,18 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Card } from "../../shared/ui/Card";
-import type { useAppData } from "../../useAppData";
+import type { Memo } from "../../types";
 
-type Store = ReturnType<typeof useAppData>;
 const fail = (reason: unknown) =>
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 
-export function MemoScreen({ store }: { store: Store }) {
+export function MemoScreen({
+  memos,
+  onAddMemo,
+  onPatchMemo,
+  onDeleteMemo,
+}: {
+  memos: Memo[];
+  onAddMemo: (title: string, body: string) => Promise<void>;
+  onPatchMemo: (id: string, patch: Partial<Memo>) => Promise<void>;
+  onDeleteMemo: (id: string) => Promise<void>;
+}) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [selectedMemoId, setSelectedMemoId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const selectedMemo = store.data.memos.find((memo) => memo.id === selectedMemoId);
+  const selectedMemo = memos.find((memo) => memo.id === selectedMemoId);
   useEffect(() => {
     if (selectedMemo) {
       setTitle(selectedMemo.title || "");
@@ -27,8 +36,9 @@ export function MemoScreen({ store }: { store: Store }) {
   const saveMemo = async () => {
     if (!title.trim() && !body.trim()) return;
     try {
-      if (selectedMemoId) await store.patchMemo(selectedMemoId, { title: title.trim(), body: body.trim() });
-      else await store.addMemo(title, body);
+      if (selectedMemoId)
+        await onPatchMemo(selectedMemoId, { title: title.trim(), body: body.trim() });
+      else await onAddMemo(title, body);
       resetDraft();
     } catch (reason) {
       fail(reason);
@@ -36,7 +46,7 @@ export function MemoScreen({ store }: { store: Store }) {
   };
   const visibleMemos = useMemo(
     () =>
-      [...store.data.memos]
+      [...memos]
         .filter(
           (memo) =>
             !query.trim() ||
@@ -45,12 +55,12 @@ export function MemoScreen({ store }: { store: Store }) {
             ),
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [query, store.data.memos],
+    [query, memos],
   );
   const confirmDeleteMemo = (id: string) =>
     Alert.alert("메모 삭제", "이 메모를 삭제할까요?", [
       { text: "취소" },
-      { text: "삭제", style: "destructive", onPress: () => void store.deleteMemo(id).catch(fail) },
+      { text: "삭제", style: "destructive", onPress: () => void onDeleteMemo(id).catch(fail) },
     ]);
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">

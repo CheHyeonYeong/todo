@@ -103,7 +103,12 @@ export function AppShell({
           />
         </View>
         <View style={[styles.dashboardPanel, styles.memoPanel]}>
-          <MemoScreen store={workspaceData} />
+          <MemoScreen
+            memos={workspaceData.data.memos}
+            onAddMemo={workspaceData.addMemo}
+            onPatchMemo={workspaceData.patchMemo}
+            onDeleteMemo={workspaceData.deleteMemo}
+          />
         </View>
       </View>
       <View style={[styles.dashboardPanel, styles.timePanel]}>
@@ -125,7 +130,12 @@ export function AppShell({
       onDeleteRoutine={workspaceData.deleteRoutine}
     />
   ) : workspace === "memo" ? (
-    <MemoScreen store={workspaceData} />
+    <MemoScreen
+      memos={workspaceData.data.memos}
+      onAddMemo={workspaceData.addMemo}
+      onPatchMemo={workspaceData.patchMemo}
+      onDeleteMemo={workspaceData.deleteMemo}
+    />
   ) : (
     <TimeScreen store={workspaceData} />
   );
