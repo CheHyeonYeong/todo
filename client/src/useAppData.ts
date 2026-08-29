@@ -80,7 +80,13 @@ export function useAppData(enabled: boolean) {
   }, []);
 
   const todoActions = useTodoActions({ todos: data.todos, setData, reload, request, createId: uid });
-  const routineActions = useRoutineActions({ routines: data.routines, setData, reload, request, createId: uid });
+  const routineActions = useRoutineActions({
+    routines: data.routines,
+    setData,
+    reload,
+    request,
+    createId: uid,
+  });
 
   const addMemo = async (title: string, body: string) => {
     const memo: Memo = {

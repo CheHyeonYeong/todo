@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Scope } from "../../types";
-import { dateKey, dayKeyOf } from "../../domain/calendar";
+import { dateKey, dayKeyOf, monthGridDays, nextMonth, previousMonth, startOfMonth } from "../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoCalendar.styles";
@@ -13,28 +13,14 @@ const scopeOptions: { value: Scope; label: string }[] = [
   { value: "month", label: "이번 달" },
 ];
 
-export function TodoCalendar({ todos }: { todos: TodoActions["todos"] }) {
-  const [cursor, setCursor] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const lastDate = new Date(year, month + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: lastDate }, (_, index) => index + 1),
-  ];
-  while (cells.length % 7) cells.push(null);
-  const todayKey = dateKey(new Date());
+export function TodoCalendar({ today, todos }: { today: Date; todos: TodoActions["todos"] }) {
+  const [cursor, setCursor] = useState(() => startOfMonth(today));
+  const { year, month, cells } = monthGridDays(cursor);
+  const todayKey = dateKey(today);
   const dayKey = (day: number) => dayKeyOf(year, month, day);
-  const showCurrentMonth = () => {
-    const now = new Date();
-    setCursor(new Date(now.getFullYear(), now.getMonth(), 1));
-  };
-  const showPreviousMonth = () => setCursor(new Date(year, month - 1, 1));
-  const showNextMonth = () => setCursor(new Date(year, month + 1, 1));
+  const showCurrentMonth = () => setCursor(startOfMonth(today));
+  const showPreviousMonth = () => setCursor(previousMonth(cursor));
+  const showNextMonth = () => setCursor(nextMonth(cursor));
   return (
     <>
       <View style={styles.sectionHeader}>

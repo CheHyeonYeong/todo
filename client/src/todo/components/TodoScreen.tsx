@@ -87,7 +87,7 @@ export function TodoScreen({
         </Pressable>
       </View>
       {view === "calendar" ? (
-        <TodoCalendar todos={todoActions.todos} />
+        <TodoCalendar today={todoActions.today} todos={todoActions.todos} />
       ) : (
         <>
           <View style={styles.segment}>
@@ -140,6 +140,7 @@ export function TodoScreen({
               key={todo.id}
               todo={todo}
               todoActions={todoActions}
+              today={todoActions.today}
               subDraft={subDrafts[todo.id] || ""}
               setSubDraft={(value) => updateSubDraft(todo.id, value)}
             />

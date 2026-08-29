@@ -1,6 +1,6 @@
 /* 날짜 계산. 전부 로컬 시간 기준이고, "지금"은 인자로 받는다.
    화면 코드가 new Date()를 직접 부르면 자정 경계를 테스트할 수 없다. */
-import type { Scope } from "../types";
+import type { Scope } from "../../types";
 
 /** 저장소와 API가 쓰는 날짜 키 형식: YYYY-MM-DD (로컬 시간 기준) */
 export function dateKey(date: Date): string {
@@ -13,6 +13,35 @@ export function dateKey(date: Date): string {
 /** 해당 연·월(0-based)의 며칠을 날짜 키로. 달력 격자가 쓴다. */
 export function dayKeyOf(year: number, month: number, day: number): string {
   return dateKey(new Date(year, month, day));
+}
+
+export function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+export function previousMonth(monthCursor: Date): Date {
+  return new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1);
+}
+
+export function nextMonth(monthCursor: Date): Date {
+  return new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1);
+}
+
+export function monthGridDays(monthCursor: Date): {
+  year: number;
+  month: number;
+  cells: (number | null)[];
+} {
+  const year = monthCursor.getFullYear();
+  const month = monthCursor.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const lastDate = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: lastDate }, (_, index) => index + 1),
+  ];
+  while (cells.length % 7) cells.push(null);
+  return { year, month, cells };
 }
 
 /** 그 주의 일요일 0시. 주간 플래너가 한 주의 시작으로 쓴다. */
@@ -39,4 +68,8 @@ export function defaultDueDate(scope: Scope, today: Date): string {
   if (scope === "month") return dateKey(endOfMonth(today));
   if (scope === "week") return dateKey(addDays(today, (7 - today.getDay()) % 7));
   return dateKey(today);
+}
+
+export function isOverdueDateKey(dueDate: string | null | undefined, done: boolean, today: Date): boolean {
+  return Boolean(dueDate && !done && dueDate < dateKey(today));
 }

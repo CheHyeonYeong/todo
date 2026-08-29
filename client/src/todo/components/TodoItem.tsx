@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { Todo } from "../../types";
-import { dateKey } from "../../domain/calendar";
+import { isOverdueDateKey } from "../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoItem.styles";
@@ -13,11 +13,13 @@ function fail(reason: unknown) {
 export function TodoItem({
   todo,
   todoActions,
+  today,
   subDraft,
   setSubDraft,
 }: {
   todo: Todo;
   todoActions: TodoActions;
+  today: Date;
   subDraft: string;
   setSubDraft: (value: string) => void;
 }) {
@@ -34,7 +36,7 @@ export function TodoItem({
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
     [todoActions.todos, todo.id],
   );
-  const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < dateKey(new Date()));
+  const overdue = isOverdueDateKey(todo.dueDate, todo.done, today);
   const toggleTodo = () => todoActions.toggleTodo(todo);
   const toggleDetails = () => setExpanded((value) => !value);
   const startEditing = () => setEditing(true);

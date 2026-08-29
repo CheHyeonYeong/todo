@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
-import { defaultDueDate } from "../../domain/calendar";
-import { applyTodoPatch, completionPatch, nextSortOrder } from "../../domain/todo";
+import { defaultDueDate } from "../domain/calendar";
+import { applyTodoPatch, completionPatch, nextSortOrder } from "../domain/todo";
 import type { AppData, Scope, Todo } from "../../types";
 
 type SetWorkspaceData = Dispatch<SetStateAction<AppData>>;
@@ -18,6 +18,7 @@ type TodoInput = {
 
 export type TodoActions = {
   todos: Todo[];
+  today: Date;
   addTodo: (input: TodoInput) => Promise<void>;
   addTodoWithDefaultDueDate: (input: Omit<TodoInput, "parentId">) => Promise<void>;
   patchTodo: (id: string, patch: Partial<Todo>) => Promise<void>;
@@ -38,6 +39,8 @@ export function useTodoActions({
   request: WorkspaceRequest;
   createId: CreateId;
 }): TodoActions {
+  const today = new Date();
+
   const addTodo = async (input: TodoInput) => {
     const parentId = input.parentId || null;
     const todo: Todo = {
@@ -109,6 +112,7 @@ export function useTodoActions({
 
   return {
     todos,
+    today,
     addTodo,
     addTodoWithDefaultDueDate,
     patchTodo,
