@@ -108,10 +108,10 @@ export function MemoScreen({
         placeholder="메모 검색 (제목 · 본문 · #태그)"
       />
       {visibleMemos.map((memo) => (
-        <Pressable key={memo.id} onPress={() => selectMemo(memo.id)}>
-          <Card>
-            <View style={styles.sectionHeader}>
-              <View style={styles.flex}>
+        <Card key={memo.id}>
+          <View style={styles.sectionHeader}>
+            <Pressable style={styles.flex} onPress={() => selectMemo(memo.id)}>
+              <View>
                 <Text style={styles.cardTitle}>{memo.title || "제목 없는 메모"}</Text>
                 <Text style={styles.memoBody} numberOfLines={4}>
                   {memo.body}
@@ -124,17 +124,12 @@ export function MemoScreen({
                   ))}
                 </View>
               </View>
-              <Pressable
-                onPress={(event) => {
-                  event.stopPropagation();
-                  confirmDeleteMemo(memo.id);
-                }}
-              >
-                <Text style={styles.danger}>삭제</Text>
-              </Pressable>
-            </View>
-          </Card>
-        </Pressable>
+            </Pressable>
+            <Pressable onPress={() => confirmDeleteMemo(memo.id)}>
+              <Text style={styles.danger}>삭제</Text>
+            </Pressable>
+          </View>
+        </Card>
       ))}
       {!visibleMemos.length && (
         <Text style={styles.empty}>{query ? "검색 결과가 없습니다." : "아직 메모가 없습니다."}</Text>
