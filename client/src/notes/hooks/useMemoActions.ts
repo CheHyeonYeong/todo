@@ -1,4 +1,4 @@
-import { extractTags, extractTodoTitles, withDerivedTags } from "../../domain/memo";
+import { extractTags, extractTodoTitles, withDerivedTags } from "../domain/memo";
 import type { Memo, Todo } from "../../types";
 import { request, type ReloadWorkspace, type SetWorkspaceData, uid } from "../../workspace/data";
 
