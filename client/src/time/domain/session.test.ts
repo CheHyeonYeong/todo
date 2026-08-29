@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { WorkSession } from "../types";
+import type { WorkSession } from "../../types";
 import {
   isMomentNote,
   momentNoteLabel,

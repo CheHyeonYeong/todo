@@ -1,6 +1,6 @@
 /* 시간 기록의 규칙. "순간 메모"는 측정 없이 남기는 한 줄짜리 기록인데,
    별도 저장소가 없어 세션 label에 접두사를 붙여 구분한다. 그 사실을 여기 한 곳에만 둔다. */
-import type { WorkSession } from "../types";
+import type { WorkSession } from "../../types";
 
 const MOMENT_NOTE_PREFIX = "__moment_note__:";
 

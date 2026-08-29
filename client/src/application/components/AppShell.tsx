@@ -10,8 +10,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { TimeScreen } from "../../Screens";
 import { MemoScreen } from "../../notes/components/MemoScreen";
+import { TimeScreen } from "../../time/components/TimeScreen";
 import { TodoScreen } from "../../todo/components/TodoScreen";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
@@ -59,6 +59,17 @@ export function AppShell({
     addRoutine: store.addRoutine,
     patchRoutine: store.patchRoutine,
     deleteRoutine: store.deleteRoutine,
+  };
+  const timeActions = {
+    sessions: store.data.sessions,
+    activeSession: store.activeSession,
+    timerMinutes: store.timerMinutes,
+    updateTimerMinutes: store.updateTimerMinutes,
+    startSession: store.startSession,
+    stopSession: store.stopSession,
+    recordTimedSession: store.recordTimedSession,
+    recordMomentNote: store.recordMomentNote,
+    deleteSession: store.deleteSession,
   };
 
   const navigation = (
@@ -115,7 +126,7 @@ export function AppShell({
         </View>
       </View>
       <View style={[styles.dashboardPanel, styles.timePanel]}>
-        <TimeScreen store={store} />
+        <TimeScreen time={timeActions} />
       </View>
     </View>
   ) : workspace === "todo" ? (
@@ -123,7 +134,7 @@ export function AppShell({
   ) : workspace === "memo" ? (
     <MemoScreen memoActions={memoActions} />
   ) : (
-    <TimeScreen store={store} />
+    <TimeScreen time={timeActions} />
   );
 
   return (
