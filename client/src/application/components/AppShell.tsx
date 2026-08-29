@@ -40,6 +40,12 @@ export function AppShell({
   const selectedTab = tabs.find((tab) => tab.key === workspace);
   const selectWorkspace = (next: Workspace) => setWorkspace(next);
   const reloadWorkspace = () => void store.reload();
+  const memoActions = {
+    memos: store.data.memos,
+    addMemo: store.addMemo,
+    patchMemo: store.patchMemo,
+    deleteMemo: store.deleteMemo,
+  };
   const todoActions = {
     todos: store.data.todos,
     addTodo: store.addTodo,
@@ -105,7 +111,7 @@ export function AppShell({
           <TodoScreen todoActions={todoActions} routineActions={routineActions} />
         </View>
         <View style={[styles.dashboardPanel, styles.memoPanel]}>
-          <MemoScreen store={store} />
+          <MemoScreen memoActions={memoActions} />
         </View>
       </View>
       <View style={[styles.dashboardPanel, styles.timePanel]}>
@@ -115,7 +121,7 @@ export function AppShell({
   ) : workspace === "todo" ? (
     <TodoScreen todoActions={todoActions} routineActions={routineActions} />
   ) : workspace === "memo" ? (
-    <MemoScreen store={store} />
+    <MemoScreen memoActions={memoActions} />
   ) : (
     <TimeScreen store={store} />
   );
