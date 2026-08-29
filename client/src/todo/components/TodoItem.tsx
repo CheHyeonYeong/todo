@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { Todo } from "../../types";
-import { dateKey } from "../../domain/calendar";
+import { dateKey } from "../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoItem.styles";

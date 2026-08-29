@@ -1,5 +1,5 @@
-import { defaultDueDate } from "../../domain/calendar";
-import { applyTodoPatch, completionPatch, nextSortOrder } from "../../domain/todo";
+import { defaultDueDate } from "../domain/calendar";
+import { applyTodoPatch, completionPatch, nextSortOrder } from "../domain/todo";
 import type { Scope, Todo } from "../../types";
 import { request, type ReloadWorkspace, type SetWorkspaceData, uid } from "../../workspace/data";
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Scope } from "../../types";
-import { dateKey, dayKeyOf } from "../../domain/calendar";
+import { dateKey, dayKeyOf } from "../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoCalendar.styles";
