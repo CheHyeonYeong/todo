@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { WorkSession } from "../../types";
 import {
+  elapsedSecondsSince,
+  elapsedTimeText,
   isMomentNote,
   momentNoteLabel,
   momentNoteText,
@@ -62,6 +64,26 @@ describe("totalDurationMs", () => {
 
   test("빈 목록은 0이다", () => {
     expect(totalDurationMs([])).toBe(0);
+  });
+});
+
+describe("elapsed time", () => {
+  test("활성 기록의 지난 초를 계산한다", () => {
+    const startedAt = at(2026, 8, 18, 9, 0).toISOString();
+    expect(elapsedSecondsSince(startedAt, at(2026, 8, 18, 9, 1).getTime() + 5000)).toBe(65);
+  });
+
+  test("시작보다 이른 현재 시각은 0초로 막는다", () => {
+    const startedAt = at(2026, 8, 18, 9, 0).toISOString();
+    expect(elapsedSecondsSince(startedAt, at(2026, 8, 18, 8, 59).getTime())).toBe(0);
+  });
+
+  test("1시간 미만은 분/초로 표시한다", () => {
+    expect(elapsedTimeText(65)).toBe("1분 5초");
+  });
+
+  test("1시간 이상은 시/분/초로 표시한다", () => {
+    expect(elapsedTimeText(3665)).toBe("1시간 1분 5초");
   });
 });
 

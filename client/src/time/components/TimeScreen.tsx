@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { ActiveSession, WorkSession } from "../../types";
 import {
-  elapsedMinutesSince,
+  elapsedSecondsSince,
+  elapsedTimeText,
   isMomentNote,
   momentNoteText,
   plannerWeekDays,
@@ -222,17 +223,17 @@ function SessionTracker({
   const [, tick] = useState(0);
   useEffect(() => {
     if (!activeSession) return;
-    const id = setInterval(() => tick((value) => value + 1), 30000);
+    const id = setInterval(() => tick((value) => value + 1), 1000);
     return () => clearInterval(id);
   }, [activeSession]);
-  const elapsed = activeSession ? elapsedMinutesSince(activeSession.startedAt, nowMs()) : 0;
+  const elapsed = activeSession ? elapsedSecondsSince(activeSession.startedAt, nowMs()) : 0;
   return (
     <Card>
       <Text style={styles.cardTitle}>작업 시간 기록</Text>
       {activeSession ? (
         <>
           <Text style={styles.sessionLabel}>{activeSession.label || "이름 없는 작업"}</Text>
-          <Text style={styles.muted}>{elapsed}분째 기록 중</Text>
+          <Text style={styles.muted}>{elapsedTimeText(elapsed)} 집중 중</Text>
           <Pressable style={styles.stopButton} onPress={() => void onStopSession().catch(fail)}>
             <Text style={styles.primaryText}>기록 종료</Text>
           </Pressable>
