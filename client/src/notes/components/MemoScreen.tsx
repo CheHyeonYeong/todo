@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { Card } from "../../shared/ui/Card";
 import type { Memo } from "../../types";
 import { styles } from "./MemoScreen.styles";
 
 const fail = (reason: unknown) =>
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
+
+const confirm = (message: string) =>
+  Platform.OS === "web" && typeof window !== "undefined" ? window.confirm(message) : true;
 
 export function MemoScreen({
   memos,
@@ -58,11 +61,17 @@ export function MemoScreen({
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [query, memos],
   );
+  const deleteMemo = async (id: string) => {
+    await onDeleteMemo(id);
+    if (selectedMemoId === id) resetDraft();
+  };
   const confirmDeleteMemo = (id: string) =>
-    Alert.alert("메모 삭제", "이 메모를 삭제할까요?", [
-      { text: "취소" },
-      { text: "삭제", style: "destructive", onPress: () => void onDeleteMemo(id).catch(fail) },
-    ]);
+    Platform.OS === "web"
+      ? confirm("이 메모를 삭제할까요?") && void deleteMemo(id).catch(fail)
+      : Alert.alert("메모 삭제", "이 메모를 삭제할까요?", [
+          { text: "취소" },
+          { text: "삭제", style: "destructive", onPress: () => void deleteMemo(id).catch(fail) },
+        ]);
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
       <View>
@@ -115,7 +124,12 @@ export function MemoScreen({
                   ))}
                 </View>
               </View>
-              <Pressable onPress={() => confirmDeleteMemo(memo.id)}>
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation();
+                  confirmDeleteMemo(memo.id);
+                }}
+              >
                 <Text style={styles.danger}>삭제</Text>
               </Pressable>
             </View>
