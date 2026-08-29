@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Alert, Button, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { Alert, Platform, Pressable, Text, TextInput, View } from "react-native";
 import type { Todo } from "../../types";
 import { isOverdueDateKey } from "../domain/calendar";
 import { Card } from "../../shared/ui/Card";
@@ -121,7 +121,9 @@ export function TodoItem({
         <Pressable onPress={toggleEditing}>
           <Text style={styles.action}>편집</Text>
         </Pressable>
-        <Button title="삭제" color="#a43d35" onPress={remove} />
+        <Pressable onPress={remove}>
+          <Text style={[styles.action, styles.danger]}>삭제</Text>
+        </Pressable>
       </View>
       {editing && (
         <View style={styles.editor}>
@@ -163,7 +165,9 @@ export function TodoItem({
                 <Text style={styles.check}>{child.done ? "✓" : ""}</Text>
               </Pressable>
               <Text style={[styles.flex, child.done && styles.done]}>{child.title}</Text>
-              <Button title="삭제" color="#a43d35" onPress={() => deleteChild(child.id)} />
+              <Pressable onPress={() => deleteChild(child.id)}>
+                <Text style={styles.danger}>×</Text>
+              </Pressable>
             </View>
           ))}
           <View style={styles.row}>
