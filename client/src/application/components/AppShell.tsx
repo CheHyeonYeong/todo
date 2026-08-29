@@ -10,9 +10,10 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { MemoScreen } from "../../notes/components/MemoScreen";
 import { TimeScreen } from "../../time/components/TimeScreen";
+import { MemoScreen } from "../../notes/components/MemoScreen";
 import { TodoScreen } from "../../todo/components/TodoScreen";
+import { useWorkspaceContracts } from "../hooks/useWorkspaceContracts";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
 
@@ -27,11 +28,11 @@ const tabs: { key: Workspace; label: string; icon: string }[] = [
 
 export function AppShell({
   session,
-  store,
+  workspaceData,
   onLogout,
 }: {
   session: Session;
-  store: Store;
+  workspaceData: Store;
   onLogout: () => Promise<unknown>;
 }) {
   const [workspace, setWorkspace] = useState<Workspace>("todo");
@@ -39,38 +40,8 @@ export function AppShell({
   const desktop = Platform.OS === "web" && width >= 1100;
   const selectedTab = tabs.find((tab) => tab.key === workspace);
   const selectWorkspace = (next: Workspace) => setWorkspace(next);
-  const reloadWorkspace = () => void store.reload();
-  const memoActions = {
-    memos: store.data.memos,
-    addMemo: store.addMemo,
-    patchMemo: store.patchMemo,
-    deleteMemo: store.deleteMemo,
-  };
-  const todoActions = {
-    todos: store.data.todos,
-    addTodo: store.addTodo,
-    addTodoWithDefaultDueDate: store.addTodoWithDefaultDueDate,
-    patchTodo: store.patchTodo,
-    deleteTodo: store.deleteTodo,
-    toggleTodo: store.toggleTodo,
-  };
-  const routineActions = {
-    routines: store.data.routines,
-    addRoutine: store.addRoutine,
-    patchRoutine: store.patchRoutine,
-    deleteRoutine: store.deleteRoutine,
-  };
-  const timeActions = {
-    sessions: store.data.sessions,
-    activeSession: store.activeSession,
-    timerMinutes: store.timerMinutes,
-    updateTimerMinutes: store.updateTimerMinutes,
-    startSession: store.startSession,
-    stopSession: store.stopSession,
-    recordTimedSession: store.recordTimedSession,
-    recordMomentNote: store.recordMomentNote,
-    deleteSession: store.deleteSession,
-  };
+  const { loading, error, reloadWorkspace, memoActions, todoActions, routineActions, time } =
+    useWorkspaceContracts(workspaceData);
 
   const navigation = (
     <View style={desktop ? styles.desktopNav : styles.nav}>
@@ -113,7 +84,7 @@ export function AppShell({
     </View>
   );
 
-  const content = store.loading ? (
+  const content = loading ? (
     <ActivityIndicator style={styles.loader} color="#176b47" />
   ) : desktop ? (
     <View style={styles.dashboard}>
@@ -126,7 +97,7 @@ export function AppShell({
         </View>
       </View>
       <View style={[styles.dashboardPanel, styles.timePanel]}>
-        <TimeScreen time={timeActions} />
+        <TimeScreen time={time} />
       </View>
     </View>
   ) : workspace === "todo" ? (
@@ -134,7 +105,7 @@ export function AppShell({
   ) : workspace === "memo" ? (
     <MemoScreen memoActions={memoActions} />
   ) : (
-    <TimeScreen time={timeActions} />
+    <TimeScreen time={time} />
   );
 
   return (
@@ -161,9 +132,9 @@ export function AppShell({
               </Pressable>
             </View>
           </View>
-          {store.error && (
+          {error && (
             <Pressable style={styles.errorBar} onPress={reloadWorkspace}>
-              <Text style={styles.errorText}>{store.error} · 다시 시도</Text>
+              <Text style={styles.errorText}>{error} · 다시 시도</Text>
             </Pressable>
           )}
           <View style={[styles.content, desktop && styles.desktopContent]}>{content}</View>

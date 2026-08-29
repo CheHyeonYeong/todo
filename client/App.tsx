@@ -8,5 +8,5 @@ export default function App() {
   const store = useAppData(Boolean(session));
 
   if (!session) return <AuthGate checking={checking} onLogin={login} />;
-  return <AppShell session={session} store={store} onLogout={logout} />;
+  return <AppShell session={session} workspaceData={store} onLogout={logout} />;
 }

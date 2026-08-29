@@ -5,7 +5,7 @@ import { useRoutineActions } from "./routines/hooks/useRoutineActions";
 import { useTimeActions } from "./time/hooks/useTimeActions";
 import { useTodoActions } from "./todo/hooks/useTodoActions";
 import type { ActiveSession, AppData } from "./types";
-import { request } from "./workspace/data";
+import { request } from "./workspace/request";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
 const ACTIVE_SESSION_KEY = "todo:active-session";
@@ -79,13 +79,14 @@ export function useAppData(enabled: boolean) {
   });
 
   return {
-    data,
-    loading,
-    error,
-    reload,
     ...todoActions,
     ...memoActions,
     ...routineActions,
     ...timeActions,
+    data,
+    activeSession,
+    loading,
+    error,
+    reload,
   };
 }

@@ -1,7 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import type { ActiveSession, WorkSession } from "../../types";
-import { request, type SetWorkspaceData, uid } from "../../workspace/data";
+import { createClientId } from "../../workspace/clientIds";
+import { request } from "../../workspace/request";
+import type { SetWorkspaceData } from "../../workspace/types";
 import { momentNoteLabel } from "../domain/session";
 
 export type TimeActions = ReturnType<typeof useTimeActions>;
@@ -44,7 +46,7 @@ export function useTimeActions({
 
   const startSession = async (label: string) => {
     const next: ActiveSession = {
-      id: uid(),
+      id: createClientId(),
       label: label.trim(),
       startedAt: new Date().toISOString(),
     };

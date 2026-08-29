@@ -1,6 +1,8 @@
 import { extractTags, extractTodoTitles, withDerivedTags } from "../domain/memo";
 import type { Memo, Todo } from "../../types";
-import { request, type ReloadWorkspace, type SetWorkspaceData, uid } from "../../workspace/data";
+import { createClientId } from "../../workspace/clientIds";
+import { request } from "../../workspace/request";
+import type { ReloadWorkspace, SetWorkspaceData } from "../../workspace/types";
 
 export type MemoActions = {
   memos: Memo[];
@@ -20,14 +22,14 @@ export function useMemoActions({
 }): MemoActions {
   const addMemo = async (title: string, body: string) => {
     const memo: Memo = {
-      id: uid(),
+      id: createClientId(),
       title: title.trim(),
       body: body.trim(),
       createdAt: new Date().toISOString(),
       tags: extractTags(body),
     };
     const extracted: Todo[] = extractTodoTitles(body).map((todoTitle, index) => ({
-      id: uid(),
+      id: createClientId(),
       title: todoTitle,
       scope: "day",
       done: false,

@@ -1,7 +1,9 @@
 import { defaultDueDate } from "../domain/calendar";
 import { applyTodoPatch, completionPatch, nextSortOrder } from "../domain/todo";
 import type { Scope, Todo } from "../../types";
-import { request, type ReloadWorkspace, type SetWorkspaceData, uid } from "../../workspace/data";
+import { createClientId } from "../../workspace/clientIds";
+import { request } from "../../workspace/request";
+import type { ReloadWorkspace, SetWorkspaceData } from "../../workspace/types";
 
 type TodoInput = {
   title: string;
@@ -32,7 +34,7 @@ export function useTodoActions({
   const addTodo = async (input: TodoInput) => {
     const parentId = input.parentId || null;
     const todo: Todo = {
-      id: uid(),
+      id: createClientId(),
       title: input.title.trim(),
       scope: input.scope,
       done: false,

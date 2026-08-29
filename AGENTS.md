@@ -25,23 +25,23 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 
 ## 클라이언트 구조
 
-`client/src/domain/`에 비즈니스 규칙을 순수함수로 모아둔다. 화면 코드(`Screens.tsx`)와
-상태 훅(`useAppData.ts`)은 이 함수들을 부르기만 한다.
+비즈니스 규칙은 각 기능의 `domain/`에 순수함수로 모아둔다. 화면 코드와 상태 훅(`useAppData.ts`)은
+이 함수들을 부르기만 한다.
 
 | 모듈 | 규칙 |
 | --- | --- |
-| `calendar.ts` | 날짜 키, 주·월 경계, 스코프별 기본 마감일 |
-| `session.ts` | 순간 메모 판별, 소요 시간, 시각대 겹침 |
-| `todo.ts` | 정렬 순서, 완료 시각, 부모 완료 전파 |
-| `memo.ts` | 태그·할 일 파싱, 본문에서 파생되는 값 |
+| `todo/domain/calendar.ts` | 날짜 키, 주·월 경계, 스코프별 기본 마감일 |
+| `time/domain/session.ts` | 순간 메모 판별, 소요 시간, 시각대 겹침 |
+| `todo/domain/todo.ts` | 정렬 순서, 완료 시각, 부모 완료 전파 |
+| `notes/domain/memo.ts` | 태그·할 일 파싱, 본문에서 파생되는 값 |
 
 지켜야 할 규칙 두 가지:
 
-- **`domain/`은 순수하게 둔다.** `new Date()`를 안에서 부르지 말고 "지금"을 인자로 받는다.
+- **각 기능의 `domain/`은 순수하게 둔다.** `new Date()`를 안에서 부르지 말고 "지금"을 인자로 받는다.
   자정 경계를 테스트할 수 없게 되는 순간 이 폴더의 존재 이유가 사라진다.
 - **규칙을 화면 코드에 다시 인라인하지 않는다.** 새 규칙이 생기면 `domain/`에 함수로 넣고 테스트를 붙인다.
 
-`domain/`은 react-native를 import하지 않으므로 node 환경에서 그대로 테스트된다.
+각 기능의 `domain/`은 react-native를 import하지 않으므로 node 환경에서 그대로 테스트된다.
 
 ## 프론트엔드 리팩토링 기준
 
@@ -52,7 +52,7 @@ npm run skills   # skills/* -> .claude/skills, .codex/skills, .agents/skills 링
 - 리팩토링 PR에 동작 변경, UI 정책 변경, CI 정책 변경을 섞지 않는다. 기능 변경이나 정책 추가가 필요하면 별도 PR로 분리한다.
 - 화면 컴포넌트는 렌더링과 화면 내부의 지역 상태에 집중한다. 네트워크 요청, 캐시 소유권, mutation 흐름은 feature hook 또는 상위 composition hook에 둔다.
 - 화면과 하위 컴포넌트에 전체 `useAppData` store를 그대로 넘기지 않는다. 해당 기능에 필요한 상태와 액션만 담은 props나 feature hook contract를 넘긴다.
-- `domain/`에 있는 규칙을 화면 코드나 feature hook에 다시 인라인하지 않는다. 새 규칙이 필요하면 domain 순수 함수와 테스트로 추가한다.
+- 각 기능 `domain/`에 있는 규칙을 화면 코드나 feature hook에 다시 인라인하지 않는다. 새 규칙이 필요하면 기능 소유 domain 순수 함수와 테스트로 추가한다.
 - feature 스타일 파일에는 해당 feature가 실제로 쓰는 스타일만 둔다. Todo/Memo/Time/Schedule 스타일을 한 파일에 섞지 않는다.
 - 전역 스타일, 테마, 아이콘 정책, CI 정책, AGENTS.md 변경은 사용자 합의 없이 추가하지 않는다.
 - 서버 DTO와 id 계약을 클라이언트에서 임의로 바꾸지 않는다. 서버 UUID/id를 줄이거나 새 uid로 대체하지 않는다.

@@ -1,5 +1,7 @@
 import type { Routine } from "../../types";
-import { request, type ReloadWorkspace, type SetWorkspaceData, uid } from "../../workspace/data";
+import { createClientId } from "../../workspace/clientIds";
+import { request } from "../../workspace/request";
+import type { ReloadWorkspace, SetWorkspaceData } from "../../workspace/types";
 
 export type RoutineActions = {
   routines: Routine[];
@@ -19,7 +21,7 @@ export function useRoutineActions({
 }): RoutineActions {
   const addRoutine = async (title: string, weekdays: number[], category?: string) => {
     const routine: Routine = {
-      id: uid(),
+      id: createClientId(),
       title: title.trim(),
       weekdays,
       category: category?.trim() || null,
