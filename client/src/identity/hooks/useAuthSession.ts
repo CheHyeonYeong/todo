@@ -4,8 +4,25 @@ import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
 import { Alert, Platform } from "react-native";
 import { supabase } from "../../api";
+import { LOCAL_DEV_AUTH } from "../../config";
 
 WebBrowser.maybeCompleteAuthSession();
+
+const localDevSession = {
+  access_token: "local-dev",
+  refresh_token: "local-dev",
+  expires_in: 3600,
+  token_type: "bearer",
+  user: {
+    id: "local-dev",
+    aud: "authenticated",
+    role: "authenticated",
+    email: "local-dev@todo.local",
+    app_metadata: {},
+    user_metadata: {},
+    created_at: "1970-01-01T00:00:00.000Z",
+  },
+} as Session;
 
 async function sessionFromCallback(url: string) {
   const params = new URLSearchParams(url.split("#")[1] || url.split("?")[1] || "");
@@ -26,6 +43,12 @@ export function useAuthSession() {
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
+    if (LOCAL_DEV_AUTH) {
+      setSession(localDevSession);
+      setIsCheckingSession(false);
+      return;
+    }
+
     if (Platform.OS === "web" && typeof window !== "undefined") {
       void sessionFromCallback(window.location.href)
         .then(() => {
@@ -45,6 +68,11 @@ export function useAuthSession() {
   }, []);
 
   const signInWithGoogle = async () => {
+    if (LOCAL_DEV_AUTH) {
+      setSession(localDevSession);
+      return;
+    }
+
     try {
       const redirectTo = Linking.createURL("auth/callback");
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -66,7 +94,13 @@ export function useAuthSession() {
     }
   };
 
-  const signOut = () => supabase.auth.signOut();
+  const signOut = () => {
+    if (LOCAL_DEV_AUTH) {
+      setSession(null);
+      return Promise.resolve();
+    }
+    return supabase.auth.signOut();
+  };
 
   return { session, isCheckingSession, signInWithGoogle, signOut };
 }
