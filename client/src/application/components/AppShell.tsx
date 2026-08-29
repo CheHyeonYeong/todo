@@ -11,7 +11,9 @@ import {
   View,
 } from "react-native";
 import { MemoScreen, TimeScreen } from "../../Screens";
+import { useRoutineActions } from "../../routines/hooks/useRoutineActions";
 import { TodoScreen } from "../../todo/components/TodoScreen";
+import { useTodoActions } from "../../todo/hooks/useTodoActions";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
 
@@ -39,6 +41,8 @@ export function AppShell({
   const selectedTab = tabs.find((tab) => tab.key === workspace);
   const selectWorkspace = (next: Workspace) => setWorkspace(next);
   const reloadWorkspace = () => void workspaceData.reload();
+  const todoActions = useTodoActions(workspaceData);
+  const routineActions = useRoutineActions(workspaceData);
 
   const navigation = (
     <View style={desktop ? styles.desktopNav : styles.nav}>
@@ -87,7 +91,7 @@ export function AppShell({
     <View style={styles.dashboard}>
       <View style={styles.dashboardPrimary}>
         <View style={[styles.dashboardPanel, styles.todoPanel]}>
-          <TodoScreen store={workspaceData} />
+          <TodoScreen todoActions={todoActions} routineActions={routineActions} />
         </View>
         <View style={[styles.dashboardPanel, styles.memoPanel]}>
           <MemoScreen store={workspaceData} />
@@ -98,7 +102,7 @@ export function AppShell({
       </View>
     </View>
   ) : workspace === "todo" ? (
-    <TodoScreen store={workspaceData} />
+    <TodoScreen todoActions={todoActions} routineActions={routineActions} />
   ) : workspace === "memo" ? (
     <MemoScreen store={workspaceData} />
   ) : (

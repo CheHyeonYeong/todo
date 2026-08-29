@@ -1,23 +1,22 @@
 import { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
-import type { useAppData } from "../../useAppData";
 import { Card } from "../../shared/ui/Card";
+import type { RoutineActions } from "../hooks/useRoutineActions";
 import { styles } from "./RoutineEditor.styles";
 
-type Store = ReturnType<typeof useAppData>;
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 function fail(reason: unknown) {
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 }
 
-export function RoutineEditor({ store }: { store: Store }) {
+export function RoutineEditor({ routineActions }: { routineActions: RoutineActions }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const submitRoutine = async () => {
     if (!title.trim() || !days.length) return;
     try {
-      await store.addRoutine(title, days, category);
+      await routineActions.addRoutine(title, days, category);
       setTitle("");
     } catch (reason) {
       fail(reason);
@@ -28,8 +27,8 @@ export function RoutineEditor({ store }: { store: Store }) {
       current.includes(day) ? current.filter((value) => value !== day) : [...current, day],
     );
   const toggleRoutine = (routineId: string, active: boolean) =>
-    void store.patchRoutine(routineId, { active: !active }).catch(fail);
-  const deleteRoutine = (routineId: string) => void store.deleteRoutine(routineId).catch(fail);
+    void routineActions.patchRoutine(routineId, { active: !active }).catch(fail);
+  const deleteRoutine = (routineId: string) => void routineActions.deleteRoutine(routineId).catch(fail);
   return (
     <Card>
       <Text style={styles.cardTitle}>반복 루틴</Text>
@@ -49,7 +48,7 @@ export function RoutineEditor({ store }: { store: Store }) {
       <Pressable style={styles.secondaryButton} onPress={() => void submitRoutine()}>
         <Text style={styles.secondaryText}>루틴 추가</Text>
       </Pressable>
-      {store.data.routines.map((routine) => (
+      {routineActions.routines.map((routine) => (
         <View key={routine.id} style={styles.listRow}>
           <Pressable style={styles.flex} onPress={() => toggleRoutine(routine.id, routine.active)}>
             <Text style={[styles.todoTitle, !routine.active && styles.done]}>{routine.title}</Text>

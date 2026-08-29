@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { Scope } from "../../types";
-import type { useAppData } from "../../useAppData";
 import { defaultDueDate } from "../../domain/calendar";
 import { Card } from "../../shared/ui/Card";
 import { RoutineEditor } from "../../routines/components/RoutineEditor";
+import type { RoutineActions } from "../../routines/hooks/useRoutineActions";
+import type { TodoActions } from "../hooks/useTodoActions";
 import { TodoCalendar } from "./TodoCalendar";
 import { TodoItem } from "./TodoItem";
 import { styles } from "./TodoScreen.styles";
 
-type Store = ReturnType<typeof useAppData>;
 const scopeOptions: { value: Scope; label: string }[] = [
   { value: "day", label: "오늘" },
   { value: "week", label: "이번 주" },
@@ -19,7 +19,13 @@ function fail(reason: unknown) {
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
 }
 
-export function TodoScreen({ store }: { store: Store }) {
+export function TodoScreen({
+  todoActions,
+  routineActions,
+}: {
+  todoActions: TodoActions;
+  routineActions: RoutineActions;
+}) {
   const [view, setView] = useState<"list" | "calendar">("list");
   const [scope, setScope] = useState<Scope>("day");
   const [title, setTitle] = useState("");
@@ -29,15 +35,15 @@ export function TodoScreen({ store }: { store: Store }) {
   const [showRoutines, setShowRoutines] = useState(false);
   const roots = useMemo(
     () =>
-      store.data.todos
+      todoActions.todos
         .filter((todo) => todo.scope === scope && !todo.parentId)
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-    [scope, store.data.todos],
+    [scope, todoActions.todos],
   );
   const submitTodo = async () => {
     if (!title.trim()) return;
     try {
-      await store.addTodo({
+      await todoActions.addTodo({
         title,
         scope,
         category,
@@ -82,7 +88,7 @@ export function TodoScreen({ store }: { store: Store }) {
         </Pressable>
       </View>
       {view === "calendar" ? (
-        <TodoCalendar store={store} />
+        <TodoCalendar todos={todoActions.todos} />
       ) : (
         <>
           <View style={styles.segment}>
@@ -98,7 +104,7 @@ export function TodoScreen({ store }: { store: Store }) {
               </Pressable>
             ))}
           </View>
-          {showRoutines && <RoutineEditor store={store} />}
+          {showRoutines && <RoutineEditor routineActions={routineActions} />}
           <Card>
             <TextInput
               style={styles.input}
@@ -134,7 +140,7 @@ export function TodoScreen({ store }: { store: Store }) {
             <TodoItem
               key={todo.id}
               todo={todo}
-              store={store}
+              todoActions={todoActions}
               subDraft={subDrafts[todo.id] || ""}
               setSubDraft={(value) => updateSubDraft(todo.id, value)}
             />

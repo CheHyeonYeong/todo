@@ -1,13 +1,11 @@
 import { useMemo, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { Todo } from "../../types";
-import type { useAppData } from "../../useAppData";
 import { dateKey } from "../../domain/calendar";
 import { completionPatch } from "../../domain/todo";
 import { Card } from "../../shared/ui/Card";
+import type { TodoActions } from "../hooks/useTodoActions";
 import { styles } from "./TodoItem.styles";
-
-type Store = ReturnType<typeof useAppData>;
 
 function fail(reason: unknown) {
   Alert.alert("저장 오류", reason instanceof Error ? reason.message : "잠시 후 다시 시도해주세요.");
@@ -15,12 +13,12 @@ function fail(reason: unknown) {
 
 export function TodoItem({
   todo,
-  store,
+  todoActions,
   subDraft,
   setSubDraft,
 }: {
   todo: Todo;
-  store: Store;
+  todoActions: TodoActions;
   subDraft: string;
   setSubDraft: (value: string) => void;
 }) {
@@ -32,31 +30,32 @@ export function TodoItem({
   const [dueDate, setDueDate] = useState(todo.dueDate || "");
   const children = useMemo(
     () =>
-      store.data.todos
+      todoActions.todos
         .filter((item) => item.parentId === todo.id)
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-    [store.data.todos, todo.id],
+    [todoActions.todos, todo.id],
   );
   const overdue = Boolean(todo.dueDate && !todo.done && todo.dueDate < dateKey(new Date()));
-  const toggleTodo = () => void store.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(fail);
+  const toggleTodo = () =>
+    void todoActions.patchTodo(todo.id, completionPatch(!todo.done, new Date())).catch(fail);
   const toggleDetails = () => setExpanded((value) => !value);
   const startEditing = () => setEditing(true);
   const toggleEditing = () => setEditing((value) => !value);
   const toggleChild = (child: Todo) =>
-    void store.patchTodo(child.id, completionPatch(!child.done, new Date())).catch(fail);
-  const deleteChild = (childId: string) => void store.deleteTodo(childId).catch(fail);
+    void todoActions.patchTodo(child.id, completionPatch(!child.done, new Date())).catch(fail);
+  const deleteChild = (childId: string) => void todoActions.deleteTodo(childId).catch(fail);
   const remove = () =>
     Alert.alert("할 일 삭제", `“${todo.title}”을 삭제할까요?`, [
       { text: "취소", style: "cancel" },
       {
         text: "삭제",
         style: "destructive",
-        onPress: () => void store.deleteTodo(todo.id).catch(fail),
+        onPress: () => void todoActions.deleteTodo(todo.id).catch(fail),
       },
     ]);
   const save = async () => {
     try {
-      await store.patchTodo(todo.id, {
+      await todoActions.patchTodo(todo.id, {
         title: draft.trim() || todo.title,
         note: note.trim() || null,
         category: category.trim() || null,
@@ -70,7 +69,7 @@ export function TodoItem({
   const addChild = async () => {
     if (!subDraft.trim()) return;
     try {
-      await store.addTodo({
+      await todoActions.addTodo({
         title: subDraft,
         scope: todo.scope,
         parentId: todo.id,
