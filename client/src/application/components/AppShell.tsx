@@ -10,7 +10,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { MemoScreen, TimeScreen } from "../../Screens";
+import { TimeScreen } from "../../time/components/TimeScreen";
+import { MemoScreen } from "../../notes/components/MemoScreen";
 import { TodoScreen } from "../../todo/components/TodoScreen";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
@@ -102,11 +103,28 @@ export function AppShell({
           />
         </View>
         <View style={[styles.dashboardPanel, styles.memoPanel]}>
-          <MemoScreen store={workspaceData} />
+          <MemoScreen
+            memos={workspaceData.data.memos}
+            onAddMemo={workspaceData.addMemo}
+            onPatchMemo={workspaceData.patchMemo}
+            onDeleteMemo={workspaceData.deleteMemo}
+          />
         </View>
       </View>
       <View style={[styles.dashboardPanel, styles.timePanel]}>
-        <TimeScreen store={workspaceData} />
+        <TimeScreen
+          sessions={workspaceData.data.sessions}
+          activeSession={workspaceData.activeSession}
+          today={workspaceData.today}
+          nowMs={workspaceData.nowMs}
+          timerMinutes={workspaceData.timerMinutes}
+          onUpdateTimerMinutes={workspaceData.updateTimerMinutes}
+          onStartSession={workspaceData.startSession}
+          onStopSession={workspaceData.stopSession}
+          onRecordTimedSession={workspaceData.recordTimedSession}
+          onRecordMomentNote={workspaceData.recordMomentNote}
+          onDeleteSession={workspaceData.deleteSession}
+        />
       </View>
     </View>
   ) : workspace === "todo" ? (
@@ -124,9 +142,26 @@ export function AppShell({
       onDeleteRoutine={workspaceData.deleteRoutine}
     />
   ) : workspace === "memo" ? (
-    <MemoScreen store={workspaceData} />
+    <MemoScreen
+      memos={workspaceData.data.memos}
+      onAddMemo={workspaceData.addMemo}
+      onPatchMemo={workspaceData.patchMemo}
+      onDeleteMemo={workspaceData.deleteMemo}
+    />
   ) : (
-    <TimeScreen store={workspaceData} />
+    <TimeScreen
+      sessions={workspaceData.data.sessions}
+      activeSession={workspaceData.activeSession}
+      today={workspaceData.today}
+      nowMs={workspaceData.nowMs}
+      timerMinutes={workspaceData.timerMinutes}
+      onUpdateTimerMinutes={workspaceData.updateTimerMinutes}
+      onStartSession={workspaceData.startSession}
+      onStopSession={workspaceData.stopSession}
+      onRecordTimedSession={workspaceData.recordTimedSession}
+      onRecordMomentNote={workspaceData.recordMomentNote}
+      onDeleteSession={workspaceData.deleteSession}
+    />
   );
 
   return (
