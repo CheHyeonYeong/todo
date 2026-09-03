@@ -10,7 +10,9 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { MemoScreen, TimeScreen, TodoScreen } from "../../Screens";
+import { TimeScreen } from "../../time/components/TimeScreen";
+import { MemoScreen } from "../../notes/components/MemoScreen";
+import { TodoScreen } from "../../todo/components/TodoScreen";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
 
@@ -86,22 +88,80 @@ export function AppShell({
     <View style={styles.dashboard}>
       <View style={styles.dashboardPrimary}>
         <View style={[styles.dashboardPanel, styles.todoPanel]}>
-          <TodoScreen store={workspaceData} />
+          <TodoScreen
+            todos={workspaceData.data.todos}
+            today={workspaceData.today}
+            routines={workspaceData.data.routines}
+            onAddTodo={workspaceData.addTodo}
+            onAddTodoWithDefaultDueDate={workspaceData.addTodoWithDefaultDueDate}
+            onPatchTodo={workspaceData.patchTodo}
+            onDeleteTodo={workspaceData.deleteTodo}
+            onToggleTodo={workspaceData.toggleTodo}
+            onAddRoutine={workspaceData.addRoutine}
+            onPatchRoutine={workspaceData.patchRoutine}
+            onDeleteRoutine={workspaceData.deleteRoutine}
+          />
         </View>
         <View style={[styles.dashboardPanel, styles.memoPanel]}>
-          <MemoScreen store={workspaceData} />
+          <MemoScreen
+            memos={workspaceData.data.memos}
+            onAddMemo={workspaceData.addMemo}
+            onPatchMemo={workspaceData.patchMemo}
+            onDeleteMemo={workspaceData.deleteMemo}
+          />
         </View>
       </View>
       <View style={[styles.dashboardPanel, styles.timePanel]}>
-        <TimeScreen store={workspaceData} />
+        <TimeScreen
+          sessions={workspaceData.data.sessions}
+          activeSession={workspaceData.activeSession}
+          today={workspaceData.today}
+          nowMs={workspaceData.nowMs}
+          timerMinutes={workspaceData.timerMinutes}
+          onUpdateTimerMinutes={workspaceData.updateTimerMinutes}
+          onStartSession={workspaceData.startSession}
+          onStopSession={workspaceData.stopSession}
+          onRecordTimedSession={workspaceData.recordTimedSession}
+          onRecordMomentNote={workspaceData.recordMomentNote}
+          onDeleteSession={workspaceData.deleteSession}
+        />
       </View>
     </View>
   ) : workspace === "todo" ? (
-    <TodoScreen store={workspaceData} />
+    <TodoScreen
+      todos={workspaceData.data.todos}
+      today={workspaceData.today}
+      routines={workspaceData.data.routines}
+      onAddTodo={workspaceData.addTodo}
+      onAddTodoWithDefaultDueDate={workspaceData.addTodoWithDefaultDueDate}
+      onPatchTodo={workspaceData.patchTodo}
+      onDeleteTodo={workspaceData.deleteTodo}
+      onToggleTodo={workspaceData.toggleTodo}
+      onAddRoutine={workspaceData.addRoutine}
+      onPatchRoutine={workspaceData.patchRoutine}
+      onDeleteRoutine={workspaceData.deleteRoutine}
+    />
   ) : workspace === "memo" ? (
-    <MemoScreen store={workspaceData} />
+    <MemoScreen
+      memos={workspaceData.data.memos}
+      onAddMemo={workspaceData.addMemo}
+      onPatchMemo={workspaceData.patchMemo}
+      onDeleteMemo={workspaceData.deleteMemo}
+    />
   ) : (
-    <TimeScreen store={workspaceData} />
+    <TimeScreen
+      sessions={workspaceData.data.sessions}
+      activeSession={workspaceData.activeSession}
+      today={workspaceData.today}
+      nowMs={workspaceData.nowMs}
+      timerMinutes={workspaceData.timerMinutes}
+      onUpdateTimerMinutes={workspaceData.updateTimerMinutes}
+      onStartSession={workspaceData.startSession}
+      onStopSession={workspaceData.stopSession}
+      onRecordTimedSession={workspaceData.recordTimedSession}
+      onRecordMomentNote={workspaceData.recordMomentNote}
+      onDeleteSession={workspaceData.deleteSession}
+    />
   );
 
   return (
