@@ -10,7 +10,7 @@ import {
   sessionsCoveringHour,
   sessionsStartedBetween,
   totalDurationMs,
-} from "./session";
+} from "../domain/session";
 
 const session = (label: string, startedAt: Date, endedAt: Date): WorkSession => ({
   id: `${startedAt.getTime()}`,
