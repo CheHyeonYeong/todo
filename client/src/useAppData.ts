@@ -3,8 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api";
 import { useMemos } from "./notes/hooks/useMemos";
 import { useRoutines } from "./routines/hooks/useRoutines";
+import { useTimeTracking } from "./time/hooks/useTimeTracking";
 import { useTodos } from "./todo/hooks/useTodos";
-import type { ActiveSession, AppData, WorkSession } from "./types";
+import type { ActiveSession, AppData } from "./types";
 
 const EMPTY_DATA: AppData = { todos: [], memos: [], sessions: [], routines: [] };
 const ACTIVE_SESSION_KEY = "todo:active-session";
@@ -88,52 +89,24 @@ export function useAppData(enabled: boolean) {
     createId: uid,
   });
   const memoState = useMemos({ memos: data.memos, setData, reload, request, createId: uid });
-
-  const startSession = async (label: string) => {
-    const next: ActiveSession = { id: uid(), label: label.trim(), startedAt: new Date().toISOString() };
-    setActiveSession(next);
-    await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(next));
-  };
-
-  const stopSession = async () => {
-    if (!activeSession) return;
-    const completed: WorkSession = { ...activeSession, endedAt: new Date().toISOString() };
-    setActiveSession(null);
-    await AsyncStorage.removeItem(ACTIVE_SESSION_KEY);
-    setData((current) => ({ ...current, sessions: [completed, ...current.sessions] }));
-    await request("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(completed),
-    });
-  };
-
-  const recordSession = async (session: WorkSession) => {
-    setData((current) => ({ ...current, sessions: [session, ...current.sessions] }));
-    await request("/api/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(session),
-    });
-  };
-
-  const deleteSession = async (id: string) => {
-    setData((current) => ({ ...current, sessions: current.sessions.filter((session) => session.id !== id) }));
-    await request(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
-  };
+  const timeTracking = useTimeTracking({
+    sessions: data.sessions,
+    activeSession,
+    setActiveSession,
+    setData,
+    activeSessionStorageKey: ACTIVE_SESSION_KEY,
+    request,
+    createId: uid,
+  });
 
   return {
     data,
-    activeSession,
     loading,
     error,
     reload,
     ...todoState,
     ...memoState,
     ...routineState,
-    startSession,
-    stopSession,
-    recordSession,
-    deleteSession,
+    ...timeTracking,
   };
 }
