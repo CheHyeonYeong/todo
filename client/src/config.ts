@@ -9,3 +9,5 @@ export const SUPABASE_ANON_KEY = required(
   "EXPO_PUBLIC_SUPABASE_ANON_KEY",
   process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
 );
+
+export const LOCAL_DEV_AUTH = SUPABASE_URL === API_BASE_URL && SUPABASE_ANON_KEY === "local-dev";
