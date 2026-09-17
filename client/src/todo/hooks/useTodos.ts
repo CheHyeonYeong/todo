@@ -14,6 +14,7 @@ export type TodoInput = {
   parentId?: string | null;
   dueDate?: string | null;
   category?: string | null;
+  note?: string | null;
 };
 
 export type UseTodosResult = {
@@ -52,6 +53,7 @@ export function useTodos({
       parentId,
       dueDate: input.dueDate || null,
       category: input.category || null,
+      note: input.note || null,
     };
     setData((current) => ({
       ...current,

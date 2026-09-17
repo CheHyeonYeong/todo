@@ -29,6 +29,7 @@ export function TodoScreen({
   onAddRoutine,
   onPatchRoutine,
   onDeleteRoutine,
+  initialView = "list",
 }: {
   todos: Todo[];
   today: Date;
@@ -41,8 +42,9 @@ export function TodoScreen({
   onAddRoutine: (title: string, weekdays: number[], category?: string) => Promise<void>;
   onPatchRoutine: (id: string, patch: Partial<Routine>) => Promise<void>;
   onDeleteRoutine: (id: string) => Promise<void>;
+  initialView?: "list" | "calendar";
 }) {
-  const [view, setView] = useState<"list" | "calendar">("list");
+  const [view, setView] = useState<"list" | "calendar">(initialView);
   const [scope, setScope] = useState<Scope>("day");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");

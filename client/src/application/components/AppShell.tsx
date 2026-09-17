@@ -13,11 +13,13 @@ import {
 import { TimeScreen } from "../../time/components/TimeScreen";
 import { MemoScreen } from "../../notes/components/MemoScreen";
 import { TodoScreen } from "../../todo/components/TodoScreen";
+import { WeeklyCalendarScreen } from "../../todo/components/WeeklyCalendarScreen";
 import type { useAppData } from "../../useAppData";
 import { styles } from "./AppShell.styles";
 
 type WorkspaceData = ReturnType<typeof useAppData>;
 type Workspace = "todo" | "memo" | "time";
+type DesktopView = "today" | "weekly" | "monthly" | "memo" | "time";
 
 const tabs: { key: Workspace; label: string; icon: string }[] = [
   { key: "todo", label: "할 일", icon: "✓" },
@@ -35,6 +37,7 @@ export function AppShell({
   onSignOut: () => Promise<unknown>;
 }) {
   const [workspace, setWorkspace] = useState<Workspace>("todo");
+  const [desktopView, setDesktopView] = useState<DesktopView>("weekly");
   const { width } = useWindowDimensions();
   const desktop = Platform.OS === "web" && width >= 1100;
   const selectedTab = tabs.find((tab) => tab.key === workspace);
@@ -82,51 +85,61 @@ export function AppShell({
     </View>
   );
 
-  const content = workspaceData.loading ? (
+  const desktopContent = workspaceData.loading ? (
     <ActivityIndicator style={styles.loader} color="#176b47" />
-  ) : desktop ? (
-    <View style={styles.dashboard}>
-      <View style={styles.dashboardPrimary}>
-        <View style={[styles.dashboardPanel, styles.todoPanel]}>
-          <TodoScreen
-            todos={workspaceData.data.todos}
-            today={workspaceData.today}
-            routines={workspaceData.data.routines}
-            onAddTodo={workspaceData.addTodo}
-            onAddTodoWithDefaultDueDate={workspaceData.addTodoWithDefaultDueDate}
-            onPatchTodo={workspaceData.patchTodo}
-            onDeleteTodo={workspaceData.deleteTodo}
-            onToggleTodo={workspaceData.toggleTodo}
-            onAddRoutine={workspaceData.addRoutine}
-            onPatchRoutine={workspaceData.patchRoutine}
-            onDeleteRoutine={workspaceData.deleteRoutine}
-          />
-        </View>
-        <View style={[styles.dashboardPanel, styles.memoPanel]}>
-          <MemoScreen
-            memos={workspaceData.data.memos}
-            onAddMemo={workspaceData.addMemo}
-            onPatchMemo={workspaceData.patchMemo}
-            onDeleteMemo={workspaceData.deleteMemo}
-          />
-        </View>
-      </View>
-      <View style={[styles.dashboardPanel, styles.timePanel]}>
-        <TimeScreen
-          sessions={workspaceData.data.sessions}
-          activeSession={workspaceData.activeSession}
-          today={workspaceData.today}
-          nowMs={workspaceData.nowMs}
-          timerMinutes={workspaceData.timerMinutes}
-          onUpdateTimerMinutes={workspaceData.updateTimerMinutes}
-          onStartSession={workspaceData.startSession}
-          onStopSession={workspaceData.stopSession}
-          onRecordTimedSession={workspaceData.recordTimedSession}
-          onRecordMomentNote={workspaceData.recordMomentNote}
-          onDeleteSession={workspaceData.deleteSession}
-        />
-      </View>
-    </View>
+  ) : desktopView === "weekly" ? (
+    <WeeklyCalendarScreen
+      todos={workspaceData.data.todos}
+      sessions={workspaceData.data.sessions}
+      today={workspaceData.today}
+      nowMs={workspaceData.nowMs}
+      onAddTodo={workspaceData.addTodo}
+      onToggleTodo={workspaceData.toggleTodo}
+      onDeleteTodo={workspaceData.deleteTodo}
+      onRecordMomentNote={workspaceData.recordMomentNote}
+      onDeleteSession={workspaceData.deleteSession}
+    />
+  ) : desktopView === "today" || desktopView === "monthly" ? (
+    <TodoScreen
+      key={desktopView}
+      initialView={desktopView === "monthly" ? "calendar" : "list"}
+      todos={workspaceData.data.todos}
+      today={workspaceData.today}
+      routines={workspaceData.data.routines}
+      onAddTodo={workspaceData.addTodo}
+      onAddTodoWithDefaultDueDate={workspaceData.addTodoWithDefaultDueDate}
+      onPatchTodo={workspaceData.patchTodo}
+      onDeleteTodo={workspaceData.deleteTodo}
+      onToggleTodo={workspaceData.toggleTodo}
+      onAddRoutine={workspaceData.addRoutine}
+      onPatchRoutine={workspaceData.patchRoutine}
+      onDeleteRoutine={workspaceData.deleteRoutine}
+    />
+  ) : desktopView === "memo" ? (
+    <MemoScreen
+      memos={workspaceData.data.memos}
+      onAddMemo={workspaceData.addMemo}
+      onPatchMemo={workspaceData.patchMemo}
+      onDeleteMemo={workspaceData.deleteMemo}
+    />
+  ) : (
+    <TimeScreen
+      sessions={workspaceData.data.sessions}
+      activeSession={workspaceData.activeSession}
+      today={workspaceData.today}
+      nowMs={workspaceData.nowMs}
+      timerMinutes={workspaceData.timerMinutes}
+      onUpdateTimerMinutes={workspaceData.updateTimerMinutes}
+      onStartSession={workspaceData.startSession}
+      onStopSession={workspaceData.stopSession}
+      onRecordTimedSession={workspaceData.recordTimedSession}
+      onRecordMomentNote={workspaceData.recordMomentNote}
+      onDeleteSession={workspaceData.deleteSession}
+    />
+  );
+
+  const mobileContent = workspaceData.loading ? (
+    <ActivityIndicator style={styles.loader} color="#176b47" />
   ) : workspace === "todo" ? (
     <TodoScreen
       todos={workspaceData.data.todos}
@@ -167,24 +180,57 @@ export function AppShell({
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <View style={desktop ? styles.desktopShell : styles.mobileShell}>
-        {desktop && navigation}
-        <View style={styles.mainColumn}>
-          <View style={[styles.topbar, desktop && styles.desktopTopbar]}>
-            <View>
-              <Text style={styles.brand}>{desktop ? "Todo Workspace" : selectedTab?.label}</Text>
-              <Text style={styles.email}>
-                {desktop
-                  ? `${session.user.email} · 할 일, 메모, 시간을 한 화면에서 관리하세요.`
-                  : session.user.email}
-              </Text>
+      {desktop ? (
+        <View style={styles.desktopCalendarShell}>
+          <View style={styles.calendarTopbar}>
+            <View style={styles.calendarBrandGroup}>
+              <Text style={styles.calendarBrand}>BlankDay</Text>
+              <View style={styles.calendarNavigation}>
+                {(["today", "weekly", "monthly"] as DesktopView[]).map((item) => (
+                  <Pressable
+                    key={item}
+                    style={[styles.calendarNavItem, desktopView === item && styles.calendarNavActive]}
+                    onPress={() => setDesktopView(item)}
+                  >
+                    <Text
+                      style={[styles.calendarNavText, desktopView === item && styles.calendarNavTextActive]}
+                    >
+                      {item[0].toUpperCase() + item.slice(1)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-            <View style={styles.topActions}>
-              <Pressable style={desktop && styles.topActionButton} onPress={reloadWorkspace}>
-                <Text style={styles.refresh}>↻ 새로고침</Text>
+            <View style={styles.calendarActions}>
+              <Pressable
+                accessibilityLabel="메모"
+                style={styles.calendarIconButton}
+                onPress={() => setDesktopView("memo")}
+              >
+                <Text style={styles.calendarIcon}>✎</Text>
               </Pressable>
+              <Pressable
+                accessibilityLabel="타이머"
+                style={styles.calendarIconButton}
+                onPress={() => setDesktopView("time")}
+              >
+                <Text style={styles.calendarIcon}>◷</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="새로고침"
+                style={styles.calendarIconButton}
+                onPress={reloadWorkspace}
+              >
+                <Text style={styles.calendarIcon}>↻</Text>
+              </Pressable>
+              <View style={styles.accountDivider} />
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{session.user.email?.slice(0, 2).toUpperCase() || "ME"}</Text>
+              </View>
               <Pressable onPress={() => void onSignOut()}>
-                <Text style={styles.logout}>로그아웃</Text>
+                <Text style={styles.calendarEmail} numberOfLines={1}>
+                  {session.user.email}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -193,10 +239,35 @@ export function AppShell({
               <Text style={styles.errorText}>{workspaceData.error} · 다시 시도</Text>
             </Pressable>
           )}
-          <View style={[styles.content, desktop && styles.desktopContent]}>{content}</View>
-          {!desktop && navigation}
+          <View style={styles.desktopCalendarContent}>{desktopContent}</View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.mobileShell}>
+          <View style={styles.mainColumn}>
+            <View style={styles.topbar}>
+              <View>
+                <Text style={styles.brand}>{selectedTab?.label}</Text>
+                <Text style={styles.email}>{session.user.email}</Text>
+              </View>
+              <View style={styles.topActions}>
+                <Pressable onPress={reloadWorkspace}>
+                  <Text style={styles.refresh}>↻ 새로고침</Text>
+                </Pressable>
+                <Pressable onPress={() => void onSignOut()}>
+                  <Text style={styles.logout}>로그아웃</Text>
+                </Pressable>
+              </View>
+            </View>
+            {workspaceData.error && (
+              <Pressable style={styles.errorBar} onPress={reloadWorkspace}>
+                <Text style={styles.errorText}>{workspaceData.error} · 다시 시도</Text>
+              </Pressable>
+            )}
+            <View style={styles.content}>{mobileContent}</View>
+            {navigation}
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
